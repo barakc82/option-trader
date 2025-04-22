@@ -14,6 +14,7 @@ def update_state():
         return jsonify({'error': 'Missing user_id or status'}), 400
     
     # Save/update status
+    global last_state
     last_state = state
     last_state['timestamp'] = time.time()
     last_state['time'] = datetime.fromtimestamp(last_state['timestamp']).strftime("%d/%m/%Y %H:%M")
