@@ -17,6 +17,7 @@ def update_state():
     last_state = state
     last_state['timestamp'] = time.time()
     last_state['time'] = datetime.fromtimestamp(last_state['timestamp']).strftime("%d/%m/%Y %H:%M")
+    return '', 204
 
 @app.route('/api/state')
 def get_state():
