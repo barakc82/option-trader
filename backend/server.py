@@ -12,10 +12,8 @@ def update_state():
     if not state or 'status' not in state:
         return jsonify({'error': 'Missing user_id or status'}), 400
     
-    status = state['status']
-    
     # Save/update status
-    last_state = status
+    last_state = state
     last_state['timestamp'] = time.time()
     last_state['time'] = datetime.fromtimestamp(last_state['timestamp']).strftime("%d/%m/%Y %H:%M")
 
