@@ -1,6 +1,7 @@
 import time
-from datetime import datetime
 import os
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from flask import Flask, send_from_directory, jsonify, request
 
 
@@ -16,8 +17,9 @@ def update_state():
     # Save/update status
     global last_state
     last_state = state
-    last_state['timestamp'] = time.time()
-    last_state['time'] = datetime.fromtimestamp(last_state['timestamp']).strftime("%d/%m/%Y %H:%M")
+    now = time.time()
+    timezone = last_state['timezone']
+    last_state['time'] = datetime.now(ZoneInfo(timezone)).strftime("%d/%m/%Y %H:%M")
     return '', 204
 
 @app.route('/api/state')
