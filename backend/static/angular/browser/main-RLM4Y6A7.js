@@ -38568,7 +38568,7 @@ var StateViewComponent = class _StateViewComponent {
   static \u0275fac = function StateViewComponent_Factory(__ngFactoryType__) {
     return new (__ngFactoryType__ || _StateViewComponent)(\u0275\u0275directiveInject(StateService));
   };
-  static \u0275cmp = /* @__PURE__ */ \u0275\u0275defineComponent({ type: _StateViewComponent, selectors: [["app-state-view"]], decls: 2, vars: 2, consts: [[4, "ngIf"], [1, "striped-table"], [4, "ngFor", "ngForOf"], [1, "trades-table"], [3, "ngClass", 4, "ngFor", "ngForOf"], [3, "ngClass"]], template: function StateViewComponent_Template(rf, ctx) {
+  static \u0275cmp = /* @__PURE__ */ \u0275\u0275defineComponent({ type: _StateViewComponent, selectors: [["app-state-view"]], decls: 2, vars: 2, consts: [[4, "ngIf"], [1, "table"], [4, "ngFor", "ngForOf"], [1, "table", "trades-table"], [3, "ngClass", 4, "ngFor", "ngForOf"], [3, "ngClass"]], template: function StateViewComponent_Template(rf, ctx) {
     if (rf & 1) {
       \u0275\u0275template(0, StateViewComponent_div_0_Template, 70, 5, "div", 0)(1, StateViewComponent_div_1_Template, 3, 0, "div", 0);
     }
@@ -38577,101 +38577,101 @@ var StateViewComponent = class _StateViewComponent {
       \u0275\u0275advance();
       \u0275\u0275property("ngIf", !ctx.state);
     }
-  }, dependencies: [CommonModule, NgClass, NgForOf, NgIf], styles: ["\n\n.striped-table[_ngcontent-%COMP%] {\n  width: 100%;\n  border-collapse: collapse;\n  margin-top: 20px;\n}\nth[_ngcontent-%COMP%], \ntd[_ngcontent-%COMP%] {\n  padding: 8px;\n  text-align: left;\n  border: 1px solid #ddd;\n}\nth[_ngcontent-%COMP%] {\n  background-color: #f2f2f2;\n}\ntable.striped-table[_ngcontent-%COMP%]:not(.trades-table)   tr[_ngcontent-%COMP%]:nth-child(even) {\n  background-color: #f9f9f9;\n}\ntr[_ngcontent-%COMP%]:hover {\n  background-color: #f1f1f1;\n}\n.stp-row[_ngcontent-%COMP%] {\n  background-color: #79baf7;\n}\n.sell-row[_ngcontent-%COMP%] {\n  background-color: red;\n}\n.buy-at-limit-row[_ngcontent-%COMP%] {\n  background-color: rgb(3, 182, 3);\n}"] });
+  }, dependencies: [CommonModule, NgClass, NgForOf, NgIf], styles: ["\n\n.table[_ngcontent-%COMP%] {\n  width: 100%;\n  border-collapse: collapse;\n  margin-top: 20px;\n}\nth[_ngcontent-%COMP%], \ntd[_ngcontent-%COMP%] {\n  padding: 8px;\n  text-align: left;\n  border: 1px solid #ddd;\n}\nth[_ngcontent-%COMP%] {\n  background-color: #f2f2f2;\n}\ntable[_ngcontent-%COMP%]:not(.trades-table)   tr[_ngcontent-%COMP%]:nth-child(even) {\n  background-color: #f9f9f9;\n}\ntr[_ngcontent-%COMP%]:hover {\n  background-color: #f1f1f1;\n}\n.stp-row[_ngcontent-%COMP%] {\n  background-color: #79baf7;\n}\n.sell-row[_ngcontent-%COMP%] {\n  background-color: red;\n}\n.buy-at-limit-row[_ngcontent-%COMP%] {\n  background-color: rgb(3, 182, 3);\n}"] });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(StateViewComponent, [{
     type: Component,
-    args: [{ selector: "app-state-view", imports: [CommonModule], template: `<div *ngIf="state">\r
-    <h2>Status: {{ state.status }}</h2>\r
-    <p><strong>Time:</strong> {{ state.time }}</p>\r
-  \r
-    <h3>Positions</h3>\r
-    <table class="striped-table">\r
-      <thead>\r
-        <tr>\r
-          <th>Right</th>\r
-          <th>Strike</th>\r
-          <th>Quantity</th>\r
-          <th>Date</th>\r
-          <th>Last Price</th>\r
-          <th>Delta</th>\r
-        </tr>\r
-      </thead>\r
-      <tbody>\r
-        <tr *ngFor="let pos of state.positions">\r
-          <td>{{ pos.right }}</td>\r
-          <td>{{ pos.strike }}</td>\r
-          <td>{{ pos.quantity }}</td>\r
-          <td>{{ pos.date }}</td>\r
-          <td>{{ pos.last_price }}</td>\r
-          <td>{{ pos.delta }}</td>\r
-        </tr>\r
-      </tbody>\r
-    </table>\r
-  \r
-    <h3>Recent Trades</h3>\r
-    <table class="striped-table">\r
-      <thead>\r
-        <tr>\r
-          <th>Action</th>\r
-          <th>Right</th>\r
-          <th>Strike</th>\r
-          <th>Quantity</th>\r
-          <th>Time</th>\r
-          <th>Price</th>\r
-          <th>Liquidation</th>\r
-        </tr>\r
-      </thead>\r
-      <tbody>\r
-        <tr *ngFor="let trade of state.fills">\r
-          <td>{{ trade.action }}</td>\r
-          <td>{{ trade.right }}</td>\r
-          <td>{{ trade.strike }}</td>\r
-          <td>{{ trade.quantity }}</td>\r
-          <td>{{ trade.time }}</td>\r
-          <td>{{ trade.price }}</td>\r
-          <td>{{ trade.liquidation }}</td>\r
-        </tr>\r
-      </tbody>\r
-    </table>\r
+    args: [{ selector: "app-state-view", imports: [CommonModule], template: `  <div *ngIf="state">\r
+      <h2>Status: {{ state.status }}</h2>\r
+      <p><strong>Time:</strong> {{ state.time }}</p>\r
+    \r
+      <h3>Positions</h3>\r
+      <table class="table">\r
+        <thead>\r
+          <tr>\r
+            <th>Right</th>\r
+            <th>Strike</th>\r
+            <th>Quantity</th>\r
+            <th>Date</th>\r
+            <th>Last Price</th>\r
+            <th>Delta</th>\r
+          </tr>\r
+        </thead>\r
+        <tbody>\r
+          <tr *ngFor="let pos of state.positions">\r
+            <td>{{ pos.right }}</td>\r
+            <td>{{ pos.strike }}</td>\r
+            <td>{{ pos.quantity }}</td>\r
+            <td>{{ pos.date }}</td>\r
+            <td>{{ pos.last_price }}</td>\r
+            <td>{{ pos.delta }}</td>\r
+          </tr>\r
+        </tbody>\r
+      </table>\r
+    \r
+      <h3>Recent Trades</h3>\r
+      <table class="table">\r
+        <thead>\r
+          <tr>\r
+            <th>Action</th>\r
+            <th>Right</th>\r
+            <th>Strike</th>\r
+            <th>Quantity</th>\r
+            <th>Time</th>\r
+            <th>Price</th>\r
+            <th>Liquidation</th>\r
+          </tr>\r
+        </thead>\r
+        <tbody>\r
+          <tr *ngFor="let trade of state.fills">\r
+            <td>{{ trade.action }}</td>\r
+            <td>{{ trade.right }}</td>\r
+            <td>{{ trade.strike }}</td>\r
+            <td>{{ trade.quantity }}</td>\r
+            <td>{{ trade.time }}</td>\r
+            <td>{{ trade.price }}</td>\r
+            <td>{{ trade.liquidation }}</td>\r
+          </tr>\r
+        </tbody>\r
+      </table>\r
 \r
-    <h3>Open Trades</h3>\r
-    <table class="trades-table">\r
-      <thead>\r
-        <tr>\r
-          <th>Action</th>\r
-          <th>Right</th>\r
-          <th>Strike</th>\r
-          <th>Quantity</th>\r
-          <th>Date</th>\r
-          <th>Delta</th>\r
-          <th>Order Type</th>\r
-          <th>Limit</th>\r
-        </tr>\r
-      </thead>\r
-      <tbody>\r
-        <tr *ngFor="let trade of state.trades" [ngClass]="{\r
-          'stp-row': trade.order_type === 'STP',\r
-          'sell-row': trade.action === 'SELL',\r
-          'buy-at-limit-row': trade.action === 'BUY' && trade.order_type === 'LMT'\r
-        }">\r
-          <td>{{ trade.action }}</td>\r
-          <td>{{ trade.right }}</td>\r
-          <td>{{ trade.strike }}</td>\r
-          <td>{{ trade.quantity }}</td>\r
-          <td>{{ trade.date }}</td>\r
-          <td>{{ trade.delta }}</td>\r
-          <td>{{ trade.order_type }}</td>\r
-          <td>{{ trade.limit }}</td>\r
-        </tr>\r
-      </tbody>\r
-    </table>\r
-  </div>\r
-  \r
-  <div *ngIf="!state">\r
-    <p>Loading state...</p>\r
-  </div>`, styles: ["/* src/app/components/state-view/state-view.component.scss */\n.striped-table {\n  width: 100%;\n  border-collapse: collapse;\n  margin-top: 20px;\n}\nth,\ntd {\n  padding: 8px;\n  text-align: left;\n  border: 1px solid #ddd;\n}\nth {\n  background-color: #f2f2f2;\n}\ntable.striped-table:not(.trades-table) tr:nth-child(even) {\n  background-color: #f9f9f9;\n}\ntr:hover {\n  background-color: #f1f1f1;\n}\n.stp-row {\n  background-color: #79baf7;\n}\n.sell-row {\n  background-color: red;\n}\n.buy-at-limit-row {\n  background-color: rgb(3, 182, 3);\n}\n"] }]
+      <h3>Open Trades</h3>\r
+      <table class="table trades-table">\r
+        <thead>\r
+          <tr>\r
+            <th>Action</th>\r
+            <th>Right</th>\r
+            <th>Strike</th>\r
+            <th>Quantity</th>\r
+            <th>Date</th>\r
+            <th>Delta</th>\r
+            <th>Order Type</th>\r
+            <th>Limit</th>\r
+          </tr>\r
+        </thead>\r
+        <tbody>\r
+          <tr *ngFor="let trade of state.trades" [ngClass]="{\r
+            'stp-row': trade.order_type === 'STP',\r
+            'sell-row': trade.action === 'SELL',\r
+            'buy-at-limit-row': trade.action === 'BUY' && trade.order_type === 'LMT'\r
+          }">\r
+            <td>{{ trade.action }}</td>\r
+            <td>{{ trade.right }}</td>\r
+            <td>{{ trade.strike }}</td>\r
+            <td>{{ trade.quantity }}</td>\r
+            <td>{{ trade.date }}</td>\r
+            <td>{{ trade.delta }}</td>\r
+            <td>{{ trade.order_type }}</td>\r
+            <td>{{ trade.limit }}</td>\r
+          </tr>\r
+        </tbody>\r
+      </table>\r
+    </div>\r
+    \r
+    <div *ngIf="!state">\r
+      <p>Loading state...</p>\r
+    </div>`, styles: ["/* src/app/components/state-view/state-view.component.scss */\n.table {\n  width: 100%;\n  border-collapse: collapse;\n  margin-top: 20px;\n}\nth,\ntd {\n  padding: 8px;\n  text-align: left;\n  border: 1px solid #ddd;\n}\nth {\n  background-color: #f2f2f2;\n}\ntable:not(.trades-table) tr:nth-child(even) {\n  background-color: #f9f9f9;\n}\ntr:hover {\n  background-color: #f1f1f1;\n}\n.stp-row {\n  background-color: #79baf7;\n}\n.sell-row {\n  background-color: red;\n}\n.buy-at-limit-row {\n  background-color: rgb(3, 182, 3);\n}\n"] }]
   }], () => [{ type: StateService }], null);
 })();
 (() => {
