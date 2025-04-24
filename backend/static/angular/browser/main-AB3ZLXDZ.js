@@ -38447,9 +38447,9 @@ function StateViewComponent_div_0_Template(rf, ctx) {
   if (rf & 2) {
     const ctx_r3 = \u0275\u0275nextContext();
     \u0275\u0275advance(2);
-    \u0275\u0275textInterpolate1("Status: ", ctx_r3.state == null ? null : ctx_r3.state.status, "");
+    \u0275\u0275textInterpolate1("Status: ", ctx_r3.state.status, "");
     \u0275\u0275advance(4);
-    \u0275\u0275textInterpolate1(" ", ctx_r3.state == null ? null : ctx_r3.state.time, "");
+    \u0275\u0275textInterpolate1(" ", ctx_r3.state.time, "");
     \u0275\u0275advance(17);
     \u0275\u0275property("ngForOf", ctx_r3.state.positions);
     \u0275\u0275advance(19);
@@ -38487,16 +38487,16 @@ var StateViewComponent = class _StateViewComponent {
       \u0275\u0275advance();
       \u0275\u0275property("ngIf", !ctx.state);
     }
-  }, dependencies: [CommonModule, NgForOf, NgIf], encapsulation: 2 });
+  }, dependencies: [CommonModule, NgForOf, NgIf], styles: ["\n\n.table[_ngcontent-%COMP%] {\n  width: 100%;\n  border-collapse: collapse;\n  margin-top: 20px;\n}\nth[_ngcontent-%COMP%], \ntd[_ngcontent-%COMP%] {\n  padding: 8px;\n  text-align: left;\n  border: 1px solid #ddd;\n}\nth[_ngcontent-%COMP%] {\n  background-color: #f2f2f2;\n}\ntr[_ngcontent-%COMP%]:nth-child(even) {\n  background-color: #f9f9f9;\n}\ntr[_ngcontent-%COMP%]:hover {\n  background-color: #f1f1f1;\n}"] });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(StateViewComponent, [{
     type: Component,
-    args: [{ selector: "app-state-view", imports: [CommonModule], template: '<div *ngIf="state">\r\n    <h2>Status: {{ state?.status }}</h2>\r\n    <p><strong>Time:</strong> {{ state?.time }}</p>\r\n  \r\n    <h3>Positions</h3>\r\n    <table class="table">\r\n      <thead>\r\n        <tr>\r\n          <th>Right</th>\r\n          <th>Strike</th>\r\n          <th>Quantity</th>\r\n          <th>Date</th>\r\n          <th>Delta</th>\r\n        </tr>\r\n      </thead>\r\n      <tbody>\r\n        <tr *ngFor="let pos of state.positions">\r\n          <td>{{ pos.right }}</td>\r\n          <td>{{ pos.strike }}</td>\r\n          <td>{{ pos.quantity }}</td>\r\n          <td>{{ pos.date }}</td>\r\n          <td>{{ pos.delta }}</td>\r\n        </tr>\r\n      </tbody>\r\n    </table>\r\n  \r\n    <h3>Trades</h3>\r\n    <table class="table">\r\n      <thead>\r\n        <tr>\r\n          <th>Action</th>\r\n          <th>Right</th>\r\n          <th>Strike</th>\r\n          <th>Quantity</th>\r\n          <th>Date</th>\r\n          <th>Delta</th>\r\n        </tr>\r\n      </thead>\r\n      <tbody>\r\n        <tr *ngFor="let pos of state.positions">\r\n          <td>{{ pos.right }}</td>\r\n          <td>{{ pos.strike }}</td>\r\n          <td>{{ pos.quantity }}</td>\r\n          <td>{{ pos.date }}</td>\r\n          <td>{{ pos.delta }}</td>\r\n        </tr>\r\n      </tbody>\r\n    </table>\r\n    <ul>\r\n      <li *ngFor="let trade of state.trades">\r\n        {{ trade.action }} {{ trade.right }} {{ trade.strike }} x{{ trade.quantity }} ({{ trade.date }}), Delta: {{ trade.delta }}, Type: {{ trade.order_type }}, Limit: {{ trade.limit }}\r\n      </li>\r\n    </ul>\r\n  </div>\r\n  \r\n  <div *ngIf="!state">\r\n    <p>Loading state...</p>\r\n  </div>' }]
+    args: [{ selector: "app-state-view", imports: [CommonModule], template: '<div *ngIf="state">\r\n    <h2>Status: {{ state.status }}</h2>\r\n    <p><strong>Time:</strong> {{ state.time }}</p>\r\n  \r\n    <h3>Positions</h3>\r\n    <table class="table">\r\n      <thead>\r\n        <tr>\r\n          <th>Right</th>\r\n          <th>Strike</th>\r\n          <th>Quantity</th>\r\n          <th>Date</th>\r\n          <th>Delta</th>\r\n        </tr>\r\n      </thead>\r\n      <tbody>\r\n        <tr *ngFor="let pos of state.positions">\r\n          <td>{{ pos.right }}</td>\r\n          <td>{{ pos.strike }}</td>\r\n          <td>{{ pos.quantity }}</td>\r\n          <td>{{ pos.date }}</td>\r\n          <td>{{ pos.delta }}</td>\r\n        </tr>\r\n      </tbody>\r\n    </table>\r\n  \r\n    <h3>Trades</h3>\r\n    <table class="table">\r\n      <thead>\r\n        <tr>\r\n          <th>Action</th>\r\n          <th>Right</th>\r\n          <th>Strike</th>\r\n          <th>Quantity</th>\r\n          <th>Date</th>\r\n          <th>Delta</th>\r\n        </tr>\r\n      </thead>\r\n      <tbody>\r\n        <tr *ngFor="let pos of state.positions">\r\n          <td>{{ pos.right }}</td>\r\n          <td>{{ pos.strike }}</td>\r\n          <td>{{ pos.quantity }}</td>\r\n          <td>{{ pos.date }}</td>\r\n          <td>{{ pos.delta }}</td>\r\n        </tr>\r\n      </tbody>\r\n    </table>\r\n    <ul>\r\n      <li *ngFor="let trade of state.trades">\r\n        {{ trade.action }} {{ trade.right }} {{ trade.strike }} x{{ trade.quantity }} ({{ trade.date }}), Delta: {{ trade.delta }}, Type: {{ trade.order_type }}, Limit: {{ trade.limit }}\r\n      </li>\r\n    </ul>\r\n  </div>\r\n  \r\n  <div *ngIf="!state">\r\n    <p>Loading state...</p>\r\n  </div>', styles: ["/* src/app/components/state-view/state-view.component.scss */\n.table {\n  width: 100%;\n  border-collapse: collapse;\n  margin-top: 20px;\n}\nth,\ntd {\n  padding: 8px;\n  text-align: left;\n  border: 1px solid #ddd;\n}\nth {\n  background-color: #f2f2f2;\n}\ntr:nth-child(even) {\n  background-color: #f9f9f9;\n}\ntr:hover {\n  background-color: #f1f1f1;\n}\n"] }]
   }], () => [{ type: StateService }], null);
 })();
 (() => {
-  (typeof ngDevMode === "undefined" || ngDevMode) && \u0275setClassDebugInfo(StateViewComponent, { className: "StateViewComponent", filePath: "src/app/components/state-view/state-view.component.ts", lineNumber: 11 });
+  (typeof ngDevMode === "undefined" || ngDevMode) && \u0275setClassDebugInfo(StateViewComponent, { className: "StateViewComponent", filePath: "src/app/components/state-view/state-view.component.ts", lineNumber: 12 });
 })();
 
 // src/app/app.component.ts
