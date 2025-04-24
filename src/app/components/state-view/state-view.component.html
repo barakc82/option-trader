@@ -1,0 +1,22 @@
+<div *ngIf="state">
+    <h2>Status: {{ state?.status }}</h2>
+    <p><strong>Time:</strong> {{ state?.time }}</p>
+  
+    <h3>Positions</h3>
+    <ul>
+      <li *ngFor="let pos of state.positions">
+        {{ pos.right }} {{ pos.strike }} x{{ pos.quantity }} ({{ pos.date }}), Delta: {{ pos.delta }}
+      </li>
+    </ul>
+  
+    <h3>Trades</h3>
+    <ul>
+      <li *ngFor="let trade of state.trades">
+        {{ trade.action }} {{ trade.right }} {{ trade.strike }} x{{ trade.quantity }} ({{ trade.date }}), Delta: {{ trade.delta }}, Type: {{ trade.order_type }}, Limit: {{ trade.limit }}
+      </li>
+    </ul>
+  </div>
+  
+  <div *ngIf="!state">
+    <p>Loading state...</p>
+  </div>

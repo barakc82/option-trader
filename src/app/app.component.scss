@@ -1,0 +1,21 @@
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem;
+    font-family: Arial, sans-serif;
+  
+    header {
+      h1 {
+        margin-bottom: 1rem;
+        color: #2c3e50;
+        font-size: 2rem;
+      }
+    }
+  
+    footer {
+      margin-top: 2rem;
+      text-align: center;
+      color: #aaa;
+      font-size: 0.9rem;
+    }
+  }

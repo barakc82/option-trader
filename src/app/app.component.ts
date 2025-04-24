@@ -1,12 +1,12 @@
 import { Component } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { StateViewComponent } from './components/state-view/state-view.component';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet],
+  imports: [StateViewComponent],
   templateUrl: './app.component.html',
-  styleUrl: './app.component.scss'
+  styleUrls: ['./app.component.scss']
 })
 export class AppComponent {
-  title = 'option-trader';
+  title = 'Live State Dashboard';
 }
