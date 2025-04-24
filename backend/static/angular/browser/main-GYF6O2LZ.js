@@ -38293,8 +38293,12 @@ var StateService = class _StateService {
   constructor(http) {
     this.http = http;
   }
-  getState() {
-    return this.http.get("/api/state");
+  stateSubject = new BehaviorSubject(null);
+  state$ = this.stateSubject.asObservable();
+  fetchState() {
+    this.http.get("/api/state").subscribe((state) => {
+      this.stateSubject.next(state);
+    });
   }
   static \u0275fac = function StateService_Factory(__ngFactoryType__) {
     return new (__ngFactoryType__ || _StateService)(\u0275\u0275inject(HttpClient));
@@ -38485,9 +38489,10 @@ var StateViewComponent = class _StateViewComponent {
   }
   state = null;
   ngOnInit() {
-    this.stateService.getState().subscribe((data) => {
+    this.stateService.state$.subscribe((data) => {
       this.state = data;
     });
+    this.stateService.fetchState();
   }
   static \u0275fac = function StateViewComponent_Factory(__ngFactoryType__) {
     return new (__ngFactoryType__ || _StateViewComponent)(\u0275\u0275directiveInject(StateService));
@@ -38501,7 +38506,7 @@ var StateViewComponent = class _StateViewComponent {
       \u0275\u0275advance();
       \u0275\u0275property("ngIf", !ctx.state);
     }
-  }, dependencies: [CommonModule, NgClass, NgForOf, NgIf], styles: ["\n\n.table[_ngcontent-%COMP%] {\n  width: 100%;\n  border-collapse: collapse;\n  margin-top: 20px;\n}\nth[_ngcontent-%COMP%], \ntd[_ngcontent-%COMP%] {\n  padding: 8px;\n  text-align: left;\n  border: 1px solid #ddd;\n}\nth[_ngcontent-%COMP%] {\n  background-color: #f2f2f2;\n}\ntr[_ngcontent-%COMP%]:hover {\n  background-color: #f1f1f1;\n}\n.stp-row[_ngcontent-%COMP%] {\n  color: blue;\n}\n.sell-row[_ngcontent-%COMP%] {\n  color: red;\n}\n.buy-at-limit-row[_ngcontent-%COMP%] {\n  color: green;\n}"] });
+  }, dependencies: [CommonModule, NgClass, NgForOf, NgIf], styles: ["\n\n.table[_ngcontent-%COMP%] {\n  width: 100%;\n  border-collapse: collapse;\n  margin-top: 20px;\n}\nth[_ngcontent-%COMP%], \ntd[_ngcontent-%COMP%] {\n  padding: 8px;\n  text-align: left;\n  border: 1px solid #ddd;\n}\nth[_ngcontent-%COMP%] {\n  background-color: #f2f2f2;\n}\ntr[_ngcontent-%COMP%]:hover {\n  background-color: #f1f1f1;\n}\n.stp-row[_ngcontent-%COMP%] {\n  background-color: #e0f0ff;\n}\n.sell-row[_ngcontent-%COMP%] {\n  background-color: red;\n}\n.buy-at-limit-row[_ngcontent-%COMP%] {\n  background-color: green;\n}"] });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(StateViewComponent, [{
@@ -38569,7 +38574,7 @@ var StateViewComponent = class _StateViewComponent {
   \r
   <div *ngIf="!state">\r
     <p>Loading state...</p>\r
-  </div>`, styles: ["/* src/app/components/state-view/state-view.component.scss */\n.table {\n  width: 100%;\n  border-collapse: collapse;\n  margin-top: 20px;\n}\nth,\ntd {\n  padding: 8px;\n  text-align: left;\n  border: 1px solid #ddd;\n}\nth {\n  background-color: #f2f2f2;\n}\ntr:hover {\n  background-color: #f1f1f1;\n}\n.stp-row {\n  color: blue;\n}\n.sell-row {\n  color: red;\n}\n.buy-at-limit-row {\n  color: green;\n}\n"] }]
+  </div>`, styles: ["/* src/app/components/state-view/state-view.component.scss */\n.table {\n  width: 100%;\n  border-collapse: collapse;\n  margin-top: 20px;\n}\nth,\ntd {\n  padding: 8px;\n  text-align: left;\n  border: 1px solid #ddd;\n}\nth {\n  background-color: #f2f2f2;\n}\ntr:hover {\n  background-color: #f1f1f1;\n}\n.stp-row {\n  background-color: #e0f0ff;\n}\n.sell-row {\n  background-color: red;\n}\n.buy-at-limit-row {\n  background-color: green;\n}\n"] }]
   }], () => [{ type: StateService }], null);
 })();
 (() => {
