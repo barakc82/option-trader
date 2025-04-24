@@ -38383,7 +38383,7 @@ function StateViewComponent_div_0_tr_44_Template(rf, ctx) {
     \u0275\u0275advance(2);
     \u0275\u0275textInterpolate(trade_r2.quantity);
     \u0275\u0275advance(2);
-    \u0275\u0275textInterpolate(trade_r2.date);
+    \u0275\u0275textInterpolate(trade_r2.time);
     \u0275\u0275advance(2);
     \u0275\u0275textInterpolate(trade_r2.price);
   }
@@ -38486,7 +38486,7 @@ function StateViewComponent_div_0_Template(rf, ctx) {
     \u0275\u0275text(38, "Quantity");
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(39, "th");
-    \u0275\u0275text(40, "Date");
+    \u0275\u0275text(40, "Time");
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(41, "th");
     \u0275\u0275text(42, "Price");
@@ -38610,7 +38610,7 @@ var StateViewComponent = class _StateViewComponent {
           <th>Right</th>\r
           <th>Strike</th>\r
           <th>Quantity</th>\r
-          <th>Date</th>\r
+          <th>Time</th>\r
           <th>Price</th>\r
         </tr>\r
       </thead>\r
@@ -38620,7 +38620,7 @@ var StateViewComponent = class _StateViewComponent {
           <td>{{ trade.right }}</td>\r
           <td>{{ trade.strike }}</td>\r
           <td>{{ trade.quantity }}</td>\r
-          <td>{{ trade.date }}</td>\r
+          <td>{{ trade.time }}</td>\r
           <td>{{ trade.price }}</td>\r
         </tr>\r
       </tbody>\r
