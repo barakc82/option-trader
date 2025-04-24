@@ -38294,10 +38294,7 @@ var StateService = class _StateService {
     this.http = http;
   }
   getState() {
-    var state = this.http.get("/api/state");
-    console.log("barak:");
-    console.log(state);
-    return state;
+    return this.http.get("/api/state");
   }
   static \u0275fac = function StateService_Factory(__ngFactoryType__) {
     return new (__ngFactoryType__ || _StateService)(\u0275\u0275inject(HttpClient));
@@ -38312,28 +38309,80 @@ var StateService = class _StateService {
 })();
 
 // src/app/components/state-view/state-view.component.ts
-function StateViewComponent_div_0_li_10_Template(rf, ctx) {
+function StateViewComponent_div_0_tr_23_Template(rf, ctx) {
   if (rf & 1) {
-    \u0275\u0275elementStart(0, "li");
-    \u0275\u0275text(1);
+    \u0275\u0275elementStart(0, "tr")(1, "td");
+    \u0275\u0275text(2);
     \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(3, "td");
+    \u0275\u0275text(4);
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(5, "td");
+    \u0275\u0275text(6);
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(7, "td");
+    \u0275\u0275text(8);
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(9, "td");
+    \u0275\u0275text(10);
+    \u0275\u0275elementEnd()();
   }
   if (rf & 2) {
     const pos_r1 = ctx.$implicit;
-    \u0275\u0275advance();
-    \u0275\u0275textInterpolate5(" ", pos_r1.right, " ", pos_r1.strike, " x", pos_r1.quantity, " (", pos_r1.date, "), Delta: ", pos_r1.delta, " ");
+    \u0275\u0275advance(2);
+    \u0275\u0275textInterpolate(pos_r1.right);
+    \u0275\u0275advance(2);
+    \u0275\u0275textInterpolate(pos_r1.strike);
+    \u0275\u0275advance(2);
+    \u0275\u0275textInterpolate(pos_r1.quantity);
+    \u0275\u0275advance(2);
+    \u0275\u0275textInterpolate(pos_r1.date);
+    \u0275\u0275advance(2);
+    \u0275\u0275textInterpolate(pos_r1.delta);
   }
 }
-function StateViewComponent_div_0_li_14_Template(rf, ctx) {
+function StateViewComponent_div_0_tr_42_Template(rf, ctx) {
+  if (rf & 1) {
+    \u0275\u0275elementStart(0, "tr")(1, "td");
+    \u0275\u0275text(2);
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(3, "td");
+    \u0275\u0275text(4);
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(5, "td");
+    \u0275\u0275text(6);
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(7, "td");
+    \u0275\u0275text(8);
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(9, "td");
+    \u0275\u0275text(10);
+    \u0275\u0275elementEnd()();
+  }
+  if (rf & 2) {
+    const pos_r2 = ctx.$implicit;
+    \u0275\u0275advance(2);
+    \u0275\u0275textInterpolate(pos_r2.right);
+    \u0275\u0275advance(2);
+    \u0275\u0275textInterpolate(pos_r2.strike);
+    \u0275\u0275advance(2);
+    \u0275\u0275textInterpolate(pos_r2.quantity);
+    \u0275\u0275advance(2);
+    \u0275\u0275textInterpolate(pos_r2.date);
+    \u0275\u0275advance(2);
+    \u0275\u0275textInterpolate(pos_r2.delta);
+  }
+}
+function StateViewComponent_div_0_li_44_Template(rf, ctx) {
   if (rf & 1) {
     \u0275\u0275elementStart(0, "li");
     \u0275\u0275text(1);
     \u0275\u0275elementEnd();
   }
   if (rf & 2) {
-    const trade_r2 = ctx.$implicit;
+    const trade_r3 = ctx.$implicit;
     \u0275\u0275advance();
-    \u0275\u0275textInterpolate8(" ", trade_r2.action, " ", trade_r2.right, " ", trade_r2.strike, " x", trade_r2.quantity, " (", trade_r2.date, "), Delta: ", trade_r2.delta, ", Type: ", trade_r2.order_type, ", Limit: ", trade_r2.limit, " ");
+    \u0275\u0275textInterpolate8(" ", trade_r3.action, " ", trade_r3.right, " ", trade_r3.strike, " x", trade_r3.quantity, " (", trade_r3.date, "), Delta: ", trade_r3.delta, ", Type: ", trade_r3.order_type, ", Limit: ", trade_r3.limit, " ");
   }
 }
 function StateViewComponent_div_0_Template(rf, ctx) {
@@ -38349,26 +38398,64 @@ function StateViewComponent_div_0_Template(rf, ctx) {
     \u0275\u0275elementStart(7, "h3");
     \u0275\u0275text(8, "Positions");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(9, "ul");
-    \u0275\u0275template(10, StateViewComponent_div_0_li_10_Template, 2, 5, "li", 1);
+    \u0275\u0275elementStart(9, "table", 1)(10, "thead")(11, "tr")(12, "th");
+    \u0275\u0275text(13, "Right");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(11, "h3");
-    \u0275\u0275text(12, "Trades");
+    \u0275\u0275elementStart(14, "th");
+    \u0275\u0275text(15, "Strike");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(13, "ul");
-    \u0275\u0275template(14, StateViewComponent_div_0_li_14_Template, 2, 8, "li", 1);
+    \u0275\u0275elementStart(16, "th");
+    \u0275\u0275text(17, "Quantity");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(18, "th");
+    \u0275\u0275text(19, "Date");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(20, "th");
+    \u0275\u0275text(21, "Delta");
+    \u0275\u0275elementEnd()()();
+    \u0275\u0275elementStart(22, "tbody");
+    \u0275\u0275template(23, StateViewComponent_div_0_tr_23_Template, 11, 5, "tr", 2);
+    \u0275\u0275elementEnd()();
+    \u0275\u0275elementStart(24, "h3");
+    \u0275\u0275text(25, "Trades");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(26, "table", 1)(27, "thead")(28, "tr")(29, "th");
+    \u0275\u0275text(30, "Action");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(31, "th");
+    \u0275\u0275text(32, "Right");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(33, "th");
+    \u0275\u0275text(34, "Strike");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(35, "th");
+    \u0275\u0275text(36, "Quantity");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(37, "th");
+    \u0275\u0275text(38, "Date");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(39, "th");
+    \u0275\u0275text(40, "Delta");
+    \u0275\u0275elementEnd()()();
+    \u0275\u0275elementStart(41, "tbody");
+    \u0275\u0275template(42, StateViewComponent_div_0_tr_42_Template, 11, 5, "tr", 2);
+    \u0275\u0275elementEnd()();
+    \u0275\u0275elementStart(43, "ul");
+    \u0275\u0275template(44, StateViewComponent_div_0_li_44_Template, 2, 8, "li", 2);
     \u0275\u0275elementEnd()();
   }
   if (rf & 2) {
-    const ctx_r2 = \u0275\u0275nextContext();
+    const ctx_r3 = \u0275\u0275nextContext();
     \u0275\u0275advance(2);
-    \u0275\u0275textInterpolate1("Status: ", ctx_r2.state == null ? null : ctx_r2.state.status, "");
+    \u0275\u0275textInterpolate1("Status: ", ctx_r3.state == null ? null : ctx_r3.state.status, "");
     \u0275\u0275advance(4);
-    \u0275\u0275textInterpolate1(" ", ctx_r2.state == null ? null : ctx_r2.state.time, "");
-    \u0275\u0275advance(4);
-    \u0275\u0275property("ngForOf", ctx_r2.state.positions);
-    \u0275\u0275advance(4);
-    \u0275\u0275property("ngForOf", ctx_r2.state.trades);
+    \u0275\u0275textInterpolate1(" ", ctx_r3.state == null ? null : ctx_r3.state.time, "");
+    \u0275\u0275advance(17);
+    \u0275\u0275property("ngForOf", ctx_r3.state.positions);
+    \u0275\u0275advance(19);
+    \u0275\u0275property("ngForOf", ctx_r3.state.positions);
+    \u0275\u0275advance(2);
+    \u0275\u0275property("ngForOf", ctx_r3.state.trades);
   }
 }
 function StateViewComponent_div_1_Template(rf, ctx) {
@@ -38391,9 +38478,9 @@ var StateViewComponent = class _StateViewComponent {
   static \u0275fac = function StateViewComponent_Factory(__ngFactoryType__) {
     return new (__ngFactoryType__ || _StateViewComponent)(\u0275\u0275directiveInject(StateService));
   };
-  static \u0275cmp = /* @__PURE__ */ \u0275\u0275defineComponent({ type: _StateViewComponent, selectors: [["app-state-view"]], decls: 2, vars: 2, consts: [[4, "ngIf"], [4, "ngFor", "ngForOf"]], template: function StateViewComponent_Template(rf, ctx) {
+  static \u0275cmp = /* @__PURE__ */ \u0275\u0275defineComponent({ type: _StateViewComponent, selectors: [["app-state-view"]], decls: 2, vars: 2, consts: [[4, "ngIf"], [1, "table"], [4, "ngFor", "ngForOf"]], template: function StateViewComponent_Template(rf, ctx) {
     if (rf & 1) {
-      \u0275\u0275template(0, StateViewComponent_div_0_Template, 15, 4, "div", 0)(1, StateViewComponent_div_1_Template, 3, 0, "div", 0);
+      \u0275\u0275template(0, StateViewComponent_div_0_Template, 45, 5, "div", 0)(1, StateViewComponent_div_1_Template, 3, 0, "div", 0);
     }
     if (rf & 2) {
       \u0275\u0275property("ngIf", ctx.state);
@@ -38405,7 +38492,7 @@ var StateViewComponent = class _StateViewComponent {
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(StateViewComponent, [{
     type: Component,
-    args: [{ selector: "app-state-view", imports: [CommonModule], template: '<div *ngIf="state">\r\n    <h2>Status: {{ state?.status }}</h2>\r\n    <p><strong>Time:</strong> {{ state?.time }}</p>\r\n  \r\n    <h3>Positions</h3>\r\n    <ul>\r\n      <li *ngFor="let pos of state.positions">\r\n        {{ pos.right }} {{ pos.strike }} x{{ pos.quantity }} ({{ pos.date }}), Delta: {{ pos.delta }}\r\n      </li>\r\n    </ul>\r\n  \r\n    <h3>Trades</h3>\r\n    <ul>\r\n      <li *ngFor="let trade of state.trades">\r\n        {{ trade.action }} {{ trade.right }} {{ trade.strike }} x{{ trade.quantity }} ({{ trade.date }}), Delta: {{ trade.delta }}, Type: {{ trade.order_type }}, Limit: {{ trade.limit }}\r\n      </li>\r\n    </ul>\r\n  </div>\r\n  \r\n  <div *ngIf="!state">\r\n    <p>Loading state...</p>\r\n  </div>' }]
+    args: [{ selector: "app-state-view", imports: [CommonModule], template: '<div *ngIf="state">\r\n    <h2>Status: {{ state?.status }}</h2>\r\n    <p><strong>Time:</strong> {{ state?.time }}</p>\r\n  \r\n    <h3>Positions</h3>\r\n    <table class="table">\r\n      <thead>\r\n        <tr>\r\n          <th>Right</th>\r\n          <th>Strike</th>\r\n          <th>Quantity</th>\r\n          <th>Date</th>\r\n          <th>Delta</th>\r\n        </tr>\r\n      </thead>\r\n      <tbody>\r\n        <tr *ngFor="let pos of state.positions">\r\n          <td>{{ pos.right }}</td>\r\n          <td>{{ pos.strike }}</td>\r\n          <td>{{ pos.quantity }}</td>\r\n          <td>{{ pos.date }}</td>\r\n          <td>{{ pos.delta }}</td>\r\n        </tr>\r\n      </tbody>\r\n    </table>\r\n  \r\n    <h3>Trades</h3>\r\n    <table class="table">\r\n      <thead>\r\n        <tr>\r\n          <th>Action</th>\r\n          <th>Right</th>\r\n          <th>Strike</th>\r\n          <th>Quantity</th>\r\n          <th>Date</th>\r\n          <th>Delta</th>\r\n        </tr>\r\n      </thead>\r\n      <tbody>\r\n        <tr *ngFor="let pos of state.positions">\r\n          <td>{{ pos.right }}</td>\r\n          <td>{{ pos.strike }}</td>\r\n          <td>{{ pos.quantity }}</td>\r\n          <td>{{ pos.date }}</td>\r\n          <td>{{ pos.delta }}</td>\r\n        </tr>\r\n      </tbody>\r\n    </table>\r\n    <ul>\r\n      <li *ngFor="let trade of state.trades">\r\n        {{ trade.action }} {{ trade.right }} {{ trade.strike }} x{{ trade.quantity }} ({{ trade.date }}), Delta: {{ trade.delta }}, Type: {{ trade.order_type }}, Limit: {{ trade.limit }}\r\n      </li>\r\n    </ul>\r\n  </div>\r\n  \r\n  <div *ngIf="!state">\r\n    <p>Loading state...</p>\r\n  </div>' }]
   }], () => [{ type: StateService }], null);
 })();
 (() => {
