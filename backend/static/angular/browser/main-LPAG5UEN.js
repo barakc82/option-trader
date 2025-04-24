@@ -38351,7 +38351,7 @@ function StateViewComponent_div_0_tr_25_Template(rf, ctx) {
     \u0275\u0275textInterpolate(pos_r1.delta);
   }
 }
-function StateViewComponent_div_0_tr_44_Template(rf, ctx) {
+function StateViewComponent_div_0_tr_46_Template(rf, ctx) {
   if (rf & 1) {
     \u0275\u0275elementStart(0, "tr")(1, "td");
     \u0275\u0275text(2);
@@ -38370,6 +38370,9 @@ function StateViewComponent_div_0_tr_44_Template(rf, ctx) {
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(11, "td");
     \u0275\u0275text(12);
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(13, "td");
+    \u0275\u0275text(14);
     \u0275\u0275elementEnd()();
   }
   if (rf & 2) {
@@ -38386,9 +38389,11 @@ function StateViewComponent_div_0_tr_44_Template(rf, ctx) {
     \u0275\u0275textInterpolate(trade_r2.time);
     \u0275\u0275advance(2);
     \u0275\u0275textInterpolate(trade_r2.price);
+    \u0275\u0275advance(2);
+    \u0275\u0275textInterpolate(trade_r2.liquidation);
   }
 }
-function StateViewComponent_div_0_tr_67_Template(rf, ctx) {
+function StateViewComponent_div_0_tr_69_Template(rf, ctx) {
   if (rf & 1) {
     \u0275\u0275elementStart(0, "tr", 5)(1, "td");
     \u0275\u0275text(2);
@@ -38490,39 +38495,42 @@ function StateViewComponent_div_0_Template(rf, ctx) {
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(41, "th");
     \u0275\u0275text(42, "Price");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(43, "th");
+    \u0275\u0275text(44, "Liquidation");
     \u0275\u0275elementEnd()()();
-    \u0275\u0275elementStart(43, "tbody");
-    \u0275\u0275template(44, StateViewComponent_div_0_tr_44_Template, 13, 6, "tr", 2);
+    \u0275\u0275elementStart(45, "tbody");
+    \u0275\u0275template(46, StateViewComponent_div_0_tr_46_Template, 15, 7, "tr", 2);
     \u0275\u0275elementEnd()();
-    \u0275\u0275elementStart(45, "h3");
-    \u0275\u0275text(46, "Open Trades");
+    \u0275\u0275elementStart(47, "h3");
+    \u0275\u0275text(48, "Open Trades");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(47, "table", 3)(48, "thead")(49, "tr")(50, "th");
-    \u0275\u0275text(51, "Action");
-    \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(52, "th");
-    \u0275\u0275text(53, "Right");
+    \u0275\u0275elementStart(49, "table", 3)(50, "thead")(51, "tr")(52, "th");
+    \u0275\u0275text(53, "Action");
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(54, "th");
-    \u0275\u0275text(55, "Strike");
+    \u0275\u0275text(55, "Right");
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(56, "th");
-    \u0275\u0275text(57, "Quantity");
+    \u0275\u0275text(57, "Strike");
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(58, "th");
-    \u0275\u0275text(59, "Date");
+    \u0275\u0275text(59, "Quantity");
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(60, "th");
-    \u0275\u0275text(61, "Delta");
+    \u0275\u0275text(61, "Date");
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(62, "th");
-    \u0275\u0275text(63, "Order Type");
+    \u0275\u0275text(63, "Delta");
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(64, "th");
-    \u0275\u0275text(65, "Limit");
+    \u0275\u0275text(65, "Order Type");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(66, "th");
+    \u0275\u0275text(67, "Limit");
     \u0275\u0275elementEnd()()();
-    \u0275\u0275elementStart(66, "tbody");
-    \u0275\u0275template(67, StateViewComponent_div_0_tr_67_Template, 17, 13, "tr", 4);
+    \u0275\u0275elementStart(68, "tbody");
+    \u0275\u0275template(69, StateViewComponent_div_0_tr_69_Template, 17, 13, "tr", 4);
     \u0275\u0275elementEnd()()();
   }
   if (rf & 2) {
@@ -38533,7 +38541,7 @@ function StateViewComponent_div_0_Template(rf, ctx) {
     \u0275\u0275textInterpolate1(" ", ctx_r3.state.time, "");
     \u0275\u0275advance(19);
     \u0275\u0275property("ngForOf", ctx_r3.state.positions);
-    \u0275\u0275advance(19);
+    \u0275\u0275advance(21);
     \u0275\u0275property("ngForOf", ctx_r3.state.fills);
     \u0275\u0275advance(23);
     \u0275\u0275property("ngForOf", ctx_r3.state.trades);
@@ -38560,9 +38568,9 @@ var StateViewComponent = class _StateViewComponent {
   static \u0275fac = function StateViewComponent_Factory(__ngFactoryType__) {
     return new (__ngFactoryType__ || _StateViewComponent)(\u0275\u0275directiveInject(StateService));
   };
-  static \u0275cmp = /* @__PURE__ */ \u0275\u0275defineComponent({ type: _StateViewComponent, selectors: [["app-state-view"]], decls: 2, vars: 2, consts: [[4, "ngIf"], [1, "striped-table"], [4, "ngFor", "ngForOf"], [1, "table"], [3, "ngClass", 4, "ngFor", "ngForOf"], [3, "ngClass"]], template: function StateViewComponent_Template(rf, ctx) {
+  static \u0275cmp = /* @__PURE__ */ \u0275\u0275defineComponent({ type: _StateViewComponent, selectors: [["app-state-view"]], decls: 2, vars: 2, consts: [[4, "ngIf"], [1, "striped-table"], [4, "ngFor", "ngForOf"], [1, "trades-table"], [3, "ngClass", 4, "ngFor", "ngForOf"], [3, "ngClass"]], template: function StateViewComponent_Template(rf, ctx) {
     if (rf & 1) {
-      \u0275\u0275template(0, StateViewComponent_div_0_Template, 68, 5, "div", 0)(1, StateViewComponent_div_1_Template, 3, 0, "div", 0);
+      \u0275\u0275template(0, StateViewComponent_div_0_Template, 70, 5, "div", 0)(1, StateViewComponent_div_1_Template, 3, 0, "div", 0);
     }
     if (rf & 2) {
       \u0275\u0275property("ngIf", ctx.state);
@@ -38612,6 +38620,7 @@ var StateViewComponent = class _StateViewComponent {
           <th>Quantity</th>\r
           <th>Time</th>\r
           <th>Price</th>\r
+          <th>Liquidation</th>\r
         </tr>\r
       </thead>\r
       <tbody>\r
@@ -38622,12 +38631,13 @@ var StateViewComponent = class _StateViewComponent {
           <td>{{ trade.quantity }}</td>\r
           <td>{{ trade.time }}</td>\r
           <td>{{ trade.price }}</td>\r
+          <td>{{ trade.liquidation }}</td>\r
         </tr>\r
       </tbody>\r
     </table>\r
 \r
     <h3>Open Trades</h3>\r
-    <table class="table">\r
+    <table class="trades-table">\r
       <thead>\r
         <tr>\r
           <th>Action</th>\r
