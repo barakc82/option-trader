@@ -38351,7 +38351,44 @@ function StateViewComponent_div_0_tr_25_Template(rf, ctx) {
     \u0275\u0275textInterpolate(pos_r1.delta);
   }
 }
-function StateViewComponent_div_0_tr_48_Template(rf, ctx) {
+function StateViewComponent_div_0_tr_44_Template(rf, ctx) {
+  if (rf & 1) {
+    \u0275\u0275elementStart(0, "tr")(1, "td");
+    \u0275\u0275text(2);
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(3, "td");
+    \u0275\u0275text(4);
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(5, "td");
+    \u0275\u0275text(6);
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(7, "td");
+    \u0275\u0275text(8);
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(9, "td");
+    \u0275\u0275text(10);
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(11, "td");
+    \u0275\u0275text(12);
+    \u0275\u0275elementEnd()();
+  }
+  if (rf & 2) {
+    const trade_r2 = ctx.$implicit;
+    \u0275\u0275advance(2);
+    \u0275\u0275textInterpolate(trade_r2.action);
+    \u0275\u0275advance(2);
+    \u0275\u0275textInterpolate(trade_r2.right);
+    \u0275\u0275advance(2);
+    \u0275\u0275textInterpolate(trade_r2.strike);
+    \u0275\u0275advance(2);
+    \u0275\u0275textInterpolate(trade_r2.quantity);
+    \u0275\u0275advance(2);
+    \u0275\u0275textInterpolate(trade_r2.date);
+    \u0275\u0275advance(2);
+    \u0275\u0275textInterpolate(trade_r2.price);
+  }
+}
+function StateViewComponent_div_0_tr_67_Template(rf, ctx) {
   if (rf & 1) {
     \u0275\u0275elementStart(0, "tr", 4)(1, "td");
     \u0275\u0275text(2);
@@ -38379,24 +38416,24 @@ function StateViewComponent_div_0_tr_48_Template(rf, ctx) {
     \u0275\u0275elementEnd()();
   }
   if (rf & 2) {
-    const trade_r2 = ctx.$implicit;
-    \u0275\u0275property("ngClass", \u0275\u0275pureFunction3(9, _c0, trade_r2.order_type === "STP", trade_r2.action === "SELL", trade_r2.action === "BUY" && trade_r2.order_type === "LMT"));
+    const trade_r3 = ctx.$implicit;
+    \u0275\u0275property("ngClass", \u0275\u0275pureFunction3(9, _c0, trade_r3.order_type === "STP", trade_r3.action === "SELL", trade_r3.action === "BUY" && trade_r3.order_type === "LMT"));
     \u0275\u0275advance(2);
-    \u0275\u0275textInterpolate(trade_r2.action);
+    \u0275\u0275textInterpolate(trade_r3.action);
     \u0275\u0275advance(2);
-    \u0275\u0275textInterpolate(trade_r2.right);
+    \u0275\u0275textInterpolate(trade_r3.right);
     \u0275\u0275advance(2);
-    \u0275\u0275textInterpolate(trade_r2.strike);
+    \u0275\u0275textInterpolate(trade_r3.strike);
     \u0275\u0275advance(2);
-    \u0275\u0275textInterpolate(trade_r2.quantity);
+    \u0275\u0275textInterpolate(trade_r3.quantity);
     \u0275\u0275advance(2);
-    \u0275\u0275textInterpolate(trade_r2.date);
+    \u0275\u0275textInterpolate(trade_r3.date);
     \u0275\u0275advance(2);
-    \u0275\u0275textInterpolate(trade_r2.delta);
+    \u0275\u0275textInterpolate(trade_r3.delta);
     \u0275\u0275advance(2);
-    \u0275\u0275textInterpolate(trade_r2.order_type);
+    \u0275\u0275textInterpolate(trade_r3.order_type);
     \u0275\u0275advance(2);
-    \u0275\u0275textInterpolate(trade_r2.limit);
+    \u0275\u0275textInterpolate(trade_r3.limit);
   }
 }
 function StateViewComponent_div_0_Template(rf, ctx) {
@@ -38434,7 +38471,7 @@ function StateViewComponent_div_0_Template(rf, ctx) {
     \u0275\u0275template(25, StateViewComponent_div_0_tr_25_Template, 13, 6, "tr", 2);
     \u0275\u0275elementEnd()();
     \u0275\u0275elementStart(26, "h3");
-    \u0275\u0275text(27, "Trades");
+    \u0275\u0275text(27, "Recent Trades");
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(28, "table", 1)(29, "thead")(30, "tr")(31, "th");
     \u0275\u0275text(32, "Action");
@@ -38452,28 +38489,54 @@ function StateViewComponent_div_0_Template(rf, ctx) {
     \u0275\u0275text(40, "Date");
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(41, "th");
-    \u0275\u0275text(42, "Delta");
-    \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(43, "th");
-    \u0275\u0275text(44, "Order Type");
-    \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(45, "th");
-    \u0275\u0275text(46, "Limit");
+    \u0275\u0275text(42, "Price");
     \u0275\u0275elementEnd()()();
-    \u0275\u0275elementStart(47, "tbody");
-    \u0275\u0275template(48, StateViewComponent_div_0_tr_48_Template, 17, 13, "tr", 3);
+    \u0275\u0275elementStart(43, "tbody");
+    \u0275\u0275template(44, StateViewComponent_div_0_tr_44_Template, 13, 6, "tr", 2);
+    \u0275\u0275elementEnd()();
+    \u0275\u0275elementStart(45, "h3");
+    \u0275\u0275text(46, "Open Trades");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(47, "table", 1)(48, "thead")(49, "tr")(50, "th");
+    \u0275\u0275text(51, "Action");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(52, "th");
+    \u0275\u0275text(53, "Right");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(54, "th");
+    \u0275\u0275text(55, "Strike");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(56, "th");
+    \u0275\u0275text(57, "Quantity");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(58, "th");
+    \u0275\u0275text(59, "Date");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(60, "th");
+    \u0275\u0275text(61, "Delta");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(62, "th");
+    \u0275\u0275text(63, "Order Type");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(64, "th");
+    \u0275\u0275text(65, "Limit");
+    \u0275\u0275elementEnd()()();
+    \u0275\u0275elementStart(66, "tbody");
+    \u0275\u0275template(67, StateViewComponent_div_0_tr_67_Template, 17, 13, "tr", 3);
     \u0275\u0275elementEnd()()();
   }
   if (rf & 2) {
-    const ctx_r2 = \u0275\u0275nextContext();
+    const ctx_r3 = \u0275\u0275nextContext();
     \u0275\u0275advance(2);
-    \u0275\u0275textInterpolate1("Status: ", ctx_r2.state.status, "");
+    \u0275\u0275textInterpolate1("Status: ", ctx_r3.state.status, "");
     \u0275\u0275advance(4);
-    \u0275\u0275textInterpolate1(" ", ctx_r2.state.time, "");
+    \u0275\u0275textInterpolate1(" ", ctx_r3.state.time, "");
     \u0275\u0275advance(19);
-    \u0275\u0275property("ngForOf", ctx_r2.state.positions);
+    \u0275\u0275property("ngForOf", ctx_r3.state.positions);
+    \u0275\u0275advance(19);
+    \u0275\u0275property("ngForOf", ctx_r3.state.fills);
     \u0275\u0275advance(23);
-    \u0275\u0275property("ngForOf", ctx_r2.state.trades);
+    \u0275\u0275property("ngForOf", ctx_r3.state.trades);
   }
 }
 function StateViewComponent_div_1_Template(rf, ctx) {
@@ -38499,14 +38562,14 @@ var StateViewComponent = class _StateViewComponent {
   };
   static \u0275cmp = /* @__PURE__ */ \u0275\u0275defineComponent({ type: _StateViewComponent, selectors: [["app-state-view"]], decls: 2, vars: 2, consts: [[4, "ngIf"], [1, "table"], [4, "ngFor", "ngForOf"], [3, "ngClass", 4, "ngFor", "ngForOf"], [3, "ngClass"]], template: function StateViewComponent_Template(rf, ctx) {
     if (rf & 1) {
-      \u0275\u0275template(0, StateViewComponent_div_0_Template, 49, 4, "div", 0)(1, StateViewComponent_div_1_Template, 3, 0, "div", 0);
+      \u0275\u0275template(0, StateViewComponent_div_0_Template, 68, 5, "div", 0)(1, StateViewComponent_div_1_Template, 3, 0, "div", 0);
     }
     if (rf & 2) {
       \u0275\u0275property("ngIf", ctx.state);
       \u0275\u0275advance();
       \u0275\u0275property("ngIf", !ctx.state);
     }
-  }, dependencies: [CommonModule, NgClass, NgForOf, NgIf], styles: ["\n\n.table[_ngcontent-%COMP%] {\n  width: 100%;\n  border-collapse: collapse;\n  margin-top: 20px;\n}\nth[_ngcontent-%COMP%], \ntd[_ngcontent-%COMP%] {\n  padding: 8px;\n  text-align: left;\n  border: 1px solid #ddd;\n}\nth[_ngcontent-%COMP%] {\n  background-color: #f2f2f2;\n}\ntr[_ngcontent-%COMP%]:hover {\n  background-color: #f1f1f1;\n}\n.stp-row[_ngcontent-%COMP%] {\n  background-color: #e0f0ff;\n}\n.sell-row[_ngcontent-%COMP%] {\n  background-color: red;\n}\n.buy-at-limit-row[_ngcontent-%COMP%] {\n  background-color: green;\n}"] });
+  }, dependencies: [CommonModule, NgClass, NgForOf, NgIf], styles: ["\n\n.table[_ngcontent-%COMP%] {\n  width: 100%;\n  border-collapse: collapse;\n  margin-top: 20px;\n}\nth[_ngcontent-%COMP%], \ntd[_ngcontent-%COMP%] {\n  padding: 8px;\n  text-align: left;\n  border: 1px solid #ddd;\n}\nth[_ngcontent-%COMP%] {\n  background-color: #f2f2f2;\n}\ntr[_ngcontent-%COMP%]:hover {\n  background-color: #f1f1f1;\n}\n.stp-row[_ngcontent-%COMP%] {\n  background-color: #95c9fa;\n}\n.sell-row[_ngcontent-%COMP%] {\n  background-color: red;\n}\n.buy-at-limit-row[_ngcontent-%COMP%] {\n  background-color: rgb(2, 160, 2);\n}"] });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(StateViewComponent, [{
@@ -38539,7 +38602,31 @@ var StateViewComponent = class _StateViewComponent {
       </tbody>\r
     </table>\r
   \r
-    <h3>Trades</h3>\r
+    <h3>Recent Trades</h3>\r
+    <table class="table">\r
+      <thead>\r
+        <tr>\r
+          <th>Action</th>\r
+          <th>Right</th>\r
+          <th>Strike</th>\r
+          <th>Quantity</th>\r
+          <th>Date</th>\r
+          <th>Price</th>\r
+        </tr>\r
+      </thead>\r
+      <tbody>\r
+        <tr *ngFor="let trade of state.fills">\r
+          <td>{{ trade.action }}</td>\r
+          <td>{{ trade.right }}</td>\r
+          <td>{{ trade.strike }}</td>\r
+          <td>{{ trade.quantity }}</td>\r
+          <td>{{ trade.date }}</td>\r
+          <td>{{ trade.price }}</td>\r
+        </tr>\r
+      </tbody>\r
+    </table>\r
+\r
+    <h3>Open Trades</h3>\r
     <table class="table">\r
       <thead>\r
         <tr>\r
@@ -38574,7 +38661,7 @@ var StateViewComponent = class _StateViewComponent {
   \r
   <div *ngIf="!state">\r
     <p>Loading state...</p>\r
-  </div>`, styles: ["/* src/app/components/state-view/state-view.component.scss */\n.table {\n  width: 100%;\n  border-collapse: collapse;\n  margin-top: 20px;\n}\nth,\ntd {\n  padding: 8px;\n  text-align: left;\n  border: 1px solid #ddd;\n}\nth {\n  background-color: #f2f2f2;\n}\ntr:hover {\n  background-color: #f1f1f1;\n}\n.stp-row {\n  background-color: #e0f0ff;\n}\n.sell-row {\n  background-color: red;\n}\n.buy-at-limit-row {\n  background-color: green;\n}\n"] }]
+  </div>`, styles: ["/* src/app/components/state-view/state-view.component.scss */\n.table {\n  width: 100%;\n  border-collapse: collapse;\n  margin-top: 20px;\n}\nth,\ntd {\n  padding: 8px;\n  text-align: left;\n  border: 1px solid #ddd;\n}\nth {\n  background-color: #f2f2f2;\n}\ntr:hover {\n  background-color: #f1f1f1;\n}\n.stp-row {\n  background-color: #95c9fa;\n}\n.sell-row {\n  background-color: red;\n}\n.buy-at-limit-row {\n  background-color: rgb(2, 160, 2);\n}\n"] }]
   }], () => [{ type: StateService }], null);
 })();
 (() => {
