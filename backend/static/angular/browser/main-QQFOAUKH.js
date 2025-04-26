@@ -38331,7 +38331,7 @@ function StateViewComponent_div_0_p_7_Template(rf, ctx) {
 }
 function StateViewComponent_div_0_tr_28_Template(rf, ctx) {
   if (rf & 1) {
-    \u0275\u0275elementStart(0, "tr", 5)(1, "td");
+    \u0275\u0275elementStart(0, "tr", 6)(1, "td");
     \u0275\u0275text(2);
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(3, "td");
@@ -38416,7 +38416,7 @@ function StateViewComponent_div_0_tr_49_Template(rf, ctx) {
 }
 function StateViewComponent_div_0_tr_72_Template(rf, ctx) {
   if (rf & 1) {
-    \u0275\u0275elementStart(0, "tr", 5)(1, "td");
+    \u0275\u0275elementStart(0, "tr", 6)(1, "td");
     \u0275\u0275text(2);
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(3, "td");
@@ -38503,7 +38503,7 @@ function StateViewComponent_div_0_Template(rf, ctx) {
     \u0275\u0275elementStart(29, "h3");
     \u0275\u0275text(30, "Recent Trades");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(31, "table", 1)(32, "thead")(33, "tr")(34, "th");
+    \u0275\u0275elementStart(31, "table", 3)(32, "thead")(33, "tr")(34, "th");
     \u0275\u0275text(35, "Action");
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(36, "th");
@@ -38525,12 +38525,12 @@ function StateViewComponent_div_0_Template(rf, ctx) {
     \u0275\u0275text(47, "Liquidation");
     \u0275\u0275elementEnd()()();
     \u0275\u0275elementStart(48, "tbody");
-    \u0275\u0275template(49, StateViewComponent_div_0_tr_49_Template, 15, 7, "tr", 3);
+    \u0275\u0275template(49, StateViewComponent_div_0_tr_49_Template, 15, 7, "tr", 4);
     \u0275\u0275elementEnd()();
     \u0275\u0275elementStart(50, "h3");
     \u0275\u0275text(51, "Open Trades");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(52, "table", 4)(53, "thead")(54, "tr")(55, "th");
+    \u0275\u0275elementStart(52, "table", 5)(53, "thead")(54, "tr")(55, "th");
     \u0275\u0275text(56, "Action");
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(57, "th");
@@ -38595,7 +38595,7 @@ var StateViewComponent = class _StateViewComponent {
   static \u0275fac = function StateViewComponent_Factory(__ngFactoryType__) {
     return new (__ngFactoryType__ || _StateViewComponent)(\u0275\u0275directiveInject(StateService));
   };
-  static \u0275cmp = /* @__PURE__ */ \u0275\u0275defineComponent({ type: _StateViewComponent, selectors: [["app-state-view"]], decls: 2, vars: 2, consts: [[4, "ngIf"], [1, "table"], [3, "ngClass", 4, "ngFor", "ngForOf"], [4, "ngFor", "ngForOf"], [1, "table", "trades-table"], [3, "ngClass"]], template: function StateViewComponent_Template(rf, ctx) {
+  static \u0275cmp = /* @__PURE__ */ \u0275\u0275defineComponent({ type: _StateViewComponent, selectors: [["app-state-view"]], decls: 2, vars: 2, consts: [[4, "ngIf"], [1, "table"], [3, "ngClass", 4, "ngFor", "ngForOf"], [1, "table", "recent-trades"], [4, "ngFor", "ngForOf"], [1, "table", "trades-table"], [3, "ngClass"]], template: function StateViewComponent_Template(rf, ctx) {
     if (rf & 1) {
       \u0275\u0275template(0, StateViewComponent_div_0_Template, 73, 6, "div", 0)(1, StateViewComponent_div_1_Template, 3, 0, "div", 0);
     }
@@ -38604,7 +38604,7 @@ var StateViewComponent = class _StateViewComponent {
       \u0275\u0275advance();
       \u0275\u0275property("ngIf", !ctx.state);
     }
-  }, dependencies: [CommonModule, NgClass, NgForOf, NgIf], styles: ["\n\n.table[_ngcontent-%COMP%] {\n  width: 100%;\n  border-collapse: collapse;\n  margin-top: 20px;\n}\nth[_ngcontent-%COMP%], \ntd[_ngcontent-%COMP%] {\n  padding: 8px;\n  text-align: left;\n  border: 1px solid #ddd;\n}\nth[_ngcontent-%COMP%] {\n  background-color: #f2f2f2;\n}\ntable[_ngcontent-%COMP%]:not(.trades-table)   tr[_ngcontent-%COMP%]:nth-child(even) {\n  background-color: #f9f9f9;\n}\ntr[_ngcontent-%COMP%]:hover {\n  background-color: #f1f1f1;\n}\n.far-from-stop-loss-row[_ngcontent-%COMP%] {\n  background-color: rgb(3, 182, 3);\n}\n.close-to-stop-loss-row[_ngcontent-%COMP%] {\n  background-color: red;\n}\n.stp-row[_ngcontent-%COMP%] {\n  background-color: #79baf7;\n}\n.sell-row[_ngcontent-%COMP%] {\n  background-color: red;\n}\n.buy-at-limit-row[_ngcontent-%COMP%] {\n  background-color: rgb(3, 182, 3);\n}"] });
+  }, dependencies: [CommonModule, NgClass, NgForOf, NgIf], styles: ["\n\n.table[_ngcontent-%COMP%] {\n  width: 100%;\n  border-collapse: collapse;\n  margin-top: 20px;\n}\nth[_ngcontent-%COMP%], \ntd[_ngcontent-%COMP%] {\n  padding: 8px;\n  text-align: left;\n  border: 1px solid #ddd;\n}\nth[_ngcontent-%COMP%] {\n  background-color: #f2f2f2;\n}\ntable[_ngcontent-%COMP%]:recent-trades   tr[_ngcontent-%COMP%]:nth-child(even) {\n  background-color: #f9f9f9;\n}\ntr[_ngcontent-%COMP%]:hover {\n  background-color: #f1f1f1;\n}\n.far-from-stop-loss-row[_ngcontent-%COMP%] {\n  background-color: rgb(3, 182, 3);\n}\n.close-to-stop-loss-row[_ngcontent-%COMP%] {\n  background-color: red;\n}\n.stp-row[_ngcontent-%COMP%] {\n  background-color: #79baf7;\n}\n.sell-row[_ngcontent-%COMP%] {\n  background-color: red;\n}\n.buy-at-limit-row[_ngcontent-%COMP%] {\n  background-color: rgb(3, 182, 3);\n}"] });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(StateViewComponent, [{
@@ -38646,7 +38646,7 @@ var StateViewComponent = class _StateViewComponent {
       </table>\r
     \r
       <h3>Recent Trades</h3>\r
-      <table class="table">\r
+      <table class="table recent-trades">\r
         <thead>\r
           <tr>\r
             <th>Action</th>\r
@@ -38706,7 +38706,7 @@ var StateViewComponent = class _StateViewComponent {
     \r
     <div *ngIf="!state">\r
       <p>Loading state...</p>\r
-    </div>`, styles: ["/* src/app/components/state-view/state-view.component.scss */\n.table {\n  width: 100%;\n  border-collapse: collapse;\n  margin-top: 20px;\n}\nth,\ntd {\n  padding: 8px;\n  text-align: left;\n  border: 1px solid #ddd;\n}\nth {\n  background-color: #f2f2f2;\n}\ntable:not(.trades-table) tr:nth-child(even) {\n  background-color: #f9f9f9;\n}\ntr:hover {\n  background-color: #f1f1f1;\n}\n.far-from-stop-loss-row {\n  background-color: rgb(3, 182, 3);\n}\n.close-to-stop-loss-row {\n  background-color: red;\n}\n.stp-row {\n  background-color: #79baf7;\n}\n.sell-row {\n  background-color: red;\n}\n.buy-at-limit-row {\n  background-color: rgb(3, 182, 3);\n}\n"] }]
+    </div>`, styles: ["/* src/app/components/state-view/state-view.component.scss */\n.table {\n  width: 100%;\n  border-collapse: collapse;\n  margin-top: 20px;\n}\nth,\ntd {\n  padding: 8px;\n  text-align: left;\n  border: 1px solid #ddd;\n}\nth {\n  background-color: #f2f2f2;\n}\ntable:recent-trades tr:nth-child(even) {\n  background-color: #f9f9f9;\n}\ntr:hover {\n  background-color: #f1f1f1;\n}\n.far-from-stop-loss-row {\n  background-color: rgb(3, 182, 3);\n}\n.close-to-stop-loss-row {\n  background-color: red;\n}\n.stp-row {\n  background-color: #79baf7;\n}\n.sell-row {\n  background-color: red;\n}\n.buy-at-limit-row {\n  background-color: rgb(3, 182, 3);\n}\n"] }]
   }], () => [{ type: StateService }], null);
 })();
 (() => {
