@@ -20,6 +20,8 @@ def update_state():
     now = time.time()
     timezone = pytz.timezone(last_state['timezone'])
     last_state['time'] = datetime.now(timezone).strftime("%d/%m/%Y %H:%M")
+    for fill in last_state['fills']:
+        fill.time = fill.time(timezone).strftime("%d/%m/%Y %H:%M")
     return '', 204
 
 @app.route('/api/state')
