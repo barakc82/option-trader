@@ -17,11 +17,7 @@ def update_state():
     # Save/update status
     global last_state
     last_state = state
-    now = time.time()
-    timezone = pytz.timezone(last_state['timezone'])
-    last_state['time'] = datetime.now(timezone).strftime("%d/%m/%Y %H:%M")
-    for fill in last_state['fills']:
-        fill.time = fill.time(timezone).strftime("%d/%m/%Y %H:%M")
+    last_state['time'] = time.time()
     return '', 204
 
 @app.route('/api/state')
