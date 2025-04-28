@@ -38313,7 +38313,7 @@ var StateService = class _StateService {
 })();
 
 // src/app/components/state-view/state-view.component.ts
-var _c0 = (a0, a1) => ({ "far-from-stop-loss-row": a0, "close-to-stop-loss-row": a1 });
+var _c0 = (a0, a1, a2) => ({ "far-from-stop-loss-row": a0, "close-to-stop-loss-row": a1, "zero-stop-loss-row": a2 });
 var _c1 = (a0, a1, a2) => ({ "stp-row": a0, "sell-row": a1, "buy-at-limit-row": a2 });
 function StateViewComponent_div_0_p_7_Template(rf, ctx) {
   if (rf & 1) {
@@ -38355,7 +38355,7 @@ function StateViewComponent_div_0_tr_28_Template(rf, ctx) {
   }
   if (rf & 2) {
     const pos_r2 = ctx.$implicit;
-    \u0275\u0275property("ngClass", \u0275\u0275pureFunction2(8, _c0, pos_r2.last_price !== "" && +pos_r2.last_price < pos_r2.stop_loss * 0.5, pos_r2.last_price !== "" && +pos_r2.last_price >= pos_r2.stop_loss * 0.5));
+    \u0275\u0275property("ngClass", \u0275\u0275pureFunction3(8, _c0, pos_r2.last_price !== "" && +pos_r2.last_price < pos_r2.stop_loss * 0.5, pos_r2.last_price !== "" && +pos_r2.last_price >= pos_r2.stop_loss * 0.5 && pos_r2.stop_loss != 0, pos_r2.stop_loss == 0));
     \u0275\u0275advance(2);
     \u0275\u0275textInterpolate(pos_r2.right);
     \u0275\u0275advance(2);
@@ -38498,7 +38498,7 @@ function StateViewComponent_div_0_Template(rf, ctx) {
     \u0275\u0275text(26, "Stop Loss");
     \u0275\u0275elementEnd()()();
     \u0275\u0275elementStart(27, "tbody");
-    \u0275\u0275template(28, StateViewComponent_div_0_tr_28_Template, 15, 11, "tr", 2);
+    \u0275\u0275template(28, StateViewComponent_div_0_tr_28_Template, 15, 12, "tr", 2);
     \u0275\u0275elementEnd()();
     \u0275\u0275elementStart(29, "h3");
     \u0275\u0275text(30, "Recent Trades");
@@ -38604,7 +38604,7 @@ var StateViewComponent = class _StateViewComponent {
       \u0275\u0275advance();
       \u0275\u0275property("ngIf", !ctx.state);
     }
-  }, dependencies: [CommonModule, NgClass, NgForOf, NgIf], styles: ["\n\n.table[_ngcontent-%COMP%] {\n  width: 100%;\n  border-collapse: collapse;\n  margin-top: 20px;\n}\nth[_ngcontent-%COMP%], \ntd[_ngcontent-%COMP%] {\n  padding: 8px;\n  text-align: left;\n  border: 1px solid #ddd;\n}\nth[_ngcontent-%COMP%] {\n  background-color: #f2f2f2;\n}\ntable[_ngcontent-%COMP%]:recent-trades   tr[_ngcontent-%COMP%]:nth-child(even) {\n  background-color: #f9f9f9;\n}\ntr[_ngcontent-%COMP%]:hover {\n  background-color: #f1f1f1;\n}\n.far-from-stop-loss-row[_ngcontent-%COMP%] {\n  background-color: rgb(3, 182, 3);\n}\n.close-to-stop-loss-row[_ngcontent-%COMP%] {\n  background-color: red;\n}\n.stp-row[_ngcontent-%COMP%] {\n  background-color: #79baf7;\n}\n.sell-row[_ngcontent-%COMP%] {\n  background-color: red;\n}\n.buy-at-limit-row[_ngcontent-%COMP%] {\n  background-color: rgb(3, 182, 3);\n}"] });
+  }, dependencies: [CommonModule, NgClass, NgForOf, NgIf], styles: ["\n\n.table[_ngcontent-%COMP%] {\n  width: 100%;\n  border-collapse: collapse;\n  margin-top: 20px;\n}\nth[_ngcontent-%COMP%], \ntd[_ngcontent-%COMP%] {\n  padding: 8px;\n  text-align: left;\n  border: 1px solid #ddd;\n}\nth[_ngcontent-%COMP%] {\n  background-color: #f2f2f2;\n}\ntable[_ngcontent-%COMP%]:recent-trades   tr[_ngcontent-%COMP%]:nth-child(even) {\n  background-color: #f9f9f9;\n}\ntr[_ngcontent-%COMP%]:hover {\n  background-color: #f1f1f1;\n}\n.far-from-stop-loss-row[_ngcontent-%COMP%] {\n  background-color: rgb(3, 182, 3);\n}\n.close-to-stop-loss-row[_ngcontent-%COMP%] {\n  background-color: red;\n}\n.zero-stop-loss-row[_ngcontent-%COMP%] {\n  background-color: orange;\n}\n.stp-row[_ngcontent-%COMP%] {\n  background-color: #79baf7;\n}\n.sell-row[_ngcontent-%COMP%] {\n  background-color: red;\n}\n.buy-at-limit-row[_ngcontent-%COMP%] {\n  background-color: rgb(3, 182, 3);\n}"] });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(StateViewComponent, [{
@@ -38632,7 +38632,8 @@ var StateViewComponent = class _StateViewComponent {
         <tbody>\r
           <tr *ngFor="let pos of state.positions" [ngClass]="{\r
             'far-from-stop-loss-row': pos.last_price !== '' && +pos.last_price < pos.stop_loss * 0.5,\r
-            'close-to-stop-loss-row': pos.last_price !== '' && +pos.last_price >= pos.stop_loss * 0.5\r
+            'close-to-stop-loss-row': pos.last_price !== '' && +pos.last_price >= pos.stop_loss * 0.5 && pos.stop_loss != 0,\r
+            'zero-stop-loss-row': pos.stop_loss == 0\r
           }">\r
             <td>{{ pos.right }}</td>\r
             <td>{{ pos.strike }}</td>\r
@@ -38706,7 +38707,7 @@ var StateViewComponent = class _StateViewComponent {
     \r
     <div *ngIf="!state">\r
       <p>Loading state...</p>\r
-    </div>`, styles: ["/* src/app/components/state-view/state-view.component.scss */\n.table {\n  width: 100%;\n  border-collapse: collapse;\n  margin-top: 20px;\n}\nth,\ntd {\n  padding: 8px;\n  text-align: left;\n  border: 1px solid #ddd;\n}\nth {\n  background-color: #f2f2f2;\n}\ntable:recent-trades tr:nth-child(even) {\n  background-color: #f9f9f9;\n}\ntr:hover {\n  background-color: #f1f1f1;\n}\n.far-from-stop-loss-row {\n  background-color: rgb(3, 182, 3);\n}\n.close-to-stop-loss-row {\n  background-color: red;\n}\n.stp-row {\n  background-color: #79baf7;\n}\n.sell-row {\n  background-color: red;\n}\n.buy-at-limit-row {\n  background-color: rgb(3, 182, 3);\n}\n"] }]
+    </div>`, styles: ["/* src/app/components/state-view/state-view.component.scss */\n.table {\n  width: 100%;\n  border-collapse: collapse;\n  margin-top: 20px;\n}\nth,\ntd {\n  padding: 8px;\n  text-align: left;\n  border: 1px solid #ddd;\n}\nth {\n  background-color: #f2f2f2;\n}\ntable:recent-trades tr:nth-child(even) {\n  background-color: #f9f9f9;\n}\ntr:hover {\n  background-color: #f1f1f1;\n}\n.far-from-stop-loss-row {\n  background-color: rgb(3, 182, 3);\n}\n.close-to-stop-loss-row {\n  background-color: red;\n}\n.zero-stop-loss-row {\n  background-color: orange;\n}\n.stp-row {\n  background-color: #79baf7;\n}\n.sell-row {\n  background-color: red;\n}\n.buy-at-limit-row {\n  background-color: rgb(3, 182, 3);\n}\n"] }]
   }], () => [{ type: StateService }], null);
 })();
 (() => {
