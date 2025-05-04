@@ -7,12 +7,26 @@ from flask import Flask, send_from_directory, jsonify, request
 
 app = Flask(__name__, static_folder='static/angular')
 last_state = {'status': 'unknown', 'timestamp': 0}
+last_supervisor_state = {'status': 'unknown', 'timestamp': 0}
+
+@app.route('/api/update-supervisor-state', methods=['POST'])
+def update_supervisor_state():
+    supervisor_state = request.get_json()
+    if not supervisor_state:
+        return jsonify({'error': 'Missing supervisor state'}), 400
+    if 'status' not in state:
+        return jsonify({'error': 'Missing status'}), 400
+
+    global last_supervisor_state
+    last_supervisor_state = supervisor_state
+    last_supervisor_state['time'] = time.time()
+    return '', 204
 
 @app.route('/api/update-state', methods=['POST'])
 def update_state():
     state = request.get_json()
     if not state or 'status' not in state:
-        return jsonify({'error': 'Missing user_id or status'}), 400
+        return jsonify({'error': 'Missing state or status'}), 400
     
     # Save/update status
     global last_state
@@ -24,7 +38,7 @@ def update_state():
 def get_state():
     return jsonify(last_state)
 
-@app.route('/api/hello')
+@app.route('/api/super')
 def hello():
     return jsonify(message="Hello from Flask!")
 
