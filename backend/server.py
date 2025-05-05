@@ -14,7 +14,7 @@ def update_supervisor_state():
     supervisor_state = request.get_json()
     if not supervisor_state:
         return jsonify({'error': 'Missing supervisor state'}), 400
-    if 'status' not in state:
+    if 'status' not in supervisor_state:
         return jsonify({'error': 'Missing status'}), 400
 
     global last_supervisor_state
@@ -38,7 +38,7 @@ def update_state():
 def get_state():
     return jsonify(last_state)
 
-@app.route('/api/supervisor_state')
+@app.route('/api/supervisor-state')
 def get_supervisor_state():
     return jsonify(last_supervisor_state)
 
