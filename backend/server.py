@@ -38,9 +38,9 @@ def update_state():
 def get_state():
     return jsonify(last_state)
 
-@app.route('/api/super')
-def hello():
-    return jsonify(message="Hello from Flask!")
+@app.route('/api/supervisor_state')
+def get_supervisor_state():
+    return jsonify(last_supervisor_state)
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
