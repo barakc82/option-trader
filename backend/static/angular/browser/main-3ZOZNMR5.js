@@ -38336,7 +38336,7 @@ function StateViewComponent_div_0_p_8_Template(rf, ctx) {
     \u0275\u0275textInterpolate1(" ", ctx_r0.state.excess_liquidity, " ");
   }
 }
-function StateViewComponent_div_0_tr_39_Template(rf, ctx) {
+function StateViewComponent_div_0_tr_44_Template(rf, ctx) {
   if (rf & 1) {
     \u0275\u0275elementStart(0, "tr", 7)(1, "td");
     \u0275\u0275text(2);
@@ -38379,7 +38379,7 @@ function StateViewComponent_div_0_tr_39_Template(rf, ctx) {
     \u0275\u0275textInterpolate(pos_r2.stop_loss);
   }
 }
-function StateViewComponent_div_0_tr_60_Template(rf, ctx) {
+function StateViewComponent_div_0_tr_65_Template(rf, ctx) {
   if (rf & 1) {
     \u0275\u0275elementStart(0, "tr")(1, "td");
     \u0275\u0275text(2);
@@ -38422,7 +38422,7 @@ function StateViewComponent_div_0_tr_60_Template(rf, ctx) {
     \u0275\u0275textInterpolate(trade_r3.liquidation);
   }
 }
-function StateViewComponent_div_0_tr_83_Template(rf, ctx) {
+function StateViewComponent_div_0_tr_88_Template(rf, ctx) {
   if (rf & 1) {
     \u0275\u0275elementStart(0, "tr", 7)(1, "td");
     \u0275\u0275text(2);
@@ -38483,100 +38483,106 @@ function StateViewComponent_div_0_Template(rf, ctx) {
     \u0275\u0275elementEnd();
     \u0275\u0275template(8, StateViewComponent_div_0_p_8_Template, 4, 1, "p", 0);
     \u0275\u0275elementStart(9, "p")(10, "strong");
-    \u0275\u0275text(11, "Liquidation Alert Time:");
+    \u0275\u0275text(11, "Supervisor Time:");
     \u0275\u0275elementEnd();
     \u0275\u0275text(12);
     \u0275\u0275pipe(13, "date");
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(14, "p")(15, "strong");
-    \u0275\u0275text(16, "Liquidation Time:");
+    \u0275\u0275text(16, "Liquidation Alert Time:");
     \u0275\u0275elementEnd();
     \u0275\u0275text(17);
     \u0275\u0275pipe(18, "date");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(19, "h3");
-    \u0275\u0275text(20, "Positions");
+    \u0275\u0275elementStart(19, "p")(20, "strong");
+    \u0275\u0275text(21, "Liquidation Time:");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(21, "table", 2)(22, "thead")(23, "tr")(24, "th");
-    \u0275\u0275text(25, "Right");
+    \u0275\u0275text(22);
+    \u0275\u0275pipe(23, "date");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(26, "th");
-    \u0275\u0275text(27, "Strike");
+    \u0275\u0275elementStart(24, "h3");
+    \u0275\u0275text(25, "Positions");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(28, "th");
-    \u0275\u0275text(29, "Quantity");
+    \u0275\u0275elementStart(26, "table", 2)(27, "thead")(28, "tr")(29, "th");
+    \u0275\u0275text(30, "Right");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(30, "th");
-    \u0275\u0275text(31, "Date");
+    \u0275\u0275elementStart(31, "th");
+    \u0275\u0275text(32, "Strike");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(32, "th");
-    \u0275\u0275text(33, "Last Price");
+    \u0275\u0275elementStart(33, "th");
+    \u0275\u0275text(34, "Quantity");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(34, "th");
-    \u0275\u0275text(35, "Delta");
+    \u0275\u0275elementStart(35, "th");
+    \u0275\u0275text(36, "Date");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(36, "th");
-    \u0275\u0275text(37, "Stop Loss");
+    \u0275\u0275elementStart(37, "th");
+    \u0275\u0275text(38, "Last Price");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(39, "th");
+    \u0275\u0275text(40, "Delta");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(41, "th");
+    \u0275\u0275text(42, "Stop Loss");
     \u0275\u0275elementEnd()()();
-    \u0275\u0275elementStart(38, "tbody");
-    \u0275\u0275template(39, StateViewComponent_div_0_tr_39_Template, 15, 12, "tr", 3);
+    \u0275\u0275elementStart(43, "tbody");
+    \u0275\u0275template(44, StateViewComponent_div_0_tr_44_Template, 15, 12, "tr", 3);
     \u0275\u0275elementEnd()();
-    \u0275\u0275elementStart(40, "h3");
-    \u0275\u0275text(41, "Recent Trades");
+    \u0275\u0275elementStart(45, "h3");
+    \u0275\u0275text(46, "Recent Trades");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(42, "table", 4)(43, "thead")(44, "tr")(45, "th");
-    \u0275\u0275text(46, "Action");
+    \u0275\u0275elementStart(47, "table", 4)(48, "thead")(49, "tr")(50, "th");
+    \u0275\u0275text(51, "Action");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(47, "th");
-    \u0275\u0275text(48, "Right");
+    \u0275\u0275elementStart(52, "th");
+    \u0275\u0275text(53, "Right");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(49, "th");
-    \u0275\u0275text(50, "Strike");
+    \u0275\u0275elementStart(54, "th");
+    \u0275\u0275text(55, "Strike");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(51, "th");
-    \u0275\u0275text(52, "Quantity");
+    \u0275\u0275elementStart(56, "th");
+    \u0275\u0275text(57, "Quantity");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(53, "th");
-    \u0275\u0275text(54, "Time");
+    \u0275\u0275elementStart(58, "th");
+    \u0275\u0275text(59, "Time");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(55, "th");
-    \u0275\u0275text(56, "Price");
+    \u0275\u0275elementStart(60, "th");
+    \u0275\u0275text(61, "Price");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(57, "th");
-    \u0275\u0275text(58, "Liquidation");
+    \u0275\u0275elementStart(62, "th");
+    \u0275\u0275text(63, "Liquidation");
     \u0275\u0275elementEnd()()();
-    \u0275\u0275elementStart(59, "tbody");
-    \u0275\u0275template(60, StateViewComponent_div_0_tr_60_Template, 16, 10, "tr", 5);
+    \u0275\u0275elementStart(64, "tbody");
+    \u0275\u0275template(65, StateViewComponent_div_0_tr_65_Template, 16, 10, "tr", 5);
     \u0275\u0275elementEnd()();
-    \u0275\u0275elementStart(61, "h3");
-    \u0275\u0275text(62, "Open Trades");
+    \u0275\u0275elementStart(66, "h3");
+    \u0275\u0275text(67, "Open Trades");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(63, "table", 6)(64, "thead")(65, "tr")(66, "th");
-    \u0275\u0275text(67, "Action");
+    \u0275\u0275elementStart(68, "table", 6)(69, "thead")(70, "tr")(71, "th");
+    \u0275\u0275text(72, "Action");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(68, "th");
-    \u0275\u0275text(69, "Right");
+    \u0275\u0275elementStart(73, "th");
+    \u0275\u0275text(74, "Right");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(70, "th");
-    \u0275\u0275text(71, "Strike");
+    \u0275\u0275elementStart(75, "th");
+    \u0275\u0275text(76, "Strike");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(72, "th");
-    \u0275\u0275text(73, "Quantity");
+    \u0275\u0275elementStart(77, "th");
+    \u0275\u0275text(78, "Quantity");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(74, "th");
-    \u0275\u0275text(75, "Date");
+    \u0275\u0275elementStart(79, "th");
+    \u0275\u0275text(80, "Date");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(76, "th");
-    \u0275\u0275text(77, "Delta");
+    \u0275\u0275elementStart(81, "th");
+    \u0275\u0275text(82, "Delta");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(78, "th");
-    \u0275\u0275text(79, "Order Type");
+    \u0275\u0275elementStart(83, "th");
+    \u0275\u0275text(84, "Order Type");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(80, "th");
-    \u0275\u0275text(81, "Limit");
+    \u0275\u0275elementStart(85, "th");
+    \u0275\u0275text(86, "Limit");
     \u0275\u0275elementEnd()()();
-    \u0275\u0275elementStart(82, "tbody");
-    \u0275\u0275template(83, StateViewComponent_div_0_tr_83_Template, 17, 13, "tr", 3);
+    \u0275\u0275elementStart(87, "tbody");
+    \u0275\u0275template(88, StateViewComponent_div_0_tr_88_Template, 17, 13, "tr", 3);
     \u0275\u0275elementEnd()()();
   }
   if (rf & 2) {
@@ -38584,13 +38590,15 @@ function StateViewComponent_div_0_Template(rf, ctx) {
     \u0275\u0275advance(2);
     \u0275\u0275textInterpolate1("Status: ", ctx_r0.state.status, "");
     \u0275\u0275advance(4);
-    \u0275\u0275textInterpolate1(" ", \u0275\u0275pipeBind2(7, 8, ctx_r0.state.time * 1e3, "dd/MM/yy HH:mm"), "");
+    \u0275\u0275textInterpolate1(" ", \u0275\u0275pipeBind2(7, 9, ctx_r0.state.time * 1e3, "dd/MM/yy HH:mm"), "");
     \u0275\u0275advance(2);
     \u0275\u0275property("ngIf", ctx_r0.state.excess_liquidity !== "");
     \u0275\u0275advance(4);
-    \u0275\u0275textInterpolate1(" ", ctx_r0.state.liquidation_alert_time === 0 ? "No alert" : \u0275\u0275pipeBind2(13, 11, ctx_r0.state.liquidation_alert_time * 1e3, "dd/MM/yy HH:mm"), " ");
+    \u0275\u0275textInterpolate1(" ", ctx_r0.supervisor_state ? \u0275\u0275pipeBind2(13, 12, ctx_r0.supervisor_state.time * 1e3, "dd/MM/yy HH:mm") : "Inactive", " ");
     \u0275\u0275advance(5);
-    \u0275\u0275textInterpolate1(" ", ctx_r0.state.liquidation_time === 0 ? "No liquidation" : \u0275\u0275pipeBind2(18, 14, ctx_r0.state.liquidation_time * 1e3, "dd/MM/yy HH:mm"), " ");
+    \u0275\u0275textInterpolate1(" ", ctx_r0.state.liquidation_alert_time === 0 ? "No alert" : \u0275\u0275pipeBind2(18, 15, ctx_r0.state.liquidation_alert_time * 1e3, "dd/MM/yy HH:mm"), " ");
+    \u0275\u0275advance(5);
+    \u0275\u0275textInterpolate1(" ", ctx_r0.state.liquidation_time === 0 ? "No liquidation" : \u0275\u0275pipeBind2(23, 18, ctx_r0.state.liquidation_time * 1e3, "dd/MM/yy HH:mm"), " ");
     \u0275\u0275advance(22);
     \u0275\u0275property("ngForOf", ctx_r0.state.positions);
     \u0275\u0275advance(21);
@@ -38633,7 +38641,7 @@ var StateViewComponent = class _StateViewComponent {
   };
   static \u0275cmp = /* @__PURE__ */ \u0275\u0275defineComponent({ type: _StateViewComponent, selectors: [["app-state-view"]], decls: 2, vars: 2, consts: [[4, "ngIf"], [4, ""], [1, "table"], [3, "ngClass", 4, "ngFor", "ngForOf"], [1, "table", "recent-trades"], [4, "ngFor", "ngForOf"], [1, "table", "trades-table"], [3, "ngClass"]], template: function StateViewComponent_Template(rf, ctx) {
     if (rf & 1) {
-      \u0275\u0275template(0, StateViewComponent_div_0_Template, 84, 17, "div", 0)(1, StateViewComponent_div_1_Template, 3, 0, "div", 1);
+      \u0275\u0275template(0, StateViewComponent_div_0_Template, 89, 21, "div", 0)(1, StateViewComponent_div_1_Template, 3, 0, "div", 1);
     }
     if (rf & 2) {
       \u0275\u0275property("ngIf", ctx.state);
@@ -38651,7 +38659,10 @@ var StateViewComponent = class _StateViewComponent {
       <p *ngIf="state.excess_liquidity !== ''">\r
         <strong>Excess Liquidity:</strong> {{ state.excess_liquidity }}\r
       </p>\r
-      \r
+      <p>\r
+        <strong>Supervisor Time:</strong> \r
+        {{ supervisor_state ? (supervisor_state.time * 1000 | date:'dd/MM/yy HH:mm') : 'Inactive'}}\r
+      </p>\r
       <p><strong>Liquidation Alert Time:</strong> {{ state.liquidation_alert_time === 0 \r
         ? 'No alert' \r
         : (state.liquidation_alert_time * 1000 | date:'dd/MM/yy HH:mm') }}\r
