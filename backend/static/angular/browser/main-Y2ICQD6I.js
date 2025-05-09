@@ -38596,7 +38596,7 @@ function StateViewComponent_div_0_Template(rf, ctx) {
     \u0275\u0275advance(2);
     \u0275\u0275property("ngIf", ctx_r0.state.excess_liquidity !== "");
     \u0275\u0275advance();
-    \u0275\u0275property("ngStyle", ctx_r0.is_supervisor_active() ? \u0275\u0275pureFunction0(22, _c0) : \u0275\u0275pureFunction0(23, _c1));
+    \u0275\u0275property("ngStyle", !ctx_r0.is_supervisor_active() ? \u0275\u0275pureFunction0(22, _c0) : \u0275\u0275pureFunction0(23, _c1));
     \u0275\u0275advance(3);
     \u0275\u0275textInterpolate1(" ", ctx_r0.supervisor_state ? \u0275\u0275pipeBind2(13, 13, ctx_r0.supervisor_state.time * 1e3, "dd/MM/yy HH:mm") : "Inactive", " ");
     \u0275\u0275advance(5);
@@ -38663,7 +38663,7 @@ var StateViewComponent = class _StateViewComponent {
       <p *ngIf="state.excess_liquidity !== ''">\r
         <strong>Excess Liquidity:</strong> {{ state.excess_liquidity }}\r
       </p>\r
-      <p [ngStyle]="is_supervisor_active() ? {'background-color': 'red'} : {}">\r
+      <p [ngStyle]="!is_supervisor_active() ? {'background-color': 'red'} : {}">\r
         <strong>Supervisor Time:</strong> \r
         {{ supervisor_state ? (supervisor_state.time * 1000 | date:'dd/MM/yy HH:mm') : 'Inactive'}}\r
       </p>\r
