@@ -38435,7 +38435,7 @@ function StateViewComponent_div_0_tr_74_Template(rf, ctx) {
     \u0275\u0275advance(3);
     \u0275\u0275textInterpolate(trade_r3.price);
     \u0275\u0275advance(2);
-    \u0275\u0275textInterpolate(trade_r3.liquidation);
+    \u0275\u0275textInterpolate(trade_r3.comment);
   }
 }
 function StateViewComponent_div_0_tr_97_Template(rf, ctx) {
@@ -38576,7 +38576,7 @@ function StateViewComponent_div_0_Template(rf, ctx) {
     \u0275\u0275text(70, "Price");
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(71, "th");
-    \u0275\u0275text(72, "Liquidation");
+    \u0275\u0275text(72, "Comment");
     \u0275\u0275elementEnd()()();
     \u0275\u0275elementStart(73, "tbody");
     \u0275\u0275template(74, StateViewComponent_div_0_tr_74_Template, 16, 10, "tr", 6);
@@ -38756,7 +38756,7 @@ var StateViewComponent = class _StateViewComponent {
             <th>Quantity</th>\r
             <th>Time</th>\r
             <th>Price</th>\r
-            <th>Liquidation</th>\r
+            <th>Comment</th>\r
           </tr>\r
         </thead>\r
         <tbody>\r
@@ -38767,7 +38767,7 @@ var StateViewComponent = class _StateViewComponent {
             <td>{{ trade.quantity }}</td>\r
             <td>{{ trade.time * 1000 | date:'dd/MM/yy HH:mm' }}</td>\r
             <td>{{ trade.price }}</td>\r
-            <td>{{ trade.liquidation }}</td>\r
+            <td>{{ trade.comment }}</td>\r
           </tr>\r
         </tbody>\r
       </table>\r
