@@ -38543,12 +38543,12 @@ function StateViewComponent_div_0_Template(rf, ctx) {
     \u0275\u0275text(32);
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(33, "p")(34, "strong");
-    \u0275\u0275text(35, "Call Options above Minimal Price:");
+    \u0275\u0275text(35, "Call Option Last Price:");
     \u0275\u0275elementEnd();
     \u0275\u0275text(36);
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(37, "p")(38, "strong");
-    \u0275\u0275text(39, "Put Options above Minimal Price:");
+    \u0275\u0275text(39, "Put Options Last Price:");
     \u0275\u0275elementEnd();
     \u0275\u0275text(40);
     \u0275\u0275elementEnd();
@@ -38785,10 +38785,10 @@ var StateViewComponent = class _StateViewComponent {
         <strong>Risk fraction:</strong> {{ state.risk_fraction }}\r
       </p>\r
       <p>\r
-        <strong>Call Options above Minimal Price:</strong> {{ state.last_call_option_price }}\r
+        <strong>Call Option Last Price:</strong> {{ state.last_call_option_price }}\r
       </p>\r
       <p>\r
-        <strong>Put Options above Minimal Price:</strong> {{ state.last_put_option_price }}\r
+        <strong>Put Options Last Price:</strong> {{ state.last_put_option_price }}\r
       </p>\r
       <p>\r
         <strong>Call Options above Minimal Price:</strong> {{ state.call_options_above_minimal_sell_price }}\r
