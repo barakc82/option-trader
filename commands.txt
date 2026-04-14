@@ -1,0 +1,13 @@
+cd C:\Users\Barak\PycharmProjects\OptionTrader
+sudo docker build -t option-trader-image .
+
+interactive mode:
+sudo docker run -it -e TWS_USERID="barakc1982" -e TWS_PASSWORD="ufekze96" -e TRADING_MODE="live" -e READ_ONLY_API="no" -e AUTO_RESTART_TIME="11:00 PM" --name option-trader option-trader-image
+
+detached mode:
+sudo docker run -d -e TWS_USERID="barakc1982" -e TWS_PASSWORD="ufekze96" -e TRADING_MODE="live" -e READ_ONLY_API="no" -e AUTO_RESTART_TIME="11:00 PM" --name option-trader option-trader-image ; sudo docker logs -f option-trader
+sudo docker exec -it option-trader /bin/bash
+sudo docker rm -f option-trader
+
+sudo docker save -o option-trader-image.tar option-trader-image:latest
+sudo docker load -i option-trader-image.tar

@@ -1,0 +1,103 @@
+FROM ubuntu:latest
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    wget \
+    openjdk-8-jdk-headless \
+    unzip \
+    xvfb \
+    libxtst6 \
+    libxrender1 \
+    libxi6 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set environment variables
+ENV IBG_VERSION=10.30.1m
+ENV IBC_VERSION=3.23.0
+ENV IB_DIR=/root/Jts
+ENV APP_DIR=/app
+
+COPY install_ibgateway.exp /tmp/install_ibgateway.exp
+
+# Make them executable
+RUN chmod +x /tmp/ibgateway-installer.sh /tmp/install_ibgateway.exp
+
+# Download and install IB Gateway
+RUN wget -q https://download2.interactivebrokers.com/installers/ibgateway/stable-standalone/ibgateway-stable-standalone-linux-x64.sh \
+    && chmod +x ibgateway-stable-standalone-linux-x64.sh
+
+# Run the Expect script to install IB Gateway
+RUN /tmp/install_ibgateway.exp
+
+RUN rm -rf ibgateway-stable-standalone-linux-x64.sh
+
+# Download and install IBC
+RUN wget -q https://github.com/IbcAlpha/IBC/releases/download/${IBC_VERSION}/IBCLinux-${IBC_VERSION}.zip \
+    && unzip IBCLinux-${IBC_VERSION}.zip -d /opt/ibc \
+    && rm IBCLinux-${IBC_VERSION}.zip \
+    && chmod +x /opt/ibc/*.sh /opt/ibc/scripts/*.sh
+
+# Install ib_insync
+RUN pip3 install ib_insync --break-system-packages
+
+# Create app directory
+RUN mkdir -p ${APP_DIR}
+
+# Sample Python script (replace with your own via COPY if needed)
+RUN echo 'from ib_insync import *' > ${APP_DIR}/script.py \
+    && echo 'import asyncio' >> ${APP_DIR}/script.py \
+    && echo 'async def main():' >> ${APP_DIR}/script.py \
+    && echo '    ib = IB()' >> ${APP_DIR}/script.py \
+    && echo '    port = 4002 if "${TRADING_MODE}" == "paper" else 4001' >> ${APP_DIR}/script.py \
+    && echo '    ib.connect("127.0.0.1", port, clientId=1)' >> ${APP_DIR}/script.py \
+    && echo '    print(ib.positions())' >> ${APP_DIR}/script.py \
+    && echo '    # Add your control logic here' >> ${APP_DIR}/script.py \
+    && echo '    await asyncio.sleep(3600)  # Keep running for 1 hour as example' >> ${APP_DIR}/script.py \
+    && echo 'asyncio.run(main())' >> ${APP_DIR}/script.py
+
+# IBC config template
+RUN cat <<EOF > /opt/ibc/config.ini.template
+IbDir=${IB_DIR}
+IbLoginId=\${IB_ACCOUNT}
+IbPassword=\${IB_PASSWORD}
+TradingMode=\${TRADING_MODE}
+AcceptIncomingConnectionAction=accept
+ClosedownAt=no
+AllowBlindTrading=yes
+Minimize=yes
+EOF
+
+# Entrypoint script
+RUN cat <<EOF > /entrypoint.sh
+#!/bin/bash
+
+# Substitute env vars in config
+envsubst < /opt/ibc/config.ini.template > /root/ibc/config.ini
+
+# Set API port based on trading mode
+PORT=4001
+if [ "\${TRADING_MODE}" = "paper" ]; then
+  PORT=4002
+fi
+echo "ForceTwsApiPort=\${PORT}" >> /opt/ibc/config.ini
+
+# Start Xvfb
+Xvfb :99 -screen 0 1024x768x16 &
+export DISPLAY=:99
+
+# Start IB Gateway via IBC
+#/opt/ibc/scripts/ibcstart.sh &
+/opt/ibc/scripts/ibcstart.sh 1037 --tws-path=/root/Jts/ibgateway --gateway
+
+# Wait for Gateway to start (simple sleep; improve with health check if needed)
+sleep 30
+
+# Run the Python script
+python3 ${APP_DIR}/script.py
+EOF
+
+RUN chmod +x /entrypoint.sh
+
+# Entry point
+ENTRYPOINT ["/entrypoint.sh"]

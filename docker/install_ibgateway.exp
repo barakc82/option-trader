@@ -1,0 +1,8 @@
+#!/usr/bin/expect -f
+
+spawn ./ibgateway-stable-standalone-linux-x64.sh
+
+expect "Where should IB Gateway 10.37 be installed?"
+send "\r"
+
+expect eof
