@@ -12,11 +12,13 @@ from utilities.spreadsheet_update import update_spreadsheet
 # & C:\\"Program Files"\\Google\\Chrome\\Application\\chrome.exe --remote-debugging-port=9222 --user-data-dir=C:\\ChromeDebug --no-first-run
 
 if __name__ == "__main__":
-    name = Barak
-    program_type = Hishtalmut
+    name = Mom
+    program_type = Gemel
 
     driver = start(name, program_type)
 
-    status = extract_status(driver)
-    update_spreadsheet(name, program_type, status)
-    driver.quit()
+    try:
+        status = extract_status(driver)
+        update_spreadsheet(name, program_type, status)
+    finally:
+        driver.quit()
