@@ -65,14 +65,43 @@ for path in paths:
             if limit and limit != "max":
                 mem_limit_mb = int(limit) / (1024 * 1024)  # Convert to MB
 
+import datetime
+
 
 def count_text_in_file(path, text):
     count = 0
+    # 1. Define the time threshold (2 hours ago)
+    now = datetime.datetime.now()
+    threshold = now - datetime.timedelta(hours=2)
+
+    # 2. Match your date format: 2026-04-15 14:12:15
+    date_format = "%Y-%m-%d %H:%M:%S"
+
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
-            count += line.count(text)
-    return count
+            try:
+                # Based on your format: [%(levelname)s] %(asctime)s - ...
+                # We find the part after the first ']'
+                # Example line: [INFO] 2026-04-15 13:00:00 - Main: process started
+                parts = line.split('] ', 1)
+                if len(parts) < 2:
+                    continue
 
+                # Extract the first 19 characters (the length of your datefmt)
+                timestamp_str = parts[1][:19]
+
+                # 3. Convert string to datetime object
+                log_time = datetime.datetime.strptime(timestamp_str, date_format)
+
+                # 4. Only count if the log time is within the last 2 hours
+                if log_time >= threshold:
+                    count += line.count(text)
+
+            except (ValueError, IndexError):
+                # This handles empty lines or lines without a valid timestamp
+                continue
+
+    return count
 
 def find_latest_option_trader_log():
     directory = Path(LOGS_DIR)
@@ -445,11 +474,12 @@ def wait_for_user_to_be_ready_to_login():
     send_telegram_message(message)
     while True:
         time.sleep(0.5)
-        if random.random() < 0.1:
+        if random.random() < 0.07:
             logger.info("Waiting for user to be ready to authenticate")
         post_current_state({'status:': 'Waiting for user to be ready to authenticate'})
         response = requests.get(READY_TO_AUTHENTICATE_STATUS_URL)
         if response.status_code != requests.codes.ok:
+            logger.error(f"Response status code for checking whether the user is ready to authenticate: {response.status_code}")
             continue
         json_response = response.json()
         is_ready_to_authenticate = json_response["is_ready_to_authenticate"]

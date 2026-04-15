@@ -4,7 +4,7 @@ import requests
 import time
 
 from selenium import webdriver
-from selenium.common import ElementNotVisibleException, ElementClickInterceptedException
+from selenium.common import ElementNotVisibleException, ElementClickInterceptedException, StaleElementReferenceException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
@@ -88,7 +88,7 @@ def try_to_click(btn):
     try:
         btn.click()
         return True
-    except ElementClickInterceptedException:
+    except (ElementClickInterceptedException, StaleElementReferenceException):
         print(f"Button is not ready: {btn.text}")
         return False
 

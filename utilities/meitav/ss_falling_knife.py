@@ -85,6 +85,9 @@ def calculate_next_buy(person, program_type):
             required_transfer = (required_leveraged_share - new_leveraged_share) * new_total
             print(f"{lower_leveraged_price} ----> {required_transfer}")
 
+            if lower_leveraged_price == 7061:
+                print(f"At leveraged price of {lower_leveraged_price}, "
+                      f"new base sum:\t{new_base_sum}\n")
             if required_transfer > 1000:
                 leveraged_price_for_transfer = lower_leveraged_price
                 print(f"At leveraged price of {lower_leveraged_price}, new status:\t{new_status}\n"
@@ -117,6 +120,7 @@ def calculate_next_buy(person, program_type):
         base_quantity = int(holdings[base_etf_index][1])
         base_price = float(holdings[base_etf_index][2])
         base_etfs_data.append((base_quantity, base_price))
+    print(f"The base ETF data is {base_etfs_data}")
     should_buy_now = holdings[3][5] == 'Buy'
     purchase_sum = float(holdings[3][6]) if should_buy_now else 0
 

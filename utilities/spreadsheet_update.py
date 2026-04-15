@@ -3,7 +3,7 @@ from utilities.meitav.meitav_common import user_data
 
 ETF_ID_ORDER = [1144708, 5109889, 5112628, 5113345, 5114657, 5122510]
 
-def update_spreadsheet(name, program_type, status):
+def update_status_in_spreadsheet(name, program_type, status):
     this_user_data = user_data[name]
     main_sheet_name = this_user_data['main_sheet_name']
     user_sheet = get_worksheet(main_sheet_name)
@@ -19,3 +19,13 @@ def update_spreadsheet(name, program_type, status):
 
     #ta125_ptf_holding = status['holdings'][5112628]
     #user_sheet.update(values=[[ta125_ptf_holding['quantity']]], range_name=f"B{reference_row + 4}")
+
+
+def update_next_buy_in_spreadsheet(name, program_type, price, deadline):
+    this_user_data = user_data[name]
+    main_sheet_name = this_user_data['main_sheet_name']
+    user_sheet = get_worksheet(main_sheet_name)
+    reference_row = this_user_data[program_type]['starting_row']
+
+    buy_row_index = reference_row-3
+    user_sheet.update(values=[[price, deadline]], range_name=f"D{buy_row_index}:E{buy_row_index}")
