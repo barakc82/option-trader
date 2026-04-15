@@ -12,7 +12,7 @@ from utilities.meitav.meitav_common import *
 from utilities.meitav.ss_falling_knife import calculate_next_buy
 from utilities.meitav.start import start
 
-user = Barak
+user = Mom
 program_type = Gemel
 
 person_data = user_data[user]
@@ -22,49 +22,59 @@ start_date = None
 end_date = target_date = today + relativedelta(months=3, days=-1)
 
 driver = start(user, program_type)
-status = extract_status(driver)
+try:
+    status = extract_status(driver)
 
-price = 8705
-sum = 10000
-element = driver.find_element(By.XPATH, f"//*[text()='1144708']")
-element.click()
-time.sleep(1)
+    price = 8969
 
-buy_button = driver.find_element(By.CSS_SELECTOR, '.buy-btn.stock-info-header')
-print(buy_button)
-buy_button.click()
+    sum = 10000
+    element = driver.find_element(By.XPATH, f"//*[text()='1144708']")
+    element.click()
+    time.sleep(1)
 
-wait_object = WebDriverWait(driver, 40, 1, ([ElementNotVisibleException]))
-wait_object.until(lambda x: x.find_element(By.XPATH, f"//*[text()='מחיר באגורות']") is not None)
+    buy_button = driver.find_element(By.CSS_SELECTOR, '.buy-btn.stock-info-header')
+    print(buy_button)
+    buy_button.click()
 
-inputs = driver.find_elements(By.CSS_SELECTOR, ".send-order-control-item-body input")
+    wait_object = WebDriverWait(driver, 40, 1, ([ElementNotVisibleException]))
+    wait_object.until(lambda x: x.find_element(By.XPATH, f"//*[text()='מחיר באגורות']") is not None)
 
-price_input = inputs[1]
-price_input.clear()
-price_input.send_keys(str(price))
+    send_order_div = driver.find_element(By.CLASS_NAME, "sendOrder")
+    sell_button = send_order_div.find_element(By.XPATH, f"//*[text()='מכירה']")
+    sell_button.click()
 
-sum_input = inputs[3]
-sum_input.clear()
-sum_input.send_keys(str(sum))
+    inputs = driver.find_elements(By.CSS_SELECTOR, ".send-order-control-item-body input")
 
-buttons = driver.find_elements(By.CSS_SELECTOR, "button[aria-label*='לחץ לבחירת תאריך']")
-until_date_button = buttons[1]
-until_date_button.click()
+    price_input = inputs[1]
+    price_input.clear()
+    price_input.send_keys(str(price))
 
-current_month = get_hebrew_month_year()
-buttons = driver.find_elements(By.XPATH, f"//button[strong[normalize-space()='{current_month}']]")
-until_date_button = buttons[1]
-until_date_button.click()
+    sum_input = inputs[3]
+    sum_input.clear()
+    sum_input.send_keys(str(sum))
 
-hebrew_month = hebrew_months[target_date.month]
-assert target_date.year == today.year
+    buttons = driver.find_elements(By.CSS_SELECTOR, "button[aria-label*='לחץ לבחירת תאריך']")
+    until_date_button = buttons[1]
+    until_date_button.click()
 
-month_button = driver.find_element(By.XPATH, f"//button[span[normalize-space()='{hebrew_month}']]")
-month_button.click()
+    current_month = get_hebrew_month_year()
+    buttons = driver.find_elements(By.XPATH, f"//button[strong[normalize-space()='{current_month}']]")
+    until_date_button = buttons[1]
+    until_date_button.click()
 
-formatted_day = f"{target_date.day:02d}"
+    hebrew_month = hebrew_months[target_date.month]
+    assert target_date.year == today.year
 
-date_picker_items = driver.find_elements(By.XPATH, "//div[@class='date-picker-item']")
+    month_button = driver.find_element(By.XPATH, f"//button[span[normalize-space()='{hebrew_month}']]")
+    month_button.click()
 
-day_buttons = date_picker_items[1].find_elements(By.XPATH, f".//tbody//button[span[normalize-space()='{formatted_day}']]")
-day_buttons[0].click()
+    formatted_day = f"{target_date.day:02d}"
+
+    date_picker_items = driver.find_elements(By.XPATH, "//div[@class='date-picker-item']")
+
+    day_buttons = date_picker_items[1].find_elements(By.XPATH,
+                                                     f".//tbody//button[span[normalize-space()='{formatted_day}']]")
+    day_buttons[0].click()
+
+finally:
+    driver.quit()

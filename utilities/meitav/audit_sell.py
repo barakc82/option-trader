@@ -12,10 +12,10 @@ CELL_REF_REGEX = re.compile(
 
 # =======================
 
-person = Barak
-program_type = Hishtalmut
-shares = 113
-trade_price = 8828
+person = Hilush
+program_type = Gemel
+shares = 111
+trade_price = 8932
 
 # =======================
 

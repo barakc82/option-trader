@@ -15,12 +15,15 @@ DEBUG_PORT = 9222
 TARGET_URL = "https://sparkmeitav.ordernet.co.il/#/auth"
 
 
-def is_chrome_debug_active(port=9222):
+def is_chrome_debug_active(port):
     try:
         # Chrome exposes this JSON endpoint when remote debugging is active
-        response = requests.get(f"http://127.0.0.1:{port}/json/version", timeout=1)
+        print(f"Sending request to {port}")
+        response = requests.get(f"http://127.0.0.1:{port}/json/version", timeout=20)
+        print(f"Response status is {response.status_code}")
         return response.status_code == 200
-    except requests.exceptions.ConnectionError:
+    except requests.exceptions.ConnectionError as e:
+        print(f"Connection error: {e}")
         return False
 
 
@@ -52,10 +55,10 @@ def launch_chrome_debug():
     # Give Chrome a couple of seconds to fully spin up and open the local port
     time.sleep(2)
 
+
 # & "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="C:\ChromeDebug" --no-first-run
 def connect_to_investment_tab(name, account_type):
     # 1. Setup options to connect to the existing Chrome instance
-    os.environ['NO_PROXY'] = '127.0.0.1,localhost'
     chrome_options = Options()
     chrome_options.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
 
@@ -89,6 +92,7 @@ def try_to_click(btn):
         print(f"Button is not ready: {btn.text}")
         return False
 
+
 def login(driver, name, account_type):
     print(f"Starting login")
     account_data = user_data[name][account_type]
@@ -106,17 +110,17 @@ def login(driver, name, account_type):
     # time.sleep(40)
     iNDshadowRootWrap = driver.find_element(By.ID, "INDshadowRootWrap")
     # print(iNDshadowRootWrap.is_displayed()) # False
-    #is_disappeared = wait_object.until(lambda x: x.find_element(By.ID, "INDshadowRootWrap") is not None)
+    # is_disappeared = wait_object.until(lambda x: x.find_element(By.ID, "INDshadowRootWrap") is not None)
     wait_object.until(lambda x: x.find_element(By.XPATH, '//*[text()="דף הבית"]') is not None)
-    #homepage_text = driver.find_element(By.XPATH, '//*[text()="דף הבית"]')
-    #print(f"Was the homepage text found? {homepage_text is not None}")
+    # homepage_text = driver.find_element(By.XPATH, '//*[text()="דף הבית"]')
+    # print(f"Was the homepage text found? {homepage_text is not None}")
 
     wait_object.until(lambda x: len(x.find_elements(By.CSS_SELECTOR, "div.btn-container > button")) > 0)
     driver.find_elements(By.CSS_SELECTOR, "div.btn-container > button")
     all_buttons = [None]
     while all_buttons:
         enter_system_buttons = driver.find_elements(By.CSS_SELECTOR, "div.btn-container > button")
-        approve_buttons = [] # driver.find_elements(By.CSS_SELECTOR, "button[ng-click='select()']")
+        approve_buttons = []  # driver.find_elements(By.CSS_SELECTOR, "button[ng-click='select()']")
         close_buttons = driver.find_elements(By.XPATH, "//button[normalize-space()='סגור']")
         all_buttons = enter_system_buttons + approve_buttons + close_buttons
         print(f"barak: number of buttons is {len(all_buttons)}")
@@ -138,8 +142,9 @@ def login(driver, name, account_type):
                     break
             time.sleep(0.5)
 
-def start(name, program_type):
 
+def start(name, program_type):
+    os.environ['NO_PROXY'] = '127.0.0.1,localhost'
     if not is_chrome_debug_active(DEBUG_PORT):
         launch_chrome_debug()
 

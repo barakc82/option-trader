@@ -23,7 +23,7 @@ driver = start(user, program_type)
 status = extract_status(driver)
 
 price, units = calculate_next_buy(user, program_type)
-#price, units = calculate_next_buy2(driver, status)
+# price, units = calculate_next_buy2(driver, status)
 
 # wait = WebDriverWait(driver, 10)
 # wait.until(EC.invisibility_of_element_located((By.CLASS_NAME, "send-order-modal")))
@@ -66,5 +66,8 @@ formatted_day = f"{target_date.day:02d}"
 
 date_picker_items = driver.find_elements(By.XPATH, "//div[@class='date-picker-item']")
 
-day_buttons = date_picker_items[1].find_elements(By.XPATH, f".//tbody//button[span[normalize-space()='{formatted_day}']]")
+day_buttons = date_picker_items[1].find_elements(By.XPATH,
+                                                 f".//tbody//button[span[normalize-space()='{formatted_day}']]")
 day_buttons[0].click()
+
+driver.quit()
