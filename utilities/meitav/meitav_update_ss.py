@@ -12,7 +12,7 @@ from utilities.spreadsheet_update import update_status_in_spreadsheet
 # & C:\\"Program Files"\\Google\\Chrome\\Application\\chrome.exe --remote-debugging-port=9222 --user-data-dir=C:\\ChromeDebug --no-first-run
 
 if __name__ == "__main__":
-    name = Barak
+    name = Mom
     program_type = Hishtalmut
 
     driver = start(name, program_type)

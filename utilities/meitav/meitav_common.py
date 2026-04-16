@@ -48,6 +48,8 @@ user_data = {
 Hilush: {
         'main_sheet_name': 'הילוש',
         'transactions_sheet_name': "Hilush-transactions",
+        'max_leveraged_share': 0.7,
+        'min_leveraged_share': 0.1,
         Hishtalmut: {
             "username": "1320195347",
             "password": "28",

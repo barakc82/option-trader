@@ -13,7 +13,7 @@ TOP = 8752
 
 # =======================
 
-person = Barak
+person = Mom
 program_type = Hishtalmut
 
 # =======================

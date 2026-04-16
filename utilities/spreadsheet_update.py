@@ -1,7 +1,7 @@
 from utilities.database_access import get_worksheet
 from utilities.meitav.meitav_common import user_data
 
-ETF_ID_ORDER = [1144708, 5109889, 5112628, 5113345, 5114657, 5122510]
+ETF_ID_ORDER = [1144708, 5112628, 5109889, 5114657, 5122510, 5113345]
 
 def update_status_in_spreadsheet(name, program_type, status):
     this_user_data = user_data[name]
@@ -14,7 +14,7 @@ def update_status_in_spreadsheet(name, program_type, status):
 
     for etf_index, etf_id in enumerate(current_etf_id_order):
         holding = status['holdings'][etf_id]
-        print(f"{etf_id} ---> {reference_row + etf_index + 2}")
+        print(f"{etf_id} ---> {reference_row + etf_index + 3}")
         user_sheet.update(values=[[holding['quantity']]], range_name=f"B{reference_row + etf_index + 3}")
 
     #ta125_ptf_holding = status['holdings'][5112628]
