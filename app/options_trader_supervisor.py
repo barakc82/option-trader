@@ -255,6 +255,13 @@ def is_session_expired():
     logger.info(f"No text was found in the Jts log files")
     return False
 
+
+def soft_restart():
+    logger.info("Running 'restart.sh'")
+    subprocess.run(['/home/ibgateway/ibc/restart.sh'], check=True)
+    time.sleep(5)
+
+
 def monitor_option_trader():
     is_process_alive = is_process_active()
     if not is_process_alive:
@@ -288,7 +295,8 @@ def monitor_option_trader():
         if number_of_missing_delta_occurrences > 10:
             logger.warning("It seems that option trader has difficulties getting delta data, switching to restart"
                            "platform state")
-            set_switch_to_restart_platform_state()
+            soft_restart()
+            # set_switch_to_restart_platform_state()
 
 
 def set_switch_to_restart_platform_state():
