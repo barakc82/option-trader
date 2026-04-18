@@ -1,7 +1,9 @@
 import os
+import sys
 import time
 import json
 import threading
+import fcntl
 from datetime import datetime, timedelta, time as dt_time
 from zoneinfo import ZoneInfo
 from functools import cache
@@ -194,3 +196,19 @@ def write_heartbeat():
     with open("../cache/heartbeat.txt", "w") as file:
         heartbeat = {'timestamp': time.time(), 'pid': os.getpid()}
         json.dump(heartbeat, file, indent=4)
+
+def acquire_single_instance_lock(lock_path, process_name):
+    """
+    Attempts to acquire an OS-level lock to prevent multiple instances.
+    Returns the file object if successful. Exits the script if already locked.
+    """
+    # Open the file (creates it if it doesn't exist)
+    lock_file = open(lock_path, 'w')
+
+    try:
+        # Try to acquire an exclusive, non-blocking lock
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return lock_file  # Keep this object alive!
+    except BlockingIOError:
+        logger.warning("Another instance of {process_name} is already running. Exiting.")
+        sys.exit(0)

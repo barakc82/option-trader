@@ -6,11 +6,13 @@ import traceback
 from pathlib import Path
 
 from logging_setup import setup_logging
+from utils import acquire_single_instance_lock
 from option_trader import OptionTrader
 
 
 if __name__ == "__main__":
 
+    _lock = acquire_single_instance_lock(lock_path='/tmp/option_trader.lock', process_name='Option Trader')
     setup_logging()
     logger = logging.getLogger("main")
 

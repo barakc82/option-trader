@@ -13,7 +13,7 @@ import requests
 from pathlib import Path
 
 from state_updater import update_supervisor_state, post_current_state
-from utils import MY_ACCOUNT, is_in_docker
+from utils import is_in_docker, acquire_single_instance_lock
 
 # Create a logger
 logger = logging.getLogger(__name__)
@@ -604,7 +604,7 @@ def monitor_platform():
         set_switch_to_restart_platform_state()"""
     return success
 
-def monitor(interval=5):
+    def monitor(interval=5):
     start_time = time.time()
     while True:
         try:
@@ -647,6 +647,8 @@ def send_telegram_message(message):
 
 
 if __name__ == "__main__":
+    _lock = acquire_single_instance_lock(lock_path='/tmp/supervisor_script.lock', process_name='Supervisor')
+
     try:
         logger.info("Supervisor started")
         monitor()
