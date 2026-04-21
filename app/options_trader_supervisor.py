@@ -3,11 +3,10 @@ import time
 import os
 import glob
 import random
-import datetime
 import json
 import logging
 import subprocess
-import psutil
+from zoneinfo import ZoneInfo
 import traceback
 import requests
 from pathlib import Path
@@ -54,6 +53,7 @@ TELEGRAM_CHAT_ID = '1796107185'
 
 last_update_time = 0
 start_time = 0
+last_sunday_expiration_check_date = None
 
 mem_limit_mb = 0
 """Reads the actual memory limit set for the Docker container."""
@@ -604,21 +604,52 @@ def monitor_platform():
         set_switch_to_restart_platform_state()"""
     return success
 
-    def monitor(interval=5):
+
+def check_sunday_expiration():
+    """
+    Evaluates if it is Sunday after 1:00 AM ET and checks session expiration.
+    Returns: (needs_restart: bool, updated_check_date: datetime.date)
+    """
+    global last_sunday_expiration_check_date
+
+    # 1. Get the current time natively in US Eastern Time
+    now_et = datetime.datetime.now(ZoneInfo("America/New_York"))
+    current_date = now_et.date()
+
+    # 2. Check if it's Sunday (weekday 6) and exactly or past 1:00 AM ET
+    if now_et.weekday() == 6 and now_et.hour >= 1:
+
+        # 3. Check the latch to ensure we only execute this ONCE today
+        if last_sunday_expiration_check_date != current_date:
+            logger.info("Executing weekly Sunday 2FA/Session check - starting with a soft restart...")
+            soft_restart()
+
+            if is_session_expired():
+                logger.info("Session is expired. Flagging for restart.")
+                last_sunday_expiration_check_date = current_date
+                return True
+            else:
+                logger.info("Session is still active. No action needed.")
+                last_sunday_expiration_check_date = current_date
+                return False
+
+                # Conditions not met; do not restart, and leave the latch unmodified
+    return False
+
+
+def monitor(interval=5):
+    global state
     start_time = time.time()
+
     while True:
         try:
             if state == MONITOR_STATE:
                 monitor_option_trader()
                 monitor_platform()
 
-                now = datetime.datetime.now()
-
-                # Check if today is Sunday (weekday() == 6) and time between 01:54 and 02:01
-                if (now.weekday() == 6 and
-                        datetime.time(1, 54) <= now.time() <= datetime.time(2, 1)):
-                    logger.info("It's Sunday between 1:54am and 2:01am.")
-                    # shutdown tws
+                is_restart_required = check_sunday_expiration()
+                if is_restart_required:
+                    state = RESTART_PLATFORM_STATE
 
             elif state == RESTART_PLATFORM_STATE:
                 logger.info("Switched to restart platform state")
