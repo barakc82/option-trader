@@ -1,8 +1,8 @@
 import sys
 import logging
 
-from account_data import AccountData
-from utils import get_option_name, current_thread
+from utilities.utils import get_option_name
+from app.account_data import AccountData
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

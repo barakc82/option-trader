@@ -3,14 +3,18 @@ import logging.config
 import colorlog
 import configparser
 from datetime import datetime
+from pathlib import Path
 
-log_file_name = datetime.now().strftime("../logs/option_trader_%Y-%m-%d_%H-%M-%S.log")
+log_file_name = datetime.now().strftime("logs/option_trader_%Y-%m-%d_%H-%M-%S.log")
 
 
 def setup_logging():
     # Load logging configuration
     config = configparser.RawConfigParser()
-    config.read("logging.conf")
+    current_file = Path(__file__).resolve()
+    current_directory = current_file.parent
+    logging_config_file = f"{current_directory}/logging.conf"
+    config.read(logging_config_file)
 
     # Define colorized format
     color_formatter = colorlog.ColoredFormatter(
@@ -27,7 +31,7 @@ def setup_logging():
 
     # Load config and inject dynamic filename
     logging.config.fileConfig(
-        'logging.conf',
+        logging_config_file,
         defaults={"logfilename": log_file_name},
         disable_existing_loggers=False
     )

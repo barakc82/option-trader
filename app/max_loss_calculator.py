@@ -1,10 +1,11 @@
 import math
 import traceback
 
-from account_data import AccountData
-from market_data_fetcher import MarketDataFetcher, get_delta
-from utils import *
-from trading_bot import TradingBot
+from utilities.utils import *
+from utilities.ib_utils import get_delta
+from app.trading_bot import TradingBot
+from app.account_data import AccountData
+from app.market_data_fetcher import MarketDataFetcher
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -13,8 +14,8 @@ DEFAULT_MAX_LOSS = 1
 WINDOW_SECONDS = 7 * 24 * 60 * 60  # 1 week
 STOP_LOSS_CHANGE_INTERVAL = 900
 
-CALL_OPTIONS_FILE_NAME = "../cache/calls.txt"
-PUT_OPTIONS_FILE_NAME = "../cache/puts.txt"
+CALL_OPTIONS_FILE_NAME = "cache/calls.txt"
+PUT_OPTIONS_FILE_NAME = "cache/puts.txt"
 options_file_names = {'C': CALL_OPTIONS_FILE_NAME, 'P': PUT_OPTIONS_FILE_NAME}
 
 

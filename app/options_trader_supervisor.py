@@ -11,8 +11,8 @@ import traceback
 import requests
 from pathlib import Path
 
-from state_updater import update_supervisor_state, post_current_state
-from utils import is_in_docker, acquire_single_instance_lock
+from utilities.utils import is_in_docker, acquire_single_instance_lock
+from app.state_updater import update_supervisor_state, post_current_state
 
 # Create a logger
 logger = logging.getLogger(__name__)
@@ -171,9 +171,9 @@ def start_tws():
 def start_option_trader():
     logger.info("Restarting process...")
     if is_in_docker():
-        option_trader_start_command = ["python3", "main.py"]
+        option_trader_start_command = ["python3", "-m", "app.main"]
     else:
-        option_trader_start_command = ["..\\.venv\\Scripts\\python.exe", "main.py"]
+        option_trader_start_command = ["..\\.venv\\Scripts\\python.exe", "-m", "app.main"]
     p = subprocess.Popen(option_trader_start_command)
     option_trader_process = psutil.Process(p.pid)
 
@@ -556,7 +556,6 @@ def update_state(status):
     update_supervisor_state(supervisor_state)
 
 import psutil
-import socket
 import os
 
 def check_ib_gateway_health(api_port=4001, ibc_port=7462, log_path="~/ibc/logs"):

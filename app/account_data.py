@@ -1,8 +1,7 @@
 import sys
-import threading
 
-from ib_utils import PORTFOLIO_MARGIN
-from utils import MY_ACCOUNT, current_thread
+from utilities.ib_utils import PORTFOLIO_MARGIN
+from utilities.utils import MY_ACCOUNT, current_thread
 
 import logging
 

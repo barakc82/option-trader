@@ -1,13 +1,11 @@
-from datetime import datetime
-import os
 import sys
 import logging.config
 import traceback
 from pathlib import Path
 
-from logging_setup import setup_logging
-from utils import acquire_single_instance_lock
-from option_trader import OptionTrader
+from utilities.utils import acquire_single_instance_lock
+from app.logging_setup import setup_logging
+from app.option_trader import OptionTrader
 
 
 if __name__ == "__main__":
@@ -16,7 +14,7 @@ if __name__ == "__main__":
     setup_logging()
     logger = logging.getLogger("main")
 
-    log_dir = Path("../logs")
+    log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
     log_pattern = "*.log"
     keep_last_n = 5

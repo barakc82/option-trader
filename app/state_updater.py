@@ -7,15 +7,15 @@ import logging
 import json
 import requests
 
-from account_data import AccountData
-from ib_utils import req_id_to_comment
-from market_data_fetcher import MarketDataFetcher
-from max_loss_calculator import MaxLossCalculator
-from target_delta_calculator import TargetDeltaCalculator
-from utils import current_thread
+from utilities.utils import current_thread
+from utilities.ib_utils import req_id_to_comment
+from app.account_data import AccountData
+from app.market_data_fetcher import MarketDataFetcher
+from app.max_loss_calculator import MaxLossCalculator
+from app.target_delta_calculator import TargetDeltaCalculator
 
-TEMP_PATH = '../shared/state_temp.json'
-JSON_PATH = '../shared/state.json'
+TEMP_PATH = 'shared/state_temp.json'
+JSON_PATH = 'shared/state.json'
 
 API_URL = "https://option-trader.onrender.com/api"
 UPDATE_STATE_URL = API_URL + "/update-state"

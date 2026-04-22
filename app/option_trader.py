@@ -1,21 +1,21 @@
 import math
-import random
 
 from ib_insync import Option
 
-from account_data import AccountData
-from max_loss_calculator import calculate_max_loss
-from margin_manager import MarginManager
-from opportunity_explorer import OpportunityExplorer, calculate_max_options_for_market_drop, \
+from utilities.utils import *
+from utilities.ib_utils import *
+
+from app.account_data import AccountData
+from app.max_loss_calculator import calculate_max_loss
+from app.margin_manager import MarginManager
+from app.opportunity_explorer import OpportunityExplorer, calculate_max_options_for_market_drop, \
     calculate_max_options_for_market_rise
-from option_safeguard import OptionSafeguard
-from positions_manager import PositionsManager
-from sheet_updater import SheetUpdater
-from state_updater import StateUpdater, post_current_state
-from target_delta_calculator import TargetDeltaCalculator
-from ib_utils import *
-from market_data_fetcher import MarketDataFetcher
-from trading_bot import TradingBot
+from app.option_safeguard import OptionSafeguard
+from app.positions_manager import PositionsManager
+from app.state_updater import StateUpdater, post_current_state
+from app.target_delta_calculator import TargetDeltaCalculator
+from app.market_data_fetcher import MarketDataFetcher
+from app.trading_bot import TradingBot
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -86,7 +86,6 @@ class OptionTrader:
         option_safeguard_thread = threading.Thread(target=option_safeguard.guard_option_risk, daemon=True)
         option_safeguard_thread.start()
 
-        sheet_updater = SheetUpdater()
         state_updater = StateUpdater(self.trading_bot)
 
         status = 'Initialized'

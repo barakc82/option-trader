@@ -1,13 +1,12 @@
 import math
-import sys
 
 import exchange_calendars as ecals
 import pandas as pd
-from ib_insync import IB, Option, Index
+from ib_insync import Index
 
-from ib_utils import req_id_to_target_delta
-from option_cache import OptionCache
-from utils import *
+from utilities.ib_utils import req_id_to_target_delta, get_delta
+from utilities.utils import *
+from app.option_cache import OptionCache
 
 LIVE_DATA = 1
 FROZEN_DATA = 2
@@ -25,12 +24,6 @@ def get_gamma(ticker):
         return ticker.modelGreeks.gamma
     return None
 
-def get_delta(ticker):
-    if ticker.lastGreeks and ticker.lastGreeks.delta:
-        return ticker.lastGreeks.delta
-    if ticker.modelGreeks and ticker.modelGreeks.delta:
-        return ticker.modelGreeks.delta
-    return None
 
 def get_implied_volatility(ticker):
     if ticker.lastGreeks and ticker.lastGreeks.impliedVol:

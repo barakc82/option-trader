@@ -4,6 +4,8 @@ set MAX_RETRIES=3
 set RETRY_DELAY=5
 set ATTEMPT=1
 
+echo Starting build and deployment
+
 REM Try to call docker info
 call docker info
 
@@ -15,6 +17,7 @@ if ERRORLEVEL 1 (
     echo Docker is running.
 )
 
+echo Building option trader image
 docker build -t option-trader-image .
 if %ERRORLEVEL% neq 0 (
     echo Error occurred when building the image! Exiting...

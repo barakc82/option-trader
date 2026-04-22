@@ -2,8 +2,8 @@ import statistics
 from collections import deque
 import traceback
 
-from max_loss_calculator import DEFAULT_MAX_LOSS, calculate_max_loss
-from utils import *
+from utilities.utils import *
+from app.max_loss_calculator import DEFAULT_MAX_LOSS, calculate_max_loss
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -12,7 +12,7 @@ DEFAULT_TARGET_DELTA = 0.008
 MIN_TARGET_DELTA = 0.003
 MAX_TARGET_DELTA = 0.013
 
-IMPLIED_VOLATILITY_FILE_NAME = "../cache/iv_log.txt"
+IMPLIED_VOLATILITY_FILE_NAME = "cache/iv_log.txt"
 MAX_ENTRIES = 10000
 
 iv_history = deque(maxlen=MAX_ENTRIES)

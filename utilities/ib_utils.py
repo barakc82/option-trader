@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-from tws_connection import TwsConnection
 import numpy as np
-from utils import *
+import logging
+
+from utilities.tws_connection import TwsConnection
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -31,15 +32,6 @@ def connect(client_id):
     return tws_connection
 
 
-def extract_delta(ticker):
-    if not ticker.modelGreeks or ticker.modelGreeks.delta is None:
-        if not ticker.lastGreeks or ticker.lastGreeks.delta is None:
-            return None
-        return abs(ticker.lastGreeks.delta)
-
-    return abs(ticker.modelGreeks.delta)
-
-
 def extract_ask(ticker):
     if ticker.ask is None:
         return None
@@ -48,3 +40,11 @@ def extract_ask(ticker):
 
 def extract_last_median_price(ticker):
     return np.nanmedian([ticker.bid, ticker.ask, ticker.last])
+
+
+def get_delta(ticker):
+    if ticker.lastGreeks and ticker.lastGreeks.delta:
+        return abs(ticker.lastGreeks.delta)
+    if ticker.modelGreeks and ticker.modelGreeks.delta:
+        return abs(ticker.modelGreeks.delta)
+    return None

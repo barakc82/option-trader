@@ -1,15 +1,14 @@
-import sys
 import math
 import re
 
 from datetime import date
 
-from ib_insync import LimitOrder, MarketOrder, StopOrder, StopLimitOrder
+from ib_insync import LimitOrder, MarketOrder, StopOrder
 
-from account_data import AccountData
-from ib_utils import SellOptionResult, MINIMAL_SELL_PRICE
-from profit_monitor import on_sell_fill
-from utils import *
+from utilities.utils import *
+from utilities.ib_utils import SellOptionResult, MINIMAL_SELL_PRICE
+from app.account_data import AccountData
+from app.profit_monitor import on_sell_fill
 
 MAIN_MINIMAL_SAFE_CUSHION = 0
 # MAIN_MINIMAL_SAFE_CUSHION = 0.2

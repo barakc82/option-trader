@@ -3,7 +3,7 @@ import sys
 import time
 import json
 import threading
-import fcntl
+
 from datetime import datetime, timedelta, time as dt_time
 from zoneinfo import ZoneInfo
 from functools import cache
@@ -160,7 +160,7 @@ def is_buffer_time_around_trade_time():
             (JUST_AFTER_TRADE_END_TIME < now_in_nyc < AFTER_HOURS_END_TIME)
 
 def fetch_next_client_id():
-    client_id_file_path = "../cache/client_id.txt"
+    client_id_file_path = "cache/client_id.txt"
     try:
         # Try reading the current client ID from file
         with open(client_id_file_path, 'r') as file:
@@ -193,7 +193,7 @@ def is_in_docker() -> bool:
 
 
 def write_heartbeat():
-    with open("../cache/heartbeat.txt", "w") as file:
+    with open("cache/heartbeat.txt", "w") as file:
         heartbeat = {'timestamp': time.time(), 'pid': os.getpid()}
         json.dump(heartbeat, file, indent=4)
 
@@ -202,6 +202,8 @@ def acquire_single_instance_lock(lock_path, process_name):
     Attempts to acquire an OS-level lock to prevent multiple instances.
     Returns the file object if successful. Exits the script if already locked.
     """
+
+    import fcntl
     # Open the file (creates it if it doesn't exist)
     lock_file = open(lock_path, 'w')
 

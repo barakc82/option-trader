@@ -1,7 +1,7 @@
 import json
 import logging
 
-from utils import get_option_name
+from utilities.utils import get_option_name
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

@@ -45,7 +45,8 @@ echo "" # Newline for cleaner logs
 echo "IB Gateway is ready. Starting ib_insync script." >> "$DOCKER_START_LOG_FILE"
 
 echo "$(date): Starting option trader supervisor..." >> "$DOCKER_START_LOG_FILE"
-python3 /home/option-trader/app/options_trader_supervisor.py
+cd /home/option-trader
+python3 -m app.options_trader_supervisor
 echo "$(date): Option trader supervisor started"
 
 # Wait for the Gateway process to exit. This keeps the container running.

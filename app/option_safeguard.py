@@ -1,14 +1,14 @@
 import asyncio
-import sys
 import traceback
 
-from configuration import should_guard_positions
-from logging_setup import setup_logging
-from market_data_fetcher import MarketDataFetcher
-from positions_manager import PositionsManager
-from trading_bot import TradingBot
-from utils import *
-from ib_utils import connect
+from utilities.utils import *
+from utilities.ib_utils import connect
+
+from app.configuration import should_guard_positions
+from app.logging_setup import setup_logging
+from app.market_data_fetcher import MarketDataFetcher
+from app.positions_manager import PositionsManager
+from app.trading_bot import TradingBot
 
 OPTION_SAFEGUARD_CLIENT_ID = 2
 

@@ -4,9 +4,9 @@ import pickle
 from ib_insync import Index, Option
 import logging
 
-from utils import current_thread
+from utilities.utils import current_thread
 
-file_path = "../cache/option_store.pql"
+file_path = "cache/option_store.pql"
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

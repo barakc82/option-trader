@@ -1,16 +1,15 @@
 import math
-import sys
 
 from dataclasses import dataclass
 from datetime import date
 
-from account_data import AccountData
-from ib_utils import req_id_to_comment, req_id_to_target_delta
-from margin_manager import MarginManager
-from max_loss_calculator import calculate_max_loss
-from opportunity_explorer import OpportunityExplorer
-from target_delta_calculator import TargetDeltaCalculator
-from utils import *
+from utilities.utils import *
+from utilities.ib_utils import req_id_to_comment, req_id_to_target_delta
+from app.account_data import AccountData
+from app.margin_manager import MarginManager
+from app.max_loss_calculator import calculate_max_loss
+from app.opportunity_explorer import OpportunityExplorer
+from app.target_delta_calculator import TargetDeltaCalculator
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

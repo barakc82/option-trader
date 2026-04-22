@@ -2,7 +2,7 @@ import asyncio
 import logging
 import random
 
-from tws_connection import TwsConnection
+from utilities.tws_connection import TwsConnection
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

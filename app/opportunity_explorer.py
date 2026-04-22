@@ -1,18 +1,15 @@
 import math
-import sys
 from datetime import date
 import random
 
-from account_data import AccountData
-from max_loss_calculator import MaxLossCalculator
-from market_data_fetcher import get_delta
-from configuration import should_write_options_overnight, should_monitor_only
-from ib_utils import SellOptionResult, req_id_to_comment, extract_last_median_price, MINIMAL_SELL_PRICE, \
-    req_id_to_target_delta
-from option_cache import OptionCache
-from strike_finder import StrikeFinder
-from target_delta_calculator import TargetDeltaCalculator
-from utils import *
+from utilities.utils import *
+from utilities.ib_utils import *
+from app.account_data import AccountData
+from app.max_loss_calculator import MaxLossCalculator
+from app.configuration import should_write_options_overnight, should_monitor_only
+from app.option_cache import OptionCache
+from app.strike_finder import StrikeFinder
+from app.target_delta_calculator import TargetDeltaCalculator
 
 TIME_UNTIL_NEXT_SELL_CHECK = 120
 LOWER_MINIMAL_SELL_PRICE_TO_CLOSE_POSITION = MINIMAL_SELL_PRICE + 0.05

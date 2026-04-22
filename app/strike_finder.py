@@ -1,8 +1,7 @@
 import logging
-import math
 
-from ib_utils import extract_delta, extract_ask
-from utils import get_option_name, current_thread, write_heartbeat
+from utilities.ib_utils import extract_ask, get_delta
+from utilities.utils import get_option_name, current_thread
 
 logger = logging.getLogger(__name__)
 NUMBER_OF_CONTRACTS_PER_REQUEST = 5
@@ -39,7 +38,7 @@ class StrikeFinder:
         highest_delta_option = None
 
         for option in options_block:
-            current_delta = extract_delta(option.ticker)
+            current_delta = get_delta(option.ticker)
             if current_delta is None:
                 continue
             if current_delta < lowest_delta:
@@ -54,13 +53,13 @@ class StrikeFinder:
         current_candidate_option = None
         if lowest_delta > target_delta:
             current_candidate_option = options_block[0]
-            logger.info(f"The deltas in the initial option block are higher than the target delta, lowest_delta is "
+            logger.info(f"The deltas in the initial option block are higher than the target delta, lowest delta is "
                         f"{lowest_delta:.3f}, block indices are: {lower_strike_index} and {higher_strike_index}, "
                         f"block strikes are: {strikes[lower_strike_index]} and {strikes[higher_strike_index]}")
             options_block = self.fetch_options_block(0, lower_strike_index - 1, strike_to_option, strikes)
         if highest_delta < target_delta:
             current_candidate_option = highest_delta_option
-            logger.info(f"The deltas in the initial option block are lower than the target delta, highest_delta is "
+            logger.info(f"The deltas in the initial option block are lower than the target delta, highest delta is "
                         f"{highest_delta:.3f}, block indices are: {lower_strike_index} and {higher_strike_index}, "
                         f"block strikes are: {strikes[lower_strike_index]} and {strikes[higher_strike_index]}")
             options_block = self.fetch_options_block(higher_strike_index, number_of_strikes - 1, strike_to_option,
@@ -68,7 +67,7 @@ class StrikeFinder:
 
         highest_delta_under_target = 0
         for option in options_block:
-            current_delta = extract_delta(option.ticker)
+            current_delta = get_delta(option.ticker)
             if current_delta is None:
                 continue
 
@@ -89,7 +88,7 @@ class StrikeFinder:
             logger.error("No put option candidate was found")
             return None
 
-        signed_candidate_delta = extract_delta(current_candidate_option.ticker)
+        signed_candidate_delta = get_delta(current_candidate_option.ticker)
         if not signed_candidate_delta:
             logger.error("No delta data was available for the candidate put option")
             return None
@@ -137,7 +136,7 @@ class StrikeFinder:
         lowest_delta = 1
         highest_delta = 0
         for option in options_block:
-            current_delta = extract_delta(option.ticker)
+            current_delta = get_delta(option.ticker)
             if current_delta is None:
                 continue
             if current_delta < lowest_delta:
@@ -151,7 +150,7 @@ class StrikeFinder:
         current_candidate_option = None
         if lowest_delta > target_delta:
             current_candidate_option = options_block[-1]
-            logger.info(f"The deltas in the initial option block are higher than the target delta, lowest_delta is "
+            logger.info(f"The deltas in the initial option block are higher than the target delta, lowest delta is "
                         f"{lowest_delta:.3f}, block indices are: {lower_strike_index} and {higher_strike_index}, "
                         f"block strikes are: {strikes[lower_strike_index]} and {strikes[higher_strike_index]}")
             if higher_strike_index + 1 <= number_of_strikes - 1:
@@ -160,12 +159,12 @@ class StrikeFinder:
                                                          strikes)
 
         if highest_delta < target_delta and lower_strike_index > 0:
-            logger.info(f"The deltas in the initial option block are lower than the target delta, highest_delta is "
+            logger.info(f"The deltas in the initial option block are lower than the target delta, highest delta is "
                         f"{highest_delta:.3f}, block indices are: {lower_strike_index} and {higher_strike_index}, "
                         f"block strikes are: {strikes[lower_strike_index]} and {strikes[higher_strike_index]}")
             for option in options_block:
                 current_candidate_option = option
-                current_delta = extract_delta(option.ticker)
+                current_delta = get_delta(option.ticker)
                 if current_delta is not None:
                     break
 
@@ -176,7 +175,7 @@ class StrikeFinder:
         highest_delta_under_target = 0
 
         for option in options_block:
-            current_delta = extract_delta(option.ticker)
+            current_delta = get_delta(option.ticker)
             if current_delta is None:
                 continue
 
@@ -197,7 +196,7 @@ class StrikeFinder:
             logger.error("No call option candidate was found")
             return None
 
-        current_candidate_delta = extract_delta(current_candidate_option.ticker)
+        current_candidate_delta = get_delta(current_candidate_option.ticker)
         if current_candidate_delta is None:
             logger.error("No delta data was available for call options")
             return None

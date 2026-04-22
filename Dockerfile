@@ -18,6 +18,7 @@ RUN pip3 install ib_insync colorlog pytz exchange_calendars gspread psutil twili
 
 RUN mkdir -p ${APP_DIR}
 COPY app ${APP_DIR}/app
+COPY utilities ${APP_DIR}/utilities
 COPY frontend ${APP_DIR}/frontend
 COPY logs ${APP_DIR}/logs
 COPY cache ${APP_DIR}/cache
@@ -36,6 +37,9 @@ WORKDIR ${APP_DIR}/app
 
 RUN echo "alias showlog='less \$(ls -1 option_trader_*.log | sort | tail -1)'" > ~/.bashrc
 RUN echo "alias taillog='tail -f \$(ls -1 option_trader_*.log | sort | tail -1)'" >> ~/.bashrc
+RUN echo "alias showsupervisor='less supervisor.log'" >> ~/.bashrc
+RUN echo "alias tailsupervisor='tail -f supervisor.log'" >> ~/.bashrc
+RUN echo "alias runsupervisor='python3 -m app.options_trader_supervisor'" >> ~/.bashrc
 
 EXPOSE 8050
 

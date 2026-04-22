@@ -2,7 +2,8 @@
 from ib_insync import IB
 
 import logging
-from utils import current_thread, is_in_docker
+
+from utilities.utils import is_in_docker, current_thread
 
 CLIENT_ID_FILE_NAME = "../cache/last_client_id.txt"
 
