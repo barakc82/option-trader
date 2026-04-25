@@ -31,8 +31,10 @@ class OptionSafeguard:
                     self.last_alive_log_time = time.time()
 
                 logger.info("OptionSafeguard: Monitoring position risk...")
+
                 
                 if self.connection_failure_start_time is not None:
+                    logger.info("OptionSafeguard: Connection error resolved.")
                     self.connection_failure_start_time = None
 
                 # Adaptive sleep logic

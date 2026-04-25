@@ -33,6 +33,7 @@ class OptionTrader:
                 await asyncio.sleep(5)
                 
                 if self.connection_failure_start_time is not None:
+                    logger.info("OptionTrader: Connection error resolved.")
                     self.connection_failure_start_time = None
                 
             except Exception:
