@@ -1,31 +1,35 @@
 import asyncio
 import logging
-
-from utilities.utils import *
+import time
+import sys
+from ib_insync import IB
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 class OptionTrader:
     def __init__(self):
-        pass
+        self.connection_failure_start_time = None
 
     async def run(self):
-        """Continuous task: Main trading logic."""
         logger.info("OptionTrader: Starting trading loop...")
-
         while True:
             try:
+                # Now you can use self.ib directly!
+                # positions = self.ib.positions()
                 logger.info("OptionTrader: Checking market opportunities...")
-                write_heartbeat()
-
                 await asyncio.sleep(5)
-
-            except asyncio.CancelledError:
-                logger.info("OptionTrader: Shutting down...")
-                break
+                
+                if self.connection_failure_start_time is not None:
+                    self.connection_failure_start_time = None
+                
             except Exception:
-                # This line captures and prints the full traceback automatically
-                logger.exception("OptionTrader: Fatal error in loop logic:")
-                # We sleep before retrying to prevent "rapid-fire" error logs
+                if self.connection_failure_start_time is None:
+                    self.connection_failure_start_time = time.time()
+                
+                elapsed = time.time() - self.connection_failure_start_time
+                if elapsed > 300:
+                    logger.critical(f"OptionTrader: Persistent failure for {elapsed:.0f}s. Exiting.")
+                    sys.exit(1)
+                
+                logger.exception(f"OptionTrader: Loop error ({elapsed:.0f}s):")
                 await asyncio.sleep(10)

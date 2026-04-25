@@ -1,25 +1,33 @@
 import asyncio
 import logging
+import time
+import sys
+from ib_insync import IB
 
 logger = logging.getLogger(__name__)
 
 class OptionSafeguard:
     def __init__(self):
-        pass
+        self.connection_failure_start_time = None
 
     async def run(self):
-        """Continuous task: Risk management logic."""
         logger.info("OptionSafeguard: Starting safeguard loop...")
         while True:
             try:
-                # Placeholder for risk management logic
                 logger.info("OptionSafeguard: Monitoring position risk...")
                 await asyncio.sleep(2)
                 
-            except asyncio.CancelledError:
-                logger.info("OptionSafeguard: Shutting down...")
-                break
+                if self.connection_failure_start_time is not None:
+                    self.connection_failure_start_time = None
+
             except Exception:
-                # This line captures and prints the full traceback automatically
-                logger.exception("OptionSafeguard: Fatal error in safeguard logic:")
+                if self.connection_failure_start_time is None:
+                    self.connection_failure_start_time = time.time()
+                
+                elapsed = time.time() - self.connection_failure_start_time
+                if elapsed > 300:
+                    logger.critical(f"OptionSafeguard: Persistent failure for {elapsed:.0f}s. Exiting.")
+                    sys.exit(1)
+                
+                logger.exception(f"OptionSafeguard: Safeguard error ({elapsed:.0f}s):")
                 await asyncio.sleep(10)
