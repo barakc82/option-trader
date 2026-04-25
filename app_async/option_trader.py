@@ -20,7 +20,8 @@ class OptionTrader:
         while True:
             try:
                 if not self.ib.isConnected():
-                    await asyncio.sleep(5)
+                    logger.warning("OptionTrader: Task is waiting for IB connection...")
+                    await asyncio.sleep(30) # Longer wait while disconnected
                     continue
 
                 logger.info("OptionTrader: Checking market opportunities...")

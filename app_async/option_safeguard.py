@@ -20,7 +20,8 @@ class OptionSafeguard:
         while True:
             try:
                 if not self.ib.isConnected():
-                    await asyncio.sleep(5)
+                    logger.warning("OptionSafeguard: Task is waiting for IB connection...")
+                    await asyncio.sleep(30)
                     continue
 
                 logger.info("OptionSafeguard: Monitoring position risk...")
