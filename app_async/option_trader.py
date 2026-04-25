@@ -3,6 +3,9 @@ import logging
 import time
 import sys
 from ib_insync import IB
+
+from utilities.utils import write_heartbeat
+from .logging_setup import setup_logging
 from .trading_bot import TradingBot
 from .positions_manager import PositionsManager
 
@@ -19,6 +22,8 @@ class OptionTrader:
         logger.info("OptionTrader: Starting trading loop...")
         while True:
             try:
+                write_heartbeat()
+                setup_logging()
                 if not self.ib.isConnected():
                     logger.warning("OptionTrader: Task is waiting for IB connection...")
                     await asyncio.sleep(30) # Longer wait while disconnected

@@ -5,6 +5,7 @@ import sys
 from ib_insync import IB
 from .trading_bot import TradingBot
 from .positions_manager import PositionsManager
+from utilities.utils import is_market_open, is_regular_hours_with_after_hours
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,7 @@ class OptionSafeguard:
         self.trading_bot = trading_bot
         self.positions_manager = positions_manager
         self.connection_failure_start_time = None
+        self.last_alive_log_time = 0
 
     async def run(self):
         logger.info("OptionSafeguard: Starting safeguard loop...")
@@ -24,11 +26,18 @@ class OptionSafeguard:
                     await asyncio.sleep(30)
                     continue
 
+                if time.time() - self.last_alive_log_time > 300:
+                    logger.info("Option safeguard is still running")
+                    self.last_alive_log_time = time.time()
+
                 logger.info("OptionSafeguard: Monitoring position risk...")
-                await asyncio.sleep(2)
                 
                 if self.connection_failure_start_time is not None:
                     self.connection_failure_start_time = None
+
+                # Adaptive sleep logic
+                sleep_time = 180 if is_regular_hours_with_after_hours() or not is_market_open() else 1
+                await asyncio.sleep(sleep_time)
 
             except Exception:
                 if self.connection_failure_start_time is None:
