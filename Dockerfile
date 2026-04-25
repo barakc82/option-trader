@@ -11,17 +11,19 @@ RUN apt-get update && apt-get install -y \
     cron \
     python3 \
     python3-pip
-RUN pip3 install ib_insync colorlog pytz exchange_calendars gspread psutil twilio dash --break-system-packages \
+RUN pip3 install ib_insync colorlog pytz exchange_calendars gspread psutil twilio dash aiohttp nest_asyncio --break-system-packages \
     && rm -rf /var/lib/apt/lists/*
 #USER ibgateway  # Switch back to non-root for security
 
 
 RUN mkdir -p ${APP_DIR}
 COPY app ${APP_DIR}/app
+COPY app_async ${APP_DIR}/app_async
 COPY utilities ${APP_DIR}/utilities
 COPY frontend ${APP_DIR}/frontend
 COPY logs ${APP_DIR}/logs
 COPY cache ${APP_DIR}/cache
+COPY config ${APP_DIR}/config
 COPY resources ${APP_DIR}/resources
 RUN mkdir -p ${APP_DIR}/shared
 
