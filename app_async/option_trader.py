@@ -3,19 +3,26 @@ import logging
 import time
 import sys
 from ib_insync import IB
+from .trading_bot import TradingBot
+from .positions_manager import PositionsManager
 
 logger = logging.getLogger(__name__)
 
 class OptionTrader:
-    def __init__(self):
+    def __init__(self, ib: IB, trading_bot: TradingBot, positions_manager: PositionsManager):
+        self.ib = ib
+        self.trading_bot = trading_bot
+        self.positions_manager = positions_manager
         self.connection_failure_start_time = None
 
     async def run(self):
         logger.info("OptionTrader: Starting trading loop...")
         while True:
             try:
-                # Now you can use self.ib directly!
-                # positions = self.ib.positions()
+                if not self.ib.isConnected():
+                    await asyncio.sleep(5)
+                    continue
+
                 logger.info("OptionTrader: Checking market opportunities...")
                 await asyncio.sleep(5)
                 

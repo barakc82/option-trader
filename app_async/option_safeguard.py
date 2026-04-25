@@ -3,17 +3,26 @@ import logging
 import time
 import sys
 from ib_insync import IB
+from .trading_bot import TradingBot
+from .positions_manager import PositionsManager
 
 logger = logging.getLogger(__name__)
 
 class OptionSafeguard:
-    def __init__(self):
+    def __init__(self, ib: IB, trading_bot: TradingBot, positions_manager: PositionsManager):
+        self.ib = ib
+        self.trading_bot = trading_bot
+        self.positions_manager = positions_manager
         self.connection_failure_start_time = None
 
     async def run(self):
         logger.info("OptionSafeguard: Starting safeguard loop...")
         while True:
             try:
+                if not self.ib.isConnected():
+                    await asyncio.sleep(5)
+                    continue
+
                 logger.info("OptionSafeguard: Monitoring position risk...")
                 await asyncio.sleep(2)
                 

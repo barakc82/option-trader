@@ -7,6 +7,8 @@ from pathlib import Path
 from utilities.utils import acquire_single_instance_lock
 from .logging_setup import setup_logging
 from .connection_manager import ConnectionManager
+from .trading_bot import TradingBot
+from .positions_manager import PositionsManager
 from .option_trader import OptionTrader
 from .option_safeguard import OptionSafeguard
 
@@ -14,19 +16,22 @@ OPTION_TRADER_CLIENT_ID = 1
 
 async def main():
     """Application entry point."""
-    logger.info("Initializing Async Option Trader (Shared Connection refactor)...")
+    logger.info("Initializing Async Option Trader (Decoupled Dependency Injection)...")
     
-    # 1. Initialize Connection Manager (Shared IB instance)
+    # 1. Shared IB Connection
     connection_manager = ConnectionManager()
+    ib = connection_manager.ib
     
-    trader = OptionTrader()
-    safeguard = OptionSafeguard()
+    # 2. Logic Managers
+    trading_bot = TradingBot(ib)
+    positions_manager = PositionsManager(trading_bot)
+    
+    # 3. Tasks (Each receives all 3 dependencies separately)
+    trader = OptionTrader(ib, trading_bot, positions_manager)
+    safeguard = OptionSafeguard(ib, trading_bot, positions_manager)
 
     try:
-        # Run everything concurrently:
-        # - The connection manager loop (connects and maintains connection)
-        # - The trading loop
-        # - The safeguard loop
+        # Run the connection manager alongside the task classes
         await asyncio.gather(
             connection_manager.connect(client_id=OPTION_TRADER_CLIENT_ID),
             trader.run(),
@@ -42,7 +47,7 @@ async def main():
 if __name__ == "__main__":
     faulthandler.enable()
 
-    _lock = acquire_single_instance_lock(lock_path='/tmp/option_trader.lock', process_name='Option Trader')
+    _lock = acquire_single_instance_lock(lock_path='/tmp/option_trader_async.lock', process_name='Option Trader Async')
     setup_logging()
     logger = logging.getLogger("main")
 
@@ -52,7 +57,6 @@ if __name__ == "__main__":
     for old_log in sorted(log_dir.glob("*.log"), key=lambda f: f.stat().st_mtime, reverse=True)[5:]:
         try:
             old_log.unlink()
-            logger.info(f"Deleted old log file: {old_log.name}")
         except Exception:
             pass
 
