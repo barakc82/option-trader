@@ -32,6 +32,7 @@ class OptionTrader:
                     self.config = json.load(f)
                     self.should_write_options_overnight = self.config.get("should_write_options_overnight", True)
                     self.should_monitor_only = self.config.get("should_monitor_only", False)
+                    logger.debug(f"Config loaded: monitor_only={self.should_monitor_only}")
         except Exception as e:
             logger.error(f"OptionTrader: Error reading config: {e}")
 
@@ -39,19 +40,18 @@ class OptionTrader:
         logger.info("OptionTrader: Starting trading loop...")
         while True:
             try:
-                # 1. Refresh configuration
+                # Refresh configuration
                 self.load_config()
 
                 write_heartbeat()
-                setup_logging()
                 
                 if not self.ib.isConnected():
                     logger.warning("OptionTrader: Task is waiting for IB connection...")
                     await asyncio.sleep(30)
                     continue
 
-                # Updated log message per request
-                logger.info("OptionTrader: Checking market status...")
+                # Consistent status message
+                logger.info(f"OptionTrader: Checking market status (Monitor Only: {self.should_monitor_only})...")
                 
                 # Main trading cadence
                 await asyncio.sleep(5)

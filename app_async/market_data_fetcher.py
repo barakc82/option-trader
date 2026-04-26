@@ -89,7 +89,7 @@ class MarketDataFetcher:
     def on_option_ticker_update(self, ticker):
         now = time.time()
         last_time = getattr(ticker, 'last_processed_time', 0)
-        if now - last_time < 5.0:
+        if now - last_time < 0.5:
             return
         ticker.last_processed_time = now
 
@@ -100,8 +100,13 @@ class MarketDataFetcher:
         gamma = get_gamma(ticker)
         gamma = math.nan if gamma is None else gamma
         price = self.get_last_price(option)
+
+        # Log with safe formatting for NaN
+        delta_str = f"{delta:.3f}" if not math.isnan(delta) else "N/A"
+        gamma_str = f"{gamma:.3f}" if not math.isnan(gamma) else "N/A"
+        
         logger.info(
-            f"{get_option_name(option)} {option.symbol} {option.secType}, price: {price}, delta: {delta:.3f}, gamma: {gamma:.3f}")
+            f"{get_option_name(option)} {option.symbol} {option.secType}, price: {price}, delta: {delta_str}, gamma: {gamma_str}")
 
         option_monitoring_required = False
         for order in self.ib.openOrders():
