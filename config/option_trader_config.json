@@ -1,0 +1,5 @@
+{
+    "should_guard_positions": true,
+    "should_write_options_overnight": true,
+    "should_monitor_only": false
+}
