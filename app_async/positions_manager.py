@@ -13,10 +13,20 @@ logger = logging.getLogger(__name__)
 
 
 class PositionsManager:
-    def __init__(self, trading_bot: TradingBot):
-        self.trading_bot = trading_bot
-        self.filled_trades = []
-        logger.info("PositionsManager initialized (TradingBot injected).")
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(PositionsManager, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self, trading_bot: TradingBot = None):
+        if not self._initialized:
+            self.trading_bot = trading_bot
+            self.filled_trades = []
+            logger.info("PositionsManager initialized.")
+            self._initialized = True
 
 
     def get_recent_trades(self):
@@ -25,7 +35,6 @@ class PositionsManager:
     def is_recent_order_filled(self, position, action):
         for filled_trade in self.filled_trades:
             if filled_trade.action == action and filled_trade.conId == position.contract.conId and time.time() - filled_trade.fill_time < 60:
-                # if filled_trade.conId == position.contract.conId and time.time() - filled_trade.fill_time < 60:
                 logger.info(
                     f"Found a matching recent filled trade: {filled_trade.option_name}, contract id {filled_trade.conId}, action: {filled_trade.action}")
                 return True
@@ -33,6 +42,13 @@ class PositionsManager:
 
     def is_recent_buy_filled(self, position):
         return self.is_recent_order_filled(position, 'BUY')
+
+    def on_fill(self, trade):
+        logger.info(f"Trade filled: {get_option_name(trade.contract)} {trade.order.action}")
+        self.filled_trades.append(trade)
+        # Optional: cleanup very old trades to save memory
+        now = time.time()
+        self.filled_trades = [t for t in self.filled_trades if now - getattr(t, 'fill_time', now) < 3600]
 
     def find_all_stop_loss_trades(self, option, open_stop_loss_trades):
         stop_loss_trades_for_position = []
@@ -85,7 +101,6 @@ class PositionsManager:
                 for open_sell_trade in open_sell_trades_for_position:
                     self.trading_bot.cancel_trade(open_sell_trade)
 
-                # Should skip not after hours? (23:00-24:00) it was part of the code in the past for no apparent reason
                 if not stop_loss_trades_for_position and not self.is_recent_buy_filled(position):
                     stop_loss_per_option = calculate_max_loss(option.right, should_consider_only_effective=True)
                     logger.info(f"Adding stop loss for {get_option_name(option)}, potential loss per option: {stop_loss_per_option}")
@@ -93,3 +108,4 @@ class PositionsManager:
                     req_id_to_comment[stop_loss_trade.order.orderId] = "Stop loss activated"
 
                 limit_buy_trade = self.find_limit_buy_trade(option, open_buy_trades)
+                # ... (Logic continues)
