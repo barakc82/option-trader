@@ -193,9 +193,19 @@ def is_in_docker() -> bool:
 
 
 def write_heartbeat():
-    with open("cache/heartbeat.txt", "w") as file:
-        heartbeat = {'timestamp': time.time(), 'pid': os.getpid()}
-        json.dump(heartbeat, file, indent=4)
+    hb_path = "cache/heartbeat.txt"
+    temp_path = hb_path + ".tmp"
+    try:
+        os.makedirs("cache", exist_ok=True)
+        with open(temp_path, "w") as file:
+            heartbeat = {'timestamp': time.time(), 'pid': os.getpid()}
+            json.dump(heartbeat, file, indent=4)
+        # Atomic rename ensures the supervisor never reads a partially written file
+        os.replace(temp_path, hb_path)
+    except Exception:
+        # Fallback if rename fails for some reason
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
 
 def acquire_single_instance_lock(lock_path, process_name):
     """
