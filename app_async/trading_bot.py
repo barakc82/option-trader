@@ -1,5 +1,6 @@
 import asyncio
-from datetime import date
+import time
+from datetime import date, datetime
 
 from ib_insync import IB, LimitOrder, MarketOrder
 
@@ -16,8 +17,6 @@ class TradingBot:
         logger.info("TradingBot initialized (MarketDataFetcher injected).")
 
     async def get_short_options(self, should_use_cache=True):
-
-        # Use a loop to retry once if cache is empty, avoiding recursion
         for attempt in range(2):
             if not should_use_cache or attempt == 1:
                 original_request_timeout = self.ib.RequestTimeout
@@ -53,17 +52,11 @@ class TradingBot:
         return option_positions
 
     async def get_open_trades(self):
-
         should_use_cache = time.time() - self.last_request_all_open_trades_time < 300
         if not should_use_cache:
-            non_cache_open_trades = await self.ib.reqAllOpenOrdersAsync()
+            logger.info("Order cache stale, refreshing from IB...")
+            await self.ib.reqAllOpenOrdersAsync()
             self.last_request_all_open_trades_time = time.time()
-            for non_cache_open_trade in non_cache_open_trades:
-                client_id = non_cache_open_trade.order.clientId
-                order_id = non_cache_open_trade.order.orderId
-                perm_id = non_cache_open_trade.order.permId
-                logger.debug(
-                    f"Non-cache trade: {client_id}, {order_id}, {perm_id}, stop loss: {non_cache_open_trade.order.auxPrice}")
 
         open_trades = self.ib.openTrades()
         open_trades = [trade for trade in open_trades if
@@ -71,11 +64,7 @@ class TradingBot:
 
         if not should_use_cache:
             for open_trade in open_trades:
-                client_id = open_trade.order.clientId
-                order_id = open_trade.order.orderId
-                perm_id = open_trade.order.permId
-                logger.debug(
-                    f"Open trade: {client_id}, {order_id}, {perm_id}, stop loss: {open_trade.order.auxPrice}")
+                logger.debug(f"Open trade: {open_trade.order.orderId}, stop loss: {open_trade.order.auxPrice}")
 
         tickers = self.ib.tickers()
         for open_trade in open_trades:
@@ -88,20 +77,25 @@ class TradingBot:
         open_sell_trades = [trade for trade in open_trades if trade.order.action.upper() == 'SELL']
         if open_sell_trades:
             contracts = [trade.contract for trade in open_sell_trades]
-            logger.debug(f"Updating {len(contracts)} options for pending sell trades")
             await self.market_data_fetcher.update_ticker_data(contracts)
         return open_trades
 
+    # Point 1: Reset cache on order placement
+    def place_order(self, contract, order):
+        logger.info(f"Placing {order.action} order for {get_option_name(contract)}")
+        trade = self.ib.placeOrder(contract, order)
+        self.last_request_all_open_trades_time = 0 # Invalidate cache
+        return trade
 
+    # Point 1: Reset cache on cancellation
     def cancel_order(self, order):
         trade = self.ib.cancelOrder(order)
         logger.info(f"Status of cancel: {trade.orderStatus.status}")
+        self.last_request_all_open_trades_time = 0 # Invalidate cache
         return trade
-
 
     def cancel_trade(self, trade):
         return self.cancel_order(trade.order)
-
 
     async def close_short_option(self, option, quantity):
         open_trades = await self.get_open_trades()
@@ -118,9 +112,9 @@ class TradingBot:
             order = LimitOrder('BUY', quantity, limit, account=MY_ACCOUNT, usePriceMgmtAlgo=False)
             order.outsideRth = True
             order.tif = 'GTC'
-        trade = self.ib.placeOrder(option, order)
-        return trade
-
+        
+        # Use the cache-invalidating place_order
+        return self.place_order(option, order)
 
     async def close_short_option_position(self, position):
         return await self.close_short_option(position.contract, -position.position)
