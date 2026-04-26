@@ -87,8 +87,10 @@ class OptionSafeguard:
             logger.info(f"Recent filled trade: {recent_trade.option_name}, contract id {recent_trade.conId}, order type: {recent_trade.action}")
 
         logger.debug("Checking current positions")
-        positions = await self.trading_bot.get_short_options(should_use_cache=True)
-        open_trades = await self.trading_bot.get_open_trades()
+        positions, open_trades = await asyncio.gather(
+            self.trading_bot.get_short_options(should_use_cache=False),
+            self.trading_bot.get_open_trades()
+        )
         
         if positions:
             await asyncio.gather(*(self.handle_current_risk(position, open_trades) for position in positions))

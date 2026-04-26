@@ -2,14 +2,14 @@ import asyncio
 import math
 import exchange_calendars as ecals
 import pandas as pd
-import time
 from datetime import timedelta, datetime
 
-from ib_insync import IB
+from ib_insync import IB, Index
 
 from utilities.utils import *
 from utilities.ib_utils import get_delta, req_id_to_target_delta
 from .connection_manager import ConnectionManager
+from .option_cache import OptionCache
 
 logger = logging.getLogger(__name__)
 LIVE_DATA = 1
@@ -33,12 +33,11 @@ class MarketDataFetcher:
 
     def __init__(self):
         if not self._initialized:
-            # Accessing the connection singleton to get the shared IB instance
             self.ib = ConnectionManager().ib
             self.market_data_state = LIVE_DATA
             self.registered_con_ids = set()
             self._qualified_con_ids = set()
-            logger.info("MarketDataFetcher initialized (using shared connection).")
+            logger.info("MarketDataFetcher initialized.")
             self._initialized = True
 
     async def _qualify_contracts(self, *contracts):
@@ -57,6 +56,24 @@ class MarketDataFetcher:
             ticker.updateEvent += self.on_option_ticker_update
             self.registered_con_ids.add(con_id)
             logger.debug(f"Registered update handler for {get_option_name(ticker.contract)}")
+
+    def on_spx_ticker_update(self, ticker):
+        logger.info(f"SPX Ticker Update: {ticker.last}")
+
+    async def get_spx_price(self):
+        spx = Index('SPX', 'CBOE', 'USD')
+        spx_ticker = self.ib.ticker(spx)
+        if not spx_ticker or math.isnan(spx_ticker.last):
+            spx_ticker = await self.req_mkt_data(spx)
+        
+        if not spx_ticker:
+            return math.nan
+            
+        if math.isnan(spx_ticker.last):
+            if not is_market_open():
+                logger.warning("The close price of S&P 500 is used instead of the last price")
+            return spx_ticker.close
+        return spx_ticker.last
 
     def get_ticker(self, option):
         ticker = self.ib.ticker(option)
@@ -96,7 +113,6 @@ class MarketDataFetcher:
         ticker.last_processed_time = now
 
         option = ticker.contract
-
         delta = get_delta(ticker)
         delta = math.nan if delta is None else abs(delta)
         gamma = get_gamma(ticker)
@@ -106,8 +122,7 @@ class MarketDataFetcher:
         delta_str = f"{delta:.3f}" if not math.isnan(delta) else "N/A"
         gamma_str = f"{gamma:.3f}" if not math.isnan(gamma) else "N/A"
         
-        logger.info(
-            f"{get_option_name(option)} {option.symbol} {option.secType}, price: {price}, delta: {delta_str}, gamma: {gamma_str}")
+        logger.info(f"{get_option_name(option)} {option.symbol}, price: {price}, delta: {delta_str}, gamma: {gamma_str}")
 
         option_monitoring_required = False
         for trade in self.ib.openTrades():
@@ -115,7 +130,7 @@ class MarketDataFetcher:
                 option_monitoring_required = True
                 target_delta = req_id_to_target_delta.get(trade.order.orderId, 1)
                 if delta > target_delta:
-                    logger.info(f"Should cancel order {trade.order.orderId} as the delta({delta}) is greater than the target delta ({target_delta})")
+                    logger.info(f"Should cancel order {trade.order.orderId} as delta({delta:.3f}) > target({target_delta:.3f})")
 
         for position in self.ib.positions():
             if position.contract.conId == option.conId:
@@ -123,7 +138,6 @@ class MarketDataFetcher:
                 break
 
         if not option_monitoring_required:
-            logger.debug(f"Stopping monitoring for {get_option_name(option)}")
             self.ib.cancelMktData(option)
             if option.conId in self.registered_con_ids:
                 ticker.updateEvent -= self.on_option_ticker_update
@@ -147,10 +161,7 @@ class MarketDataFetcher:
                 current_tickers.append(ticker)
 
         if missing_tickers_in_cache:
-            logger.debug(f"Fetching {len(missing_tickers_in_cache)} tickers")
-            write_heartbeat()
             new_tickers = await self.ib.reqTickersAsync(*missing_tickers_in_cache)
-            write_heartbeat()
             for ticker in new_tickers:
                 self._register_ticker(ticker)
                 contract_id_to_ticker[ticker.contract.conId] = ticker
@@ -158,9 +169,6 @@ class MarketDataFetcher:
 
         if all(ticker is None or (math.isnan(ticker.ask) and math.isnan(ticker.bid)) for ticker in current_tickers):
             raise ValueError("Could not fetch ticker data for all contracts")
-
-        if all(ticker is None or ticker.modelGreeks is None or ticker.lastGreeks is None for ticker in current_tickers):
-            logger.warning(f"No delta was updated for any of the options")
 
         for contract in missing_tickers_in_cache:
             if contract.conId in contract_id_to_ticker:
@@ -186,8 +194,75 @@ class MarketDataFetcher:
         if math.isnan(ticker.last) and math.isnan(ticker.bid):
             tickers = await self.ib.reqTickersAsync(contract)
             ticker = tickers[0]
-            if math.isnan(ticker.last):
-                logger.warning(f"Last price of {contract.symbol} is unknown")
 
         self._register_ticker(ticker)
         return ticker
+
+    def get_ask(self, option):
+        ticker = self.get_ticker(option)
+        if not ticker or math.isnan(ticker.ask) or ticker.ask < 0:
+            return sys.float_info.max
+        return ticker.ask
+
+    async def get_spx_implied_volatility(self):
+        global last_implied_volatility
+        spx_price = await self.get_spx_price()
+        options_cache = OptionCache()
+        options = options_cache.load_cached_options()
+        if not options:
+            return last_implied_volatility
+
+        at_the_money_options = {'C': options[0], 'P': options[0]}
+        for right in ['C', 'P']:
+            for option in options:
+                if option.right == right and abs(option.strike - spx_price) < abs(
+                        at_the_money_options[right].strike - spx_price):
+                    at_the_money_options[right] = option
+
+        logger.info("Obtaining implied volatility")
+        write_heartbeat()
+        await self.update_ticker_data(list(at_the_money_options.values()))
+        write_heartbeat()
+
+        at_the_money_call_option = at_the_money_options['C']
+        if not hasattr(at_the_money_call_option, "ticker"):
+            return last_implied_volatility
+
+        call_ticker = at_the_money_call_option.ticker
+        call_implied_volatility = get_implied_volatility(call_ticker)
+
+        if not call_implied_volatility:
+            logger.warning(f"Implied volatility missing in the ticker of {get_option_name(at_the_money_call_option)}, "
+                           f"S&P 500: {spx_price}, thus using an implied volatility of {last_implied_volatility}")
+            return last_implied_volatility
+
+        at_the_money_put_option = at_the_money_options['P']
+        if not hasattr(at_the_money_put_option, "ticker"):
+            return last_implied_volatility
+
+        put_ticker = at_the_money_put_option.ticker
+        put_implied_volatility = get_implied_volatility(put_ticker)
+
+        if not put_implied_volatility:
+            logger.warning(f"Implied volatility missing in the ticker of {get_option_name(at_the_money_put_option)}, s&P 500: {spx_price}")
+            return last_implied_volatility
+
+        implied_volatility = (call_implied_volatility + put_implied_volatility) / 2
+        if implied_volatility > 1.9:
+            logger.error(
+                f"Implied volatility is {implied_volatility}, discarding. last call iv: {call_ticker.lastGreeks.impliedVol}, model call iv: {call_ticker.modelGreeks.impliedVol}, "
+                f"last put iv: {put_ticker.lastGreeks.impliedVol if put_ticker.lastGreeks else 'lastGreeks is None'},  "
+                f"model put iv: {put_ticker.modelGreeks.impliedVol if put_ticker.modelGreeks else 'modelGreeks is None'}, "
+                f"call: {get_option_name(at_the_money_options['C'])}, put: {get_option_name(at_the_money_options['P'])}")
+            return last_implied_volatility if last_implied_volatility else 0
+
+        if abs(implied_volatility - last_implied_volatility) > 1:
+            logger.error(
+                f"Implied volatility is {implied_volatility} while the last implied volatility is {last_implied_volatility}, "
+                f"discarding. last call iv: {call_ticker.lastGreeks.impliedVol}, model call iv: {call_ticker.modelGreeks.impliedVol},"
+                f" last put iv: {put_ticker.lastGreeks.impliedVol},  model put iv: {put_ticker.modelGreeks.impliedVol}, "
+                f"call: {get_option_name(at_the_money_options['C'])}, put: {get_option_name(at_the_money_options['P'])}")
+            return last_implied_volatility if last_implied_volatility else 0
+
+        last_implied_volatility = implied_volatility
+        return implied_volatility

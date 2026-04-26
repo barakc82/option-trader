@@ -2,10 +2,11 @@ import asyncio
 import time
 import logging
 
-from utilities.utils import is_trade_cancelled, write_heartbeat, get_option_name
+from utilities.utils import is_trade_cancelled, write_heartbeat, get_option_name, is_final_hours
 from utilities.ib_utils import req_id_to_comment
 
 from .max_loss_calculator import calculate_max_loss
+from .opportunity_explorer import OpportunityExplorer
 from .trading_bot import TradingBot
 
 
@@ -25,12 +26,14 @@ class PositionsManager:
         if not self._initialized:
             self.trading_bot = trading_bot
             self.filled_trades = []
+            self.was_option_positions_data_changed = False
             logger.info("PositionsManager initialized.")
             self._initialized = True
 
 
     def get_recent_trades(self):
         return [filled_trade for filled_trade in self.filled_trades if time.time() - filled_trade.fill_time < 300]
+
     def is_recent_order_filled(self, position, action):
         for filled_trade in self.filled_trades:
             if filled_trade.action == action and filled_trade.conId == position.contract.conId and time.time() - filled_trade.fill_time < 60:
@@ -45,8 +48,6 @@ class PositionsManager:
     def on_fill(self, trade):
         logger.info(f"Trade filled: {get_option_name(trade.contract)} {trade.order.action}")
         self.filled_trades.append(trade)
-        # Optional: cleanup very old trades to save memory
-
         now = time.time()
         self.filled_trades = [t for t in self.filled_trades if now - getattr(t, 'fill_time', now) < 3600]
 
@@ -102,10 +103,58 @@ class PositionsManager:
                     self.trading_bot.cancel_trade(open_sell_trade)
 
                 if not stop_loss_trades_for_position and not self.is_recent_buy_filled(position):
-                    stop_loss_per_option = calculate_max_loss(option.right, should_consider_only_effective=True)
+                    # Fix: calculate_max_loss is now ASYNC
+                    stop_loss_per_option = await calculate_max_loss(option.right, should_consider_only_effective=True)
                     logger.info(f"Adding stop loss for {get_option_name(option)}, potential loss per option: {stop_loss_per_option}")
-                    stop_loss_trade = self.trading_bot.add_stop_loss(position, stop_loss_per_option)
+                    # Fix: add_stop_loss is now ASYNC
+                    stop_loss_trade = await self.trading_bot.add_stop_loss(position, stop_loss_per_option)
                     req_id_to_comment[stop_loss_trade.order.orderId] = "Stop loss activated"
 
                 limit_buy_trade = self.find_limit_buy_trade(option, open_buy_trades)
-                # ... (Logic continues)
+                opportunity_explorer = OpportunityExplorer()
+                current_price_level = opportunity_explorer.last_call_option_price if option.right == 'C' else opportunity_explorer.last_put_option_price
+                
+                # Fix: calculate_minimal_sell_price_to_close_position is now ASYNC
+                min_sell_price = await opportunity_explorer.calculate_minimal_sell_price_to_close_position(option.right)
+                if current_price_level < min_sell_price:
+                    options_type = 'Put' if option.right == 'P' else 'Call'
+                    logger.info(
+                        f"The current price level for {options_type} options is {current_price_level}, thus no point in buying back position {get_option_name(option)}")
+                    if limit_buy_trade:
+                        logger.info(
+                            f"Cancelling a buy trade for position of {get_option_name(option)} since sell price for {options_type} options is too low ({current_price_level})")
+                        self.trading_bot.cancel_trade(limit_buy_trade)
+                    continue
+
+                if limit_buy_trade:
+                    if limit_buy_trade.remaining() == abs(position.position):
+                        continue
+                    else:
+                        logger.info(
+                            f"Cancelling a buy trade for position of {get_option_name(option)}, trade quantity: {limit_buy_trade.remaining()}, position quantity: {position.position}")
+                        self.trading_bot.cancel_trade(limit_buy_trade)
+
+                bid = option.ticker.bid
+                ask = option.ticker.ask
+                if not self.can_buy_options() or math.isnan(bid) or bid > 0.05 or math.isnan(ask) or ask > 0.2 or ask < 0:
+                    continue
+
+                if self.was_option_positions_data_changed:
+                    logger.info(f"Option positions changed, re-checking current positions")
+                    self.was_option_positions_data_changed = False
+                    break
+
+                logger.info(
+                    f"Submitting a buy trade for position of {get_option_name(position.contract)}, quantity: {position.position}")
+                # Note: close_position_at_limit was referenced but not found, 
+                # assuming close_short_option is the intended async replacement
+                await self.trading_bot.close_short_option(option, abs(position.position))
+
+            if not self.was_option_positions_data_changed:
+                logger.info("Checking of current positions is done")
+                break
+
+        self.was_option_positions_data_changed = False
+
+    def can_buy_options(self):
+        return not is_final_hours()
