@@ -83,7 +83,7 @@ class MarketDataFetcher:
         # Point 2: Throttling high-frequency updates (5-second gatekeeper)
         now = time.time()
         last_time = getattr(ticker, 'last_processed_time', 0)
-        if now - last_time < 5.0:
+        if now - last_time < 0.5:
             return
         ticker.last_processed_time = now
 
