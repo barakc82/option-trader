@@ -1,8 +1,8 @@
 import asyncio
-import time
+import math
 from datetime import date, datetime
 
-from ib_insync import IB, LimitOrder, MarketOrder
+from ib_insync import IB, LimitOrder, MarketOrder, StopOrder
 
 from utilities.utils import *
 from .market_data_fetcher import MarketDataFetcher
@@ -14,6 +14,7 @@ class TradingBot:
         self.ib = ib
         self.market_data_fetcher = market_data_fetcher
         self.last_request_all_open_trades_time = 0
+        self.price_increments = []
         logger.info("TradingBot initialized (MarketDataFetcher injected).")
 
     async def get_short_options(self, should_use_cache=True):
@@ -118,3 +119,46 @@ class TradingBot:
 
     async def close_short_option_position(self, position):
         return await self.close_short_option(position.contract, -position.position)
+
+    def verify_price_increments_exist(self, contract):
+        if not self.price_increments:
+            contract_details = self.ib.reqContractDetails(contract)
+            market_rule_ids_str = contract_details[0].marketRuleIds
+            market_rule_id_str = market_rule_ids_str.split(',')[0]
+            market_rule_id = int(market_rule_id_str)
+            market_rule = self.ib.reqMarketRule(int(market_rule_id))
+            assert market_rule
+            for tier in market_rule:
+                self.price_increments.append(tier)
+            self.price_increments = sorted(self.price_increments, key=lambda increment_tier: increment_tier.lowEdge)
+
+
+    def adjust_limit_to_market_rules(self, raw_limit):
+        assert self.price_increments
+        assert raw_limit
+        assert not math.isnan(raw_limit)
+        current_increment = self.price_increments[0].increment
+        for price_increment in self.price_increments:
+            if raw_limit > price_increment.lowEdge:
+                current_increment = price_increment.increment
+        assert not math.isnan(current_increment)
+        limit = round(round(raw_limit / current_increment) * current_increment, 6)
+        return limit
+
+
+    def add_stop_loss(self, position, stop_loss_per_option):
+        self.verify_price_increments_exist(position.contract)
+        raw_stop_loss_price = position.avgCost / 100 + stop_loss_per_option
+        stop_loss_price = self.adjust_limit_to_market_rules(raw_stop_loss_price)
+        stop_loss_order = StopOrder('BUY', abs(position.position), stop_loss_price, account=MY_ACCOUNT)
+        # limit_price = stop_loss_price + 0.15
+        # stop_loss_order = StopLimitOrder('BUY', abs(position.position), lmtPrice=limit_price, stopPrice=stop_loss_price)
+        stop_loss_order.usePriceMgmtAlgo = False
+        stop_loss_order.tif = 'GTC'
+
+        logger.info(f"Placing a stop loss order for {get_option_name(position.contract)}")
+        trade = self.ib.placeOrder(position.contract, stop_loss_order)
+
+        # is this really required?
+        # self.ib.sleep(2)
+        return trade

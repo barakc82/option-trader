@@ -1,13 +1,9 @@
 import asyncio
-import logging
-import time
-import sys
-import json
-import os
+
 from ib_insync import IB
 
-from utilities.utils import write_heartbeat
-from .logging_setup import setup_logging
+from utilities.utils import *
+
 from .trading_bot import TradingBot
 from .positions_manager import PositionsManager
 
@@ -52,9 +48,10 @@ class OptionTrader:
 
                 # Consistent status message
                 logger.info(f"OptionTrader: Checking market status (Monitor Only: {self.should_monitor_only})...")
+                self.trade()
                 
                 # Main trading cadence
-                await asyncio.sleep(5)
+                await self.sleep()
                 
                 if self.connection_failure_start_time is not None:
                     logger.info("OptionTrader: Connection error resolved.")
@@ -70,4 +67,24 @@ class OptionTrader:
                     sys.exit(1)
                 
                 logger.exception(f"OptionTrader: Loop error ({elapsed:.0f}s):")
-                await asyncio.sleep(10)
+                await asyncio.sleep(5)
+
+
+    async def sleep(self):
+        write_heartbeat()
+        sleep_time_in_seconds = 180
+        if is_market_open() or is_buffer_time_around_trade_time():
+            sleep_time_in_seconds = 90 if is_in_docker() else 180
+        if is_early_closing_hours():
+            sleep_time_in_seconds = 40
+        logger.info(f"Sleeping for {sleep_time_in_seconds // 60} minutes")
+
+        times = sleep_time_in_seconds // 10
+        for _ in range(times):
+            write_heartbeat()
+            await asyncio.sleep(10)
+
+    def trade(self):
+        is_market_open_result = is_market_open()
+        if is_market_open_result:
+            self.positions_manager.manage_current_positions()
