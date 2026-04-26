@@ -17,11 +17,12 @@ from .market_data_fetcher import MarketDataFetcher
 logger = logging.getLogger(__name__)
 
 class OptionSafeguard:
-    def __init__(self, ib: IB, trading_bot: TradingBot, positions_manager: PositionsManager, market_data_fetcher: MarketDataFetcher):
+    def __init__(self, ib: IB, trading_bot: TradingBot, market_data_fetcher: MarketDataFetcher):
         self.ib = ib
         self.trading_bot = trading_bot
-        self.positions_manager = positions_manager
         self.market_data_fetcher = market_data_fetcher
+        # Accessing the singleton instance
+        self.positions_manager = PositionsManager()
         self.connection_failure_start_time = None
         self.last_alive_log_time = 0
         self.config = {}
@@ -35,7 +36,7 @@ class OptionSafeguard:
 
                 if not self.ib.isConnected():
                     logger.warning("OptionSafeguard: Task is waiting for IB connection...")
-                    await asyncio.sleep(30)
+                    await asyncio.sleep(2)
                     continue
 
                 if time.time() - self.last_alive_log_time > 300:
@@ -89,7 +90,6 @@ class OptionSafeguard:
         if positions:
             await asyncio.gather(*(self.handle_current_risk(position, open_trades) for position in positions))
 
-    # Point 4: Converted to synchronous helper
     def find_stop_loss_trade(self, position, open_trades):
         option = position.contract
         for open_trade in open_trades:
@@ -98,7 +98,6 @@ class OptionSafeguard:
                 return open_trade
         return None
 
-    # Point 4: Converted to synchronous helper
     def get_pending_buy(self, position, open_trades):
         open_buy_trades = [trade for trade in open_trades if trade.order.action.upper() == 'BUY' and
                            not is_trade_cancelled(trade) and trade.order.orderType == 'LMT']
@@ -127,7 +126,6 @@ class OptionSafeguard:
 
         last_price = option.ticker.last
         
-        # Now used synchronously
         stop_loss_trade = self.find_stop_loss_trade(position, open_trades)
         if not stop_loss_trade:
             logger.warning(f"No stop loss is set for position of {get_option_name(option)}")
@@ -146,7 +144,6 @@ class OptionSafeguard:
                 logger.info(f"Recent buy already filled, so not closing {get_option_name(option)}")
                 return
 
-            # Now used synchronously
             pending_buy_trade = self.get_pending_buy(position, open_trades)
             if pending_buy_trade and hasattr(pending_buy_trade, 'submission_time'):
                 if time.time() - pending_buy_trade.submission_time < 10:
@@ -158,7 +155,6 @@ class OptionSafeguard:
                 return
 
             if is_regular_hours():
-                # Safety check inside the lock/sequence
                 is_stop_loss_exists = self.find_stop_loss_trade(position, open_trades)
                 if is_stop_loss_exists:
                     logger.info(f"Stop loss exists for {get_option_name(option)}, so not closing")

@@ -26,11 +26,12 @@ async def main():
     # 2. Logic Managers
     market_data_fetcher = MarketDataFetcher(ib)
     trading_bot = TradingBot(ib, market_data_fetcher)
-    positions_manager = PositionsManager(trading_bot)
+    # PositionsManager is a singleton, initialized here if needed but not passed
+    PositionsManager(trading_bot)
     
     # 3. Tasks
-    trader = OptionTrader(ib, trading_bot, positions_manager)
-    safeguard = OptionSafeguard(ib, trading_bot, positions_manager, market_data_fetcher)
+    trader = OptionTrader(ib, trading_bot)
+    safeguard = OptionSafeguard(ib, trading_bot, market_data_fetcher)
 
     try:
         # Run everything concurrently

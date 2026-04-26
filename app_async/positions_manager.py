@@ -31,7 +31,6 @@ class PositionsManager:
 
     def get_recent_trades(self):
         return [filled_trade for filled_trade in self.filled_trades if time.time() - filled_trade.fill_time < 300]
-
     def is_recent_order_filled(self, position, action):
         for filled_trade in self.filled_trades:
             if filled_trade.action == action and filled_trade.conId == position.contract.conId and time.time() - filled_trade.fill_time < 60:
@@ -47,6 +46,7 @@ class PositionsManager:
         logger.info(f"Trade filled: {get_option_name(trade.contract)} {trade.order.action}")
         self.filled_trades.append(trade)
         # Optional: cleanup very old trades to save memory
+
         now = time.time()
         self.filled_trades = [t for t in self.filled_trades if now - getattr(t, 'fill_time', now) < 3600]
 

@@ -1,19 +1,23 @@
 import asyncio
-
+import logging
+import time
+import sys
+import json
+import os
 from ib_insync import IB
 
 from utilities.utils import *
-
 from .trading_bot import TradingBot
 from .positions_manager import PositionsManager
 
 logger = logging.getLogger(__name__)
 
 class OptionTrader:
-    def __init__(self, ib: IB, trading_bot: TradingBot, positions_manager: PositionsManager):
+    def __init__(self, ib: IB, trading_bot: TradingBot):
         self.ib = ib
         self.trading_bot = trading_bot
-        self.positions_manager = positions_manager
+        # Accessing the singleton instance
+        self.positions_manager = PositionsManager()
         self.connection_failure_start_time = None
         self.config = {}
         self.should_write_options_overnight = True
@@ -43,14 +47,16 @@ class OptionTrader:
                 
                 if not self.ib.isConnected():
                     logger.warning("OptionTrader: Task is waiting for IB connection...")
-                    await asyncio.sleep(30)
+                    await asyncio.sleep(2)
                     continue
 
                 # Consistent status message
                 logger.info(f"OptionTrader: Checking market status (Monitor Only: {self.should_monitor_only})...")
-                self.trade()
                 
-                # Main trading cadence
+                # Restore the trade logic call
+                await self.trade()
+
+                # Restore the custom sleep logic
                 await self.sleep()
                 
                 if self.connection_failure_start_time is not None:
@@ -67,8 +73,7 @@ class OptionTrader:
                     sys.exit(1)
                 
                 logger.exception(f"OptionTrader: Loop error ({elapsed:.0f}s):")
-                await asyncio.sleep(5)
-
+                await asyncio.sleep(10)
 
     async def sleep(self):
         write_heartbeat()
@@ -84,7 +89,7 @@ class OptionTrader:
             write_heartbeat()
             await asyncio.sleep(10)
 
-    def trade(self):
-        is_market_open_result = is_market_open()
-        if is_market_open_result:
-            self.positions_manager.manage_current_positions()
+    async def trade(self):
+        if is_market_open():
+            # Crucial: manage_current_positions is ASYNC, so we must await it!
+            await self.positions_manager.manage_current_positions()
