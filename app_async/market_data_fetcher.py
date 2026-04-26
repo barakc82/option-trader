@@ -29,12 +29,10 @@ class MarketDataFetcher:
         self.ib = ib
         self.market_data_state = LIVE_DATA
         self.registered_con_ids = set()
-        # Point 2: Cache for already qualified contracts
         self._qualified_con_ids = set()
         logger.info("MarketDataFetcher initialized.")
 
     async def _qualify_contracts(self, *contracts):
-        """Helper to qualify only contracts not yet in our cache."""
         to_qualify = [c for c in contracts if c.conId not in self._qualified_con_ids]
         if to_qualify:
             logger.debug(f"Qualifying {len(to_qualify)} new contracts...")
@@ -43,7 +41,6 @@ class MarketDataFetcher:
                 self._qualified_con_ids.add(c.conId)
 
     def _register_ticker(self, ticker):
-        """Ensures the update handler is attached exactly once per ticker."""
         if not ticker:
             return
         con_id = ticker.contract.conId
@@ -67,7 +64,7 @@ class MarketDataFetcher:
         if not ticker:
             return math.nan
         last_price = ticker.last
-        if not last_price:
+        if math.isnan(last_price):
             return math.nan
         return last_price
 
@@ -101,7 +98,6 @@ class MarketDataFetcher:
         gamma = math.nan if gamma is None else gamma
         price = self.get_last_price(option)
 
-        # Log with safe formatting for NaN
         delta_str = f"{delta:.3f}" if not math.isnan(delta) else "N/A"
         gamma_str = f"{gamma:.3f}" if not math.isnan(gamma) else "N/A"
         
@@ -109,12 +105,14 @@ class MarketDataFetcher:
             f"{get_option_name(option)} {option.symbol} {option.secType}, price: {price}, delta: {delta_str}, gamma: {gamma_str}")
 
         option_monitoring_required = False
-        for order in self.ib.openOrders():
-            if order.referenceContractId == option.conId:
+        
+        # Correction 1: Use openTrades() instead of openOrders()
+        for trade in self.ib.openTrades():
+            if trade.contract.conId == option.conId:
                 option_monitoring_required = True
-                target_delta = req_id_to_target_delta.get(order.orderId, 1)
+                target_delta = req_id_to_target_delta.get(trade.order.orderId, 1)
                 if delta > target_delta:
-                    logger.info(f"Should cancel order {order.orderId} as the delta({delta}) is greater than the target delta ({target_delta})")
+                    logger.info(f"Should cancel order {trade.order.orderId} as the delta({delta}) is greater than the target delta ({target_delta})")
 
         for position in self.ib.positions():
             if position.contract.conId == option.conId:
@@ -122,17 +120,15 @@ class MarketDataFetcher:
                 break
 
         if not option_monitoring_required:
-            # Point 3: Explicitly remove the event handler on cleanup
             logger.debug(f"Stopping monitoring for {get_option_name(option)}")
             self.ib.cancelMktData(option)
             if option.conId in self.registered_con_ids:
-                ticker.updateEvent -= self.on_option_ticker_update # Unregister
+                ticker.updateEvent -= self.on_option_ticker_update
                 self.registered_con_ids.remove(option.conId)
 
 
     async def update_ticker_data(self, contracts):
         assert contracts
-        # Use Point 2 optimization
         await self._qualify_contracts(*contracts)
 
         self.set_market_data_state()
@@ -160,7 +156,8 @@ class MarketDataFetcher:
                 contract_id_to_ticker[ticker.contract.conId] = ticker
                 current_tickers.append(ticker)
 
-        if all(ticker is None or (ticker.ask is None and ticker.bid is None) for ticker in current_tickers):
+        # Correction 2: Use math.isnan() for proper validation
+        if all(ticker is None or (math.isnan(ticker.ask) and math.isnan(ticker.bid)) for ticker in current_tickers):
             raise ValueError("Could not fetch ticker data for all contracts")
 
         if all(ticker is None or ticker.modelGreeks is None or ticker.lastGreeks is None for ticker in current_tickers):
@@ -180,9 +177,7 @@ class MarketDataFetcher:
                 contract.ticker = ticker
                 return ticker
 
-        # Use Point 2 optimization
         await self._qualify_contracts(contract)
-        
         self.set_market_data_state()
 
         ticker = self.ib.reqMktData(contract, "", snapshot=is_snapshot, regulatorySnapshot=False)
