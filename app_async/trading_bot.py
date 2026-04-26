@@ -17,22 +17,26 @@ class TradingBot:
 
     async def get_short_options(self, should_use_cache=True):
 
-        if not should_use_cache:
-            original_request_timeout = self.ib.RequestTimeout
-            self.ib.RequestTimeout = 10.0
-            try:
-                await self.ib.reqPositionsAsync()
-            except TimeoutError:
-                logger.warning("reqPositions timed out")
-            finally:
-                await asyncio.sleep(2)
-                self.ib.RequestTimeout = original_request_timeout
+        # Use a loop to retry once if cache is empty, avoiding recursion
+        for attempt in range(2):
+            if not should_use_cache or attempt == 1:
+                original_request_timeout = self.ib.RequestTimeout
+                self.ib.RequestTimeout = 10.0
+                try:
+                    await self.ib.reqPositionsAsync()
+                except TimeoutError:
+                    logger.warning("reqPositions timed out")
+                finally:
+                    await asyncio.sleep(2)
+                    self.ib.RequestTimeout = original_request_timeout
 
-        logger.debug("Requesting positions from cache")
-        positions = self.ib.positions(MY_ACCOUNT)
-        if not positions and should_use_cache:
-            logger.info("No positions, retrying using should_use_cache=False")
-            return self.get_short_options(should_use_cache=False)
+            logger.debug(f"Requesting positions (use_cache={should_use_cache}, attempt={attempt})")
+            positions = self.ib.positions(MY_ACCOUNT)
+            
+            if positions or not should_use_cache:
+                break
+            
+            logger.info("No positions found in cache, retrying with server request...")
 
         option_positions = []
         for position in positions:
@@ -60,9 +64,6 @@ class TradingBot:
                 perm_id = non_cache_open_trade.order.permId
                 logger.debug(
                     f"Non-cache trade: {client_id}, {order_id}, {perm_id}, stop loss: {non_cache_open_trade.order.auxPrice}")
-                order_key = self.ib.wrapper.orderKey(client_id, order_id, perm_id)
-                # self.ib.wrapper.trades[order_key] = non_cache_open_trade
-                # self.ib.wrapper.permId2Trade[perm_id] = non_cache_open_trade
 
         open_trades = self.ib.openTrades()
         open_trades = [trade for trade in open_trades if

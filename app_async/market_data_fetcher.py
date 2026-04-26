@@ -2,6 +2,8 @@ import asyncio
 import math
 import exchange_calendars as ecals
 import pandas as pd
+import time
+from datetime import timedelta, datetime
 
 from ib_insync import IB
 
@@ -26,7 +28,19 @@ class MarketDataFetcher:
     def __init__(self, ib: IB):
         self.ib = ib
         self.market_data_state = LIVE_DATA
+        self.registered_con_ids = set()
         logger.info("MarketDataFetcher initialized.")
+
+
+    def _register_ticker(self, ticker):
+        """Ensures the update handler is attached exactly once per ticker."""
+        if not ticker:
+            return
+        con_id = ticker.contract.conId
+        if con_id not in self.registered_con_ids:
+            ticker.updateEvent += self.on_option_ticker_update
+            self.registered_con_ids.add(con_id)
+            logger.debug(f"Registered update handler for {get_option_name(ticker.contract)}")
 
 
     def get_ticker(self, option):
@@ -66,6 +80,12 @@ class MarketDataFetcher:
 
 
     def on_option_ticker_update(self, ticker):
+        # Point 2: Throttling high-frequency updates (5-second gatekeeper)
+        now = time.time()
+        last_time = getattr(ticker, 'last_processed_time', 0)
+        if now - last_time < 5.0:
+            return
+        ticker.last_processed_time = now
 
         option = ticker.contract
 
@@ -84,9 +104,6 @@ class MarketDataFetcher:
                 target_delta = req_id_to_target_delta.get(order.orderId, 1)
                 if delta > target_delta:
                     logger.info(f"Should cancel order {order.orderId} as the delta({delta}) is greater than the target delta ({target_delta})")
-                else:
-                    logger.info(
-                        f"For {get_option_name(option)} is greater than the target delta ({target_delta})")
 
         for position in self.ib.positions():
             if position.contract.conId == option.conId:
@@ -95,6 +112,8 @@ class MarketDataFetcher:
 
         if not option_monitoring_required:
             self.ib.cancelMktData(option)
+            if option.conId in self.registered_con_ids:
+                self.registered_con_ids.remove(option.conId)
 
 
     async def update_ticker_data(self, contracts):
@@ -112,6 +131,8 @@ class MarketDataFetcher:
             if ticker is None:
                 missing_tickers_in_cache.append(contract)
             else:
+                # Point 1: Ensure handler is attached even if already in cache
+                self._register_ticker(ticker)
                 contract.ticker = ticker
                 current_tickers.append(ticker)
 
@@ -122,7 +143,8 @@ class MarketDataFetcher:
         logger.debug("Done fetching tickers")
 
         for ticker in new_tickers:
-            ticker.updateEvent += self.on_option_ticker_update
+            # Point 1: Register newly created tickers
+            self._register_ticker(ticker)
             contract_id_to_ticker[ticker.contract.conId] = ticker
 
         current_tickers.extend(new_tickers)
@@ -142,25 +164,32 @@ class MarketDataFetcher:
 
         ticker = self.ib.ticker(contract)
         if ticker is not None:
-
+            # Point 1: Register if we just found it in the IB cache
+            self._register_ticker(ticker)
             is_ticker_valid = is_snapshot or datetime.now().astimezone() - ticker.time < timedelta(seconds=4)
             if is_ticker_valid:
                 contract.ticker = ticker
                 return ticker
 
         await self.ib.qualifyContractsAsync(contract)
-        await asyncio.sleep(2)
-
+        
         self.set_market_data_state()
 
+        # Optimization: Use dynamic polling instead of fixed 4-second sleep
         ticker = self.ib.reqMktData(contract, "", snapshot=is_snapshot, regulatorySnapshot=False)
-        await asyncio.sleep(2)
+        
+        start_time = time.time()
+        # Wait up to 3 seconds, but proceed as soon as data arrives
+        while math.isnan(ticker.last) and math.isnan(ticker.bid) and (time.time() - start_time < 3.0):
+            await asyncio.sleep(0.1)
 
-        if math.isnan(ticker.last):
+        if math.isnan(ticker.last) and math.isnan(ticker.bid):
+            # Try one last batch request if snapshot failed
             tickers = await self.ib.reqTickersAsync(contract)
-            await asyncio.sleep(2)
             ticker = tickers[0]
             if math.isnan(ticker.last):
                 logger.warning(f"Last price of {contract.symbol} is unknown")
 
+        # Point 1: Register ticker found/created by req_mkt_data
+        self._register_ticker(ticker)
         return ticker

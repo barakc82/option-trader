@@ -10,6 +10,25 @@ from .market_data_fetcher import MarketDataFetcher
 
 logger = logging.getLogger(__name__)
 
+
+async def find_stop_loss_trade(position, open_trades):
+    option = position.contract
+    for open_trade in open_trades:
+        if (option.conId == open_trade.contract.conId and open_trade.order.orderType == 'STP'
+                and open_trade.remaining() == abs(position.position)):
+            return open_trade
+    return None
+
+
+async def get_pending_buy(position, open_trades):
+    open_buy_trades = [trade for trade in open_trades if trade.order.action.upper() == 'BUY' and
+                       not is_trade_cancelled(trade) and trade.order.orderType == 'LMT']
+    for open_buy_trade in open_buy_trades:
+        if open_buy_trade.contract.conId == position.contract.conId:
+            return open_buy_trade
+    return None
+
+
 class OptionSafeguard:
     def __init__(self, ib: IB, trading_bot: TradingBot, positions_manager: PositionsManager, market_data_fetcher: MarketDataFetcher):
         self.ib = ib
@@ -25,7 +44,6 @@ class OptionSafeguard:
         logger.info("OptionSafeguard: Starting safeguard loop...")
         while True:
             try:
-                # 1. Refresh configuration from file
                 self.load_config()
 
                 if not self.ib.isConnected():
@@ -47,7 +65,6 @@ class OptionSafeguard:
                     logger.info("OptionSafeguard: Connection error resolved.")
                     self.connection_failure_start_time = None
 
-                # Adaptive sleep logic
                 sleep_time = 180 if is_regular_hours_with_after_hours() or not is_market_open() else 1
                 await asyncio.sleep(sleep_time)
 
@@ -64,50 +81,30 @@ class OptionSafeguard:
                 await asyncio.sleep(10)
 
     def load_config(self):
-        """Reads configuration from config/option_trader_config.json."""
         config_path = "config/option_trader_config.json"
         try:
             if os.path.exists(config_path):
                 with open(config_path, "r") as f:
                     self.config = json.load(f)
                     self.should_guard_positions = self.config.get("should_guard_positions", True)
-                    logger.debug(f"Config loaded: should_guard_positions={self.should_guard_positions}")
         except Exception as e:
             logger.error(f"Error reading safeguard config: {e}")
 
     async def guard_current_positions(self):
         recent_trades = self.positions_manager.get_recent_trades()
         for recent_trade in recent_trades:
-            logger.info(
-                f"Recent filled trade: {recent_trade.option_name}, contract id {recent_trade.conId}, order type: {recent_trade.action}")
+            logger.info(f"Recent filled trade: {recent_trade.option_name}, contract id {recent_trade.conId}, order type: {recent_trade.action}")
 
         logger.debug("Checking current positions")
         positions = await self.trading_bot.get_short_options(should_use_cache=True)
+        
+        # Optimization: Fetch open trades ONCE for all positions
+        open_trades = await self.trading_bot.get_open_trades()
+        
         if positions:
-            await asyncio.gather(*(self.handle_current_risk(position) for position in positions))
+            await asyncio.gather(*(self.handle_current_risk(position, open_trades) for position in positions))
 
-
-    async def find_stop_loss_trade(self, position):
-        option = position.contract
-        open_trades = await self.trading_bot.get_open_trades()
-        for open_trade in open_trades:
-            if (option.conId == open_trade.contract.conId and open_trade.order.orderType == 'STP'
-                    and open_trade.remaining() == abs(position.position)):
-                return open_trade
-        return None
-
-
-    async def get_pending_buy(self, position):
-        open_trades = await self.trading_bot.get_open_trades()
-        open_buy_trades = [trade for trade in open_trades if trade.order.action.upper() == 'BUY' and
-                           not is_trade_cancelled(trade) and trade.order.orderType == 'LMT']
-        for open_buy_trade in open_buy_trades:
-            if open_buy_trade.contract.conId == position.contract.conId:
-                return open_buy_trade
-        return None
-
-
-    async def handle_current_risk(self, position):
+    async def handle_current_risk(self, position, open_trades):
         option = position.contract
         if not hasattr(option, 'ticker') or option.ticker is None:
             ticker = self.market_data_fetcher.get_ticker(option)
@@ -126,7 +123,9 @@ class OptionSafeguard:
             option.ticker = ticker
 
         last_price = option.ticker.last
-        stop_loss_trade = await self.find_stop_loss_trade(position)
+        
+        # Optimization: Use the passed-in open_trades list
+        stop_loss_trade = await find_stop_loss_trade(position, open_trades)
         if not stop_loss_trade:
             logger.warning(f"No stop loss is set for position of {get_option_name(option)}")
             await self.ib.reqAllOpenOrdersAsync()
@@ -134,8 +133,7 @@ class OptionSafeguard:
 
         stop_loss = stop_loss_trade.order.auxPrice
         sell_price = position.avgCost / 100
-        logger.debug(
-            f"{get_option_name(option)}, Last price: {last_price:.2f}, Sell price: {sell_price:.2f}, Stop loss for option: {stop_loss:.2f}, time: {option.ticker.time}")
+        logger.debug(f"{get_option_name(option)}, Last price: {last_price:.2f}, Sell price: {sell_price:.2f}, Stop loss for option: {stop_loss:.2f}")
 
         if last_price >= 0.5 * stop_loss:
             logger.info(f"Watching the current price of {get_option_name(option)}: {last_price:.2f}, stop loss is at {stop_loss:.2f}")
@@ -147,7 +145,7 @@ class OptionSafeguard:
                 await self.ib.reqPositionsAsync()
                 return
 
-            pending_buy_trade = await self.get_pending_buy(position)
+            pending_buy_trade = await get_pending_buy(position, open_trades)
             if pending_buy_trade and hasattr(pending_buy_trade, 'submission_time'):
                 if time.time() - pending_buy_trade.submission_time < 10:
                     logger.info(f"Recent buy already pending, so not trying to close {get_option_name(option)} yet")
@@ -163,15 +161,13 @@ class OptionSafeguard:
                 logger.info(f"{get_option_name(option)} is cancelled, continuing to a new close of the position")
 
             if is_regular_hours():
-                is_stop_loss_exists = await self.find_stop_loss_trade(position)
+                is_stop_loss_exists = await find_stop_loss_trade(position, open_trades)
                 if is_stop_loss_exists:
                     logger.info(f"Stop loss exists for {get_option_name(option)}, so not closing")
                     return
 
-            logger.warning(
-                f"Risky position {get_option_name(option)} during pre-market, current price is {last_price} and the stop loss is {stop_loss}")
+            logger.warning(f"Risky position {get_option_name(option)} during pre-market, current price is {last_price} and the stop loss is {stop_loss}")
             
-            # Use the dynamically loaded config value
             if self.should_guard_positions:
                 logger.warning(f"Closing risky position {get_option_name(option)} during pre-market")
                 pending_buy_trade = await self.trading_bot.close_short_option_position(position)
