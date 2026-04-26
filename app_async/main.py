@@ -7,6 +7,7 @@ from pathlib import Path
 from utilities.utils import acquire_single_instance_lock
 from .logging_setup import setup_logging
 from .connection_manager import ConnectionManager
+from .market_data_fetcher import MarketDataFetcher
 from .trading_bot import TradingBot
 from .positions_manager import PositionsManager
 from .option_trader import OptionTrader
@@ -16,22 +17,23 @@ OPTION_TRADER_CLIENT_ID = 1
 
 async def main():
     """Application entry point."""
-    logger.info("Initializing Async Option Trader (Decoupled Dependency Injection)...")
+    logger.info("Initializing Async Option Trader...")
     
     # 1. Shared IB Connection
     connection_manager = ConnectionManager()
     ib = connection_manager.ib
     
     # 2. Logic Managers
-    trading_bot = TradingBot(ib)
+    market_data_fetcher = MarketDataFetcher(ib)
+    trading_bot = TradingBot(ib, market_data_fetcher)
     positions_manager = PositionsManager(trading_bot)
     
-    # 3. Tasks (Each receives all 3 dependencies separately)
+    # 3. Tasks
     trader = OptionTrader(ib, trading_bot, positions_manager)
-    safeguard = OptionSafeguard(ib, trading_bot, positions_manager)
+    safeguard = OptionSafeguard(ib, trading_bot, positions_manager, market_data_fetcher)
 
     try:
-        # Run the connection manager alongside the task classes
+        # Run everything concurrently
         await asyncio.gather(
             connection_manager.connect(client_id=OPTION_TRADER_CLIENT_ID),
             trader.run(),
