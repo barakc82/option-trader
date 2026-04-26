@@ -144,14 +144,14 @@ class OptionSafeguard:
             logger.warning(f"The current price of {get_option_name(option)} ({last_price}) is higher than the stop loss: {stop_loss:}")
             if self.positions_manager.is_recent_buy_filled(position):
                 logger.info(f"Recent buy already filled, so not closing {get_option_name(option)}")
-                self.ib.reqPositions()
+                await self.ib.reqPositionsAsync()
                 return
 
             pending_buy_trade = await self.get_pending_buy(position)
             if pending_buy_trade and hasattr(pending_buy_trade, 'submission_time'):
                 if time.time() - pending_buy_trade.submission_time < 10:
                     logger.info(f"Recent buy already pending, so not trying to close {get_option_name(option)} yet")
-                    self.ib.reqPositions()
+                    await self.ib.reqPositionsAsync()
                     return
 
                 logger.info(f"Cancelling the buy of {get_option_name(option)} since it has been pending for too long")

@@ -2,6 +2,8 @@ import asyncio
 import logging
 import time
 import sys
+import json
+import os
 from ib_insync import IB
 
 from utilities.utils import write_heartbeat
@@ -17,19 +19,41 @@ class OptionTrader:
         self.trading_bot = trading_bot
         self.positions_manager = positions_manager
         self.connection_failure_start_time = None
+        self.config = {}
+        self.should_write_options_overnight = True
+        self.should_monitor_only = False
+
+    def load_config(self):
+        """Reads configuration from config/option_trader_config.json."""
+        config_path = "config/option_trader_config.json"
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, "r") as f:
+                    self.config = json.load(f)
+                    self.should_write_options_overnight = self.config.get("should_write_options_overnight", True)
+                    self.should_monitor_only = self.config.get("should_monitor_only", False)
+        except Exception as e:
+            logger.error(f"OptionTrader: Error reading config: {e}")
 
     async def run(self):
         logger.info("OptionTrader: Starting trading loop...")
         while True:
             try:
+                # 1. Refresh configuration
+                self.load_config()
+
                 write_heartbeat()
                 setup_logging()
+                
                 if not self.ib.isConnected():
                     logger.warning("OptionTrader: Task is waiting for IB connection...")
-                    await asyncio.sleep(30) # Longer wait while disconnected
+                    await asyncio.sleep(30)
                     continue
 
-                logger.info("OptionTrader: Checking market opportunities...")
+                # Updated log message per request
+                logger.info("OptionTrader: Checking market status...")
+                
+                # Main trading cadence
                 await asyncio.sleep(5)
                 
                 if self.connection_failure_start_time is not None:
