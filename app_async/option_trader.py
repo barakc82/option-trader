@@ -1,23 +1,20 @@
 import asyncio
-import logging
-import time
-import sys
-import json
-import os
-from ib_insync import IB
 
 from utilities.utils import *
 from .trading_bot import TradingBot
 from .positions_manager import PositionsManager
+from .connection_manager import ConnectionManager
 
 logger = logging.getLogger(__name__)
 
 class OptionTrader:
-    def __init__(self, ib: IB, trading_bot: TradingBot):
-        self.ib = ib
-        self.trading_bot = trading_bot
-        # Accessing the singleton instance
+    def __init__(self):
+        # Accessing singleton instances
+        self.connection_manager = ConnectionManager()
+        self.ib = self.connection_manager.ib
+        self.trading_bot = TradingBot()
         self.positions_manager = PositionsManager()
+        
         self.connection_failure_start_time = None
         self.config = {}
         self.should_write_options_overnight = True
@@ -47,16 +44,13 @@ class OptionTrader:
                 
                 if not self.ib.isConnected():
                     logger.warning("OptionTrader: Task is waiting for IB connection...")
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(30)
                     continue
 
                 # Consistent status message
                 logger.info(f"OptionTrader: Checking market status (Monitor Only: {self.should_monitor_only})...")
                 
-                # Restore the trade logic call
                 await self.trade()
-
-                # Restore the custom sleep logic
                 await self.sleep()
                 
                 if self.connection_failure_start_time is not None:
@@ -91,5 +85,4 @@ class OptionTrader:
 
     async def trade(self):
         if is_market_open():
-            # Crucial: manage_current_positions is ASYNC, so we must await it!
             await self.positions_manager.manage_current_positions()

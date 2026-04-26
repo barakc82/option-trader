@@ -9,12 +9,11 @@ from ib_insync import IB
 
 from utilities.utils import *
 from utilities.ib_utils import get_delta, req_id_to_target_delta
-
+from .connection_manager import ConnectionManager
 
 logger = logging.getLogger(__name__)
 LIVE_DATA = 1
 FROZEN_DATA = 2
-
 
 def get_gamma(ticker):
     if ticker.lastGreeks and ticker.lastGreeks.gamma:
@@ -23,14 +22,24 @@ def get_gamma(ticker):
         return ticker.modelGreeks.gamma
     return None
 
-
 class MarketDataFetcher:
-    def __init__(self, ib: IB):
-        self.ib = ib
-        self.market_data_state = LIVE_DATA
-        self.registered_con_ids = set()
-        self._qualified_con_ids = set()
-        logger.info("MarketDataFetcher initialized.")
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(MarketDataFetcher, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self):
+        if not self._initialized:
+            # Accessing the connection singleton to get the shared IB instance
+            self.ib = ConnectionManager().ib
+            self.market_data_state = LIVE_DATA
+            self.registered_con_ids = set()
+            self._qualified_con_ids = set()
+            logger.info("MarketDataFetcher initialized (using shared connection).")
+            self._initialized = True
 
     async def _qualify_contracts(self, *contracts):
         to_qualify = [c for c in contracts if c.conId not in self._qualified_con_ids]
@@ -49,7 +58,6 @@ class MarketDataFetcher:
             self.registered_con_ids.add(con_id)
             logger.debug(f"Registered update handler for {get_option_name(ticker.contract)}")
 
-
     def get_ticker(self, option):
         ticker = self.ib.ticker(option)
         if ticker:
@@ -57,7 +65,6 @@ class MarketDataFetcher:
         if hasattr(option, "ticker"):
             return option.ticker
         return None
-
 
     def get_last_price(self, option):
         ticker = self.get_ticker(option)
@@ -67,7 +74,6 @@ class MarketDataFetcher:
         if math.isnan(last_price):
             return math.nan
         return last_price
-
 
     def set_market_data_state(self):
         cboe = ecals.get_calendar("XCBF")
@@ -81,7 +87,6 @@ class MarketDataFetcher:
             if self.market_data_state != FROZEN_DATA:
                 self.ib.reqMarketDataType(FROZEN_DATA)
                 self.market_data_state = FROZEN_DATA
-
 
     def on_option_ticker_update(self, ticker):
         now = time.time()
@@ -105,8 +110,6 @@ class MarketDataFetcher:
             f"{get_option_name(option)} {option.symbol} {option.secType}, price: {price}, delta: {delta_str}, gamma: {gamma_str}")
 
         option_monitoring_required = False
-        
-        # Correction 1: Use openTrades() instead of openOrders()
         for trade in self.ib.openTrades():
             if trade.contract.conId == option.conId:
                 option_monitoring_required = True
@@ -126,11 +129,9 @@ class MarketDataFetcher:
                 ticker.updateEvent -= self.on_option_ticker_update
                 self.registered_con_ids.remove(option.conId)
 
-
     async def update_ticker_data(self, contracts):
         assert contracts
         await self._qualify_contracts(*contracts)
-
         self.set_market_data_state()
 
         missing_tickers_in_cache = []
@@ -150,13 +151,11 @@ class MarketDataFetcher:
             write_heartbeat()
             new_tickers = await self.ib.reqTickersAsync(*missing_tickers_in_cache)
             write_heartbeat()
-            
             for ticker in new_tickers:
                 self._register_ticker(ticker)
                 contract_id_to_ticker[ticker.contract.conId] = ticker
                 current_tickers.append(ticker)
 
-        # Correction 2: Use math.isnan() for proper validation
         if all(ticker is None or (math.isnan(ticker.ask) and math.isnan(ticker.bid)) for ticker in current_tickers):
             raise ValueError("Could not fetch ticker data for all contracts")
 
@@ -166,7 +165,6 @@ class MarketDataFetcher:
         for contract in missing_tickers_in_cache:
             if contract.conId in contract_id_to_ticker:
                 contract.ticker = contract_id_to_ticker[contract.conId]
-
 
     async def req_mkt_data(self, contract, is_snapshot=True):
         ticker = self.ib.ticker(contract)
@@ -179,7 +177,6 @@ class MarketDataFetcher:
 
         await self._qualify_contracts(contract)
         self.set_market_data_state()
-
         ticker = self.ib.reqMktData(contract, "", snapshot=is_snapshot, regulatorySnapshot=False)
         
         start_time = time.time()

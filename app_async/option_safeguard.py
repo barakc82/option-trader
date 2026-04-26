@@ -13,16 +13,19 @@ from utilities.utils import *
 from .trading_bot import TradingBot
 from .positions_manager import PositionsManager
 from .market_data_fetcher import MarketDataFetcher
+from .connection_manager import ConnectionManager
 
 logger = logging.getLogger(__name__)
 
 class OptionSafeguard:
-    def __init__(self, ib: IB, trading_bot: TradingBot, market_data_fetcher: MarketDataFetcher):
-        self.ib = ib
-        self.trading_bot = trading_bot
-        self.market_data_fetcher = market_data_fetcher
-        # Accessing the singleton instance
+    def __init__(self):
+        # Accessing singleton instances
+        self.connection_manager = ConnectionManager()
+        self.ib = self.connection_manager.ib
+        self.trading_bot = TradingBot()
+        self.market_data_fetcher = MarketDataFetcher()
         self.positions_manager = PositionsManager()
+        
         self.connection_failure_start_time = None
         self.last_alive_log_time = 0
         self.config = {}
@@ -36,7 +39,7 @@ class OptionSafeguard:
 
                 if not self.ib.isConnected():
                     logger.warning("OptionSafeguard: Task is waiting for IB connection...")
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(30)
                     continue
 
                 if time.time() - self.last_alive_log_time > 300:

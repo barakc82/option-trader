@@ -19,19 +19,18 @@ async def main():
     """Application entry point."""
     logger.info("Initializing Async Option Trader...")
     
-    # 1. Shared IB Connection
+    # 1. Initialize the Connection singleton
     connection_manager = ConnectionManager()
-    ib = connection_manager.ib
     
-    # 2. Logic Managers
-    market_data_fetcher = MarketDataFetcher(ib)
-    trading_bot = TradingBot(ib, market_data_fetcher)
-    # PositionsManager is a singleton, initialized here if needed but not passed
-    PositionsManager(trading_bot)
+    # 2. Prime all Singletons
+    # They will internally access ConnectionManager().ib
+    MarketDataFetcher()
+    TradingBot()
+    PositionsManager()
     
-    # 3. Tasks
-    trader = OptionTrader(ib, trading_bot)
-    safeguard = OptionSafeguard(ib, trading_bot, market_data_fetcher)
+    # 3. Start Task Classes (Now zero-argument constructors)
+    trader = OptionTrader()
+    safeguard = OptionSafeguard()
 
     try:
         # Run everything concurrently

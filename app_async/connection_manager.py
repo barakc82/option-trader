@@ -6,8 +6,18 @@ from utilities.utils import is_in_docker
 logger = logging.getLogger(__name__)
 
 class ConnectionManager:
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(ConnectionManager, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
     def __init__(self):
-        self.ib = IB()
+        if not self._initialized:
+            self.ib = IB()
+            self._initialized = True
 
     async def connect(self, client_id=1):
         """Handle the initial connection and reconnection logic."""
@@ -21,11 +31,10 @@ class ConnectionManager:
                     await self.ib.connectAsync(host, port, clientId=client_id)
                     logger.info("Successfully connected to IB.")
                 
-                # Check connection every 30 seconds
                 await asyncio.sleep(30)
                 
             except Exception:
-                logger.exception("ConnectionManager: Error during connection/maintenance. Retrying in 10s...")
+                logger.exception("ConnectionManager: Error during connection. Retrying in 10s...")
                 await asyncio.sleep(10)
 
     def disconnect(self):
