@@ -131,7 +131,6 @@ class OptionSafeguard:
         stop_loss_trade = self.find_stop_loss_trade(position, open_trades)
         if not stop_loss_trade:
             logger.warning(f"No stop loss is set for position of {get_option_name(option)}")
-            await self.ib.reqPositionsAsync() # Native async update
             return
 
         stop_loss = stop_loss_trade.order.auxPrice
