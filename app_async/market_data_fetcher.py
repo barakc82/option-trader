@@ -270,7 +270,7 @@ class MarketDataFetcher:
 
     async def get_chains(self, underlying):
         await self.ib.qualifyContractsAsync(underlying)
-        result = self.ib.reqSecDefOptParams(underlying.symbol, '', underlying.secType, underlying.conId)
+        result = await self.ib.reqSecDefOptParamsAsync(underlying.symbol, '', underlying.secType, underlying.conId)
         return result
 
     async def qualify(self, options_to_check):
