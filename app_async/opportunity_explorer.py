@@ -196,7 +196,7 @@ class OpportunityExplorer:
             return sell_option_result
 
         target_delta_calculator = TargetDeltaCalculator()
-        target_delta = target_delta_calculator.calculate_target_delta()
+        target_delta = await target_delta_calculator.calculate_target_delta()
         strike_finder = StrikeFinder()
         call_option = await strike_finder.get_low_delta_call_option(call_options, target_delta)
         if not call_option:
