@@ -106,9 +106,18 @@ class MarketDataFetcher:
                 self.market_data_state = FROZEN_DATA
 
     def on_option_ticker_update(self, ticker):
+        # Point 2: Throttling high-frequency updates
         now = time.time()
         last_time = getattr(ticker, 'last_processed_time', 0)
-        if now - last_time < 0.5:
+        
+        # Calculate gamma to determine throttle interval
+        gamma = get_gamma(ticker)
+        gamma = math.nan if gamma is None else gamma
+        
+        # If gamma is 0.0 or unknown, wait 5 seconds; otherwise 0.5 seconds
+        throttle_interval = 5.0 if (math.isnan(gamma) or gamma == 0.0) else 0.5
+        
+        if now - last_time < throttle_interval:
             return
         ticker.last_processed_time = now
 

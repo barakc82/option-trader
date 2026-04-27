@@ -22,13 +22,8 @@ async def main():
     # 1. Initialize the Connection singleton
     connection_manager = ConnectionManager()
     
-    # 2. Prime all Singletons
-    # They will internally access ConnectionManager().ib
-    MarketDataFetcher()
-    TradingBot()
-    PositionsManager()
-    
-    # 3. Start Task Classes (Now zero-argument constructors)
+    # 2. Start Task Classes
+    # They will internally access Singletons (MarketDataFetcher, TradingBot, etc.)
     trader = OptionTrader()
     safeguard = OptionSafeguard()
 

@@ -39,7 +39,7 @@ class OptionSafeguard:
 
                 if not self.ib.isConnected():
                     logger.warning("OptionSafeguard: Task is waiting for IB connection...")
-                    await asyncio.sleep(30)
+                    await asyncio.sleep(2)
                     continue
 
                 if time.time() - self.last_alive_log_time > 300:

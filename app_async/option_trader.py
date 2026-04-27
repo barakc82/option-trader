@@ -56,7 +56,7 @@ class OptionTrader:
                 
                 if not self.ib.isConnected():
                     logger.warning("OptionTrader: Task is waiting for IB connection...")
-                    await asyncio.sleep(30)
+                    await asyncio.sleep(2)
                     continue
 
                 # Consistent status message

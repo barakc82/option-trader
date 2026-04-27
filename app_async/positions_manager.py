@@ -22,12 +22,13 @@ class PositionsManager:
             cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self, trading_bot: TradingBot = None):
+    def __init__(self):
         if not self._initialized:
-            self.trading_bot = trading_bot
+            # Accessing the TradingBot singleton internally
+            self.trading_bot = TradingBot()
             self.filled_trades = []
             self.was_option_positions_data_changed = False
-            logger.info("PositionsManager initialized.")
+            logger.info("PositionsManager singleton initialized.")
             self._initialized = True
 
 
@@ -103,10 +104,8 @@ class PositionsManager:
                     self.trading_bot.cancel_trade(open_sell_trade)
 
                 if not stop_loss_trades_for_position and not self.is_recent_buy_filled(position):
-                    # Fix: calculate_max_loss is now ASYNC
                     stop_loss_per_option = await calculate_max_loss(option.right, should_consider_only_effective=True)
                     logger.info(f"Adding stop loss for {get_option_name(option)}, potential loss per option: {stop_loss_per_option}")
-                    # Fix: add_stop_loss is now ASYNC
                     stop_loss_trade = await self.trading_bot.add_stop_loss(position, stop_loss_per_option)
                     req_id_to_comment[stop_loss_trade.order.orderId] = "Stop loss activated"
 
@@ -114,7 +113,6 @@ class PositionsManager:
                 opportunity_explorer = OpportunityExplorer()
                 current_price_level = opportunity_explorer.last_call_option_price if option.right == 'C' else opportunity_explorer.last_put_option_price
                 
-                # Fix: calculate_minimal_sell_price_to_close_position is now ASYNC
                 min_sell_price = await opportunity_explorer.calculate_minimal_sell_price_to_close_position(option.right)
                 if current_price_level < min_sell_price:
                     options_type = 'Put' if option.right == 'P' else 'Call'
@@ -146,8 +144,6 @@ class PositionsManager:
 
                 logger.info(
                     f"Submitting a buy trade for position of {get_option_name(position.contract)}, quantity: {position.position}")
-                # Note: close_position_at_limit was referenced but not found, 
-                # assuming close_short_option is the intended async replacement
                 await self.trading_bot.close_short_option(option, abs(position.position))
 
             if not self.was_option_positions_data_changed:
