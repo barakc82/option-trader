@@ -4,8 +4,8 @@ import exchange_calendars as ecals
 import pandas as pd
 from ib_insync import Index
 
-from utilities.ib_utils import req_id_to_target_delta, get_delta
 from utilities.utils import *
+from utilities.ib_utils import req_id_to_target_delta, get_delta
 from app.option_cache import OptionCache
 
 LIVE_DATA = 1
@@ -146,7 +146,7 @@ class MarketDataFetcher:
         current_tickers.extend(new_tickers)
 
         if all(ticker is None or (ticker.ask is None and ticker.bid is None) for ticker in current_tickers):
-            ValueError("Could not fetch ticker data for all contracts")
+            raise ValueError("Could not fetch ticker data for all contracts")
 
         if all(ticker is None or ticker.modelGreeks is None or ticker.lastGreeks is None for ticker in current_tickers):
             logger.warning(f"No delta was updated for any of the options")
@@ -208,7 +208,9 @@ class MarketDataFetcher:
         spx_ticker = self.ib.ticker(spx)
         if not spx_ticker:
             spx_ticker = self.req_mkt_data(spx)
-            spx_ticker.updateEvent += on_spx_ticker_update
+        if not spx_ticker:
+            return math.nan
+        spx_ticker.updateEvent += on_spx_ticker_update
         if math.isnan(spx_ticker.last):
             if not is_market_open():
                 logger.warning("The close price of S&P 500 is used instead of the last price")

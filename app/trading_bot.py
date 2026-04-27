@@ -282,6 +282,7 @@ class TradingBot:
                 self.price_increments.append(tier)
             self.price_increments = sorted(self.price_increments, key=lambda increment_tier: increment_tier.lowEdge)
 
+
     def adjust_limit_to_market_rules(self, raw_limit):
         assert self.price_increments
         assert raw_limit
@@ -293,6 +294,7 @@ class TradingBot:
         assert not math.isnan(current_increment)
         limit = round(round(raw_limit / current_increment) * current_increment, 6)
         return limit
+
 
     def add_stop_loss(self, position, stop_loss_per_option):
         self.verify_price_increments_exist(position.contract)

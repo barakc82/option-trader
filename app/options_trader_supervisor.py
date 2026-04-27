@@ -19,7 +19,12 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 OPTION_TRADER_DIR = "/home/option-trader"
+if not os.path.exists(OPTION_TRADER_DIR):
+    OPTION_TRADER_DIR = "." # Fallback for local dev
+
 LOGS_DIR = f"{OPTION_TRADER_DIR}/logs"
+CONFIG_PATH = f"{OPTION_TRADER_DIR}/config/supervisor_config.json"
+current_running_version = "sync"
 
 # Console handler (prints to stdout)
 console_handler = logging.StreamHandler()
@@ -168,14 +173,33 @@ def start_tws():
     return {"login_window": login_window, "tws_pid": tws_process.pid}
 """
 
+def get_desired_version():
+    """Reads the desired version (sync/async) from the config file."""
+    try:
+        if os.path.exists(CONFIG_PATH):
+            with open(CONFIG_PATH, "r") as f:
+                config = json.load(f)
+                return config.get("version", "sync")
+    except Exception as e:
+        logger.error(f"Error reading supervisor config: {e}")
+    return "sync"
+
 def start_option_trader():
-    logger.info("Restarting process...")
+    version = get_desired_version()
+    logger.info(f"Restarting process using {version} version...")
+    
+    module = "app_async.main" if version == "async" else "app.main"
+    
     if is_in_docker():
-        option_trader_start_command = ["python3", "-m", "app.main"]
+        option_trader_start_command = ["python3", "-m", module]
     else:
-        option_trader_start_command = ["..\\.venv\\Scripts\\python.exe", "-m", "app.main"]
+        option_trader_start_command = [".\\.venv\\Scripts\\python.exe", "-m", module]
+        
     p = subprocess.Popen(option_trader_start_command)
     option_trader_process = psutil.Process(p.pid)
+
+    global current_running_version
+    current_running_version = version
 
     for _ in range(10):
         if option_trader_process.is_running():
@@ -185,15 +209,17 @@ def start_option_trader():
         logger.info(f"Process restarted, pid: {p.pid}. Waiting for the pid to be stored in the heartbeat file")
         try:
             for _ in range(10):
-                with open(f"{OPTION_TRADER_DIR}/cache/heartbeat.txt", "r") as file:
-                    heartbeat = json.load(file)
-                    heartbeat_pid = heartbeat['pid']
-                    if heartbeat_pid == option_trader_process.pid:
-                        logger.info(f"The required pid was found in the heartbeat file")
-                        break
+                hb_path = f"{OPTION_TRADER_DIR}/cache/heartbeat.txt"
+                if os.path.exists(hb_path):
+                    with open(hb_path, "r") as file:
+                        heartbeat = json.load(file)
+                        heartbeat_pid = heartbeat['pid']
+                        if heartbeat_pid == option_trader_process.pid:
+                            logger.info(f"The required pid was found in the heartbeat file")
+                            break
                 time.sleep(5)
-        except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON in heartbeat file: {e}")
+        except Exception as e:
+            logger.error(f"Error checking heartbeat: {e}")
     else:
         logger.info("Process did not restart")
 
@@ -362,6 +388,7 @@ def is_process_active(debug=False):
     last_pid = 0
     for _ in range(24):
         try:
+            pid_found = False
             with open(f"{OPTION_TRADER_DIR}/cache/heartbeat.txt", "r") as file:
                 heartbeat = json.load(file)
                 pid = heartbeat['pid']
@@ -373,11 +400,12 @@ def is_process_active(debug=False):
                         option_trader_process = psutil.Process(pid)
                         check_process_state(option_trader_process)
                         last_pid = pid
+                        pid_found = True
                     except psutil.NoSuchProcess:
                         logger.error(f"Could not find process {pid}")
 
             time_since_last_ping = time.time() - last_ping
-            is_process_alive = time_since_last_ping < 60
+            is_process_alive = time_since_last_ping < 60 and pid_found
             if not is_process_alive:
                 logger.error(f"No heartbeat from option trader, time since last ping: {time_since_last_ping:.0f}s")
                 if last_pid:
@@ -637,11 +665,20 @@ def check_sunday_expiration():
 
 
 def monitor(interval=5):
-    global state
+    global state, current_running_version
     start_time = time.time()
+    current_running_version = get_desired_version()
 
     while True:
         try:
+            # Check for version change (hot-swap)
+            desired_version = get_desired_version()
+            if desired_version != current_running_version:
+                logger.warning(f"VERSION CHANGE DETECTED: {current_running_version} -> {desired_version}")
+                kill_option_trader()
+                start_option_trader() # This will use the new version from config
+                current_running_version = desired_version
+
             if state == MONITOR_STATE:
                 monitor_option_trader()
                 monitor_platform()

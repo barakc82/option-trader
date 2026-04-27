@@ -5,7 +5,7 @@ import random
 from utilities.utils import *
 from utilities.ib_utils import *
 from app.account_data import AccountData
-from app.max_loss_calculator import MaxLossCalculator
+from app.max_loss_calculator import MaxLossCalculator, calculate_max_loss
 from app.configuration import should_write_options_overnight, should_monitor_only
 from app.option_cache import OptionCache
 from app.strike_finder import StrikeFinder
@@ -32,6 +32,10 @@ def calculate_max_options_for_market_drop(put_option):
 
     remaining_fraction_after_drop = 1 - 0.3
     current_price = current_thread.market_data_fetcher.get_spx_price()
+    if math.isnan(current_price):
+        logger.error("Cannot calculate max number of options for market drop because the S&P 500 index value is NaN")
+        return 0
+
     price_after_drop = current_price * remaining_fraction_after_drop
     if put_option.strike < price_after_drop:
         logger.info(f"{get_option_name(put_option)} is lower than worst case scenario market drop")
@@ -59,12 +63,6 @@ def calculate_max_options_for_market_drop(put_option):
         return 0
 
     liability_per_contract = (put_option.strike - price_after_drop) * 100
-    if math.isnan(put_option.strike):
-        logger.error(f"Put option strike is {put_option.strike}")
-    if math.isnan(price_after_drop):
-        logger.error(f"Price after drop is {price_after_drop}")
-    if math.isnan(liability_per_contract):
-        logger.error(f"Liability per contract is {liability_per_contract}")
     return math.floor(net_worth_after_drop / liability_per_contract)
 
 
@@ -74,6 +72,10 @@ def calculate_max_options_for_market_rise(call_option):
 
     fold_after_market_rise = 1 + 0.2
     current_price = current_thread.market_data_fetcher.get_spx_price()
+    if math.isnan(current_price):
+        logger.error("Cannot calculate max number of options for market rise because the S&P 500 index value is NaN")
+        return 0
+
     price_after_market_rise = current_price * fold_after_market_rise
     if call_option.strike > price_after_market_rise:
         return sys.float_info.max
@@ -102,12 +104,6 @@ def calculate_max_options_for_market_rise(call_option):
         return sys.float_info.max
 
     liability_per_contract = (price_after_market_rise - call_option.strike) * 100
-    if math.isnan(call_option.strike):
-        logger.error(f"Call option strike is {call_option.strike}")
-    if math.isnan(price_after_market_rise):
-        logger.error(f"Price after market rise is {price_after_market_rise}")
-    if math.isnan(liability_per_contract):
-        logger.error(f"Liability per contract is {liability_per_contract}")
     return math.floor(net_worth_after_rise / liability_per_contract)
 
 
@@ -186,6 +182,12 @@ class OpportunityExplorer:
         if self.last_call_option_price != last_price and not math.isnan(last_price):
             logger.info(f"The current price level for call options changed from {self.last_call_option_price} to {last_price}")
             self.last_call_option_price = last_price
+
+        stop_loss_per_option = calculate_max_loss('C', should_consider_only_effective=True)
+        if stop_loss_per_option < last_price:
+            logger.warning(f"Failed to sell {get_option_name(call_option)} since the acceptable loss ({stop_loss_per_option}) is smaller than the option price ({last_price})")
+            return sell_option_result
+
         logger.info(f"Testing sell 2 options of {get_option_name(call_option)}")
         max_options_for_market_rise = calculate_max_options_for_market_rise(call_option)
         if not max_options_for_market_rise:
@@ -257,6 +259,12 @@ class OpportunityExplorer:
         if self.last_put_option_price != last_price and not math.isnan(last_price):
             logger.info(f"The current price level for put options changed from {self.last_put_option_price} to {last_price}")
             self.last_put_option_price = last_price
+
+        stop_loss_per_option = calculate_max_loss('P', should_consider_only_effective=True)
+        if stop_loss_per_option < last_price:
+            logger.warning(f"Failed to sell {get_option_name(put_option)} since the acceptable loss ({stop_loss_per_option}) is smaller than the option price ({last_price})")
+            return sell_option_result
+
         logger.info(f"Testing sell 2 options of {get_option_name(put_option)}")
         max_options_for_market_drop = calculate_max_options_for_market_drop(put_option)
         if not max_options_for_market_drop:
