@@ -208,7 +208,7 @@ class OpportunityExplorer:
             logger.info(f"The current price level for call options changed from {self.last_call_option_price} to {last_price}")
             self.last_call_option_price = last_price
 
-        stop_loss_per_option = calculate_max_loss('C', should_consider_only_effective=True)
+        stop_loss_per_option = await calculate_max_loss('C', should_consider_only_effective=True)
         if stop_loss_per_option < last_price:
             logger.warning(f"Failed to sell {get_option_name(call_option)} since the acceptable loss ({stop_loss_per_option}) is smaller than the option price ({last_price})")
             return sell_option_result
