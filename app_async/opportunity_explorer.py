@@ -1,4 +1,4 @@
-import math
+import asyncio
 import random
 from datetime import date
 
@@ -34,7 +34,7 @@ async def calculate_max_options_for_market_rise(call_option):
 
     fold_after_market_rise = 1 + 0.2
     market_data_fetcher = MarketDataFetcher()
-    current_price = market_data_fetcher.get_spx_price()
+    current_price = await market_data_fetcher.get_spx_price()
     if math.isnan(current_price):
         logger.error("Cannot calculate max number of options for market rise because the S&P 500 index value is NaN")
         return 0
@@ -220,7 +220,7 @@ class OpportunityExplorer:
             return sell_option_result
 
         self.cancel_all_buy_trades(open_trades, call_option)  # To allow a sell
-        self.ib.sleep(0.2)
+        asyncio.sleep(0.2)
 
         sell_option_result = await self.try_to_sell(call_option, 2, target_delta)
         if sell_option_result.success:
@@ -297,7 +297,7 @@ class OpportunityExplorer:
             return sell_option_result
 
         self.cancel_all_buy_trades(open_trades, put_option)  # To allow a sell
-        self.ib.sleep(0.2)
+        asyncio.sleep(0.2)
 
         quantity = min(max_options_for_market_drop, 2)
         sell_option_result = await self.try_to_sell(put_option, quantity, target_delta)
