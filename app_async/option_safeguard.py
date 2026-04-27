@@ -1,12 +1,5 @@
 import asyncio
-import logging
-import time
-import sys
-import json
-import os
-from datetime import timedelta, datetime
-
-from ib_insync import IB
+import math
 
 from utilities.utils import *
 
@@ -14,6 +7,8 @@ from .trading_bot import TradingBot
 from .positions_manager import PositionsManager
 from .market_data_fetcher import MarketDataFetcher
 from .connection_manager import ConnectionManager
+
+from utilities.ib_utils import is_hollow
 
 logger = logging.getLogger(__name__)
 
@@ -124,8 +119,8 @@ class OptionSafeguard:
                 option.ticker = ticker
             return
 
-        if datetime.now().astimezone() - option.ticker.time > timedelta(seconds=4):
-            logger.debug(f"The ticker of {get_option_name(option)} is invalid, updating it")
+        if is_hollow(option.ticker):
+            logger.debug(f"The ticker of {get_option_name(option)} is hollow (no data), updating it")
             ticker = await self.market_data_fetcher.req_mkt_data(option, is_snapshot=False)
             option.ticker = ticker
 

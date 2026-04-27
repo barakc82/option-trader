@@ -38,8 +38,8 @@ class AccountData:
     async def get_cushion(self):
         return await self.get_account_summary_item('Cushion')
 
-    async def get_account_value(self, item_tag, data_type='float', currency=None):
-        account_values = await self.ib.accountValuesAsync(account=MY_ACCOUNT)
+    def get_account_value(self, item_tag, data_type='float', currency=None):
+        account_values = self.ib.accountValues(account=MY_ACCOUNT)
         for account_value in account_values:
             if account_value.tag == item_tag and (currency is None or account_value.currency == currency):
                 if data_type == 'float':
@@ -103,5 +103,5 @@ class AccountData:
     def is_portfolio_margin(self):
         return self.margin_type == PORTFOLIO_MARGIN
 
-    async def get_cash_balance_value(self):
-        return await self.get_account_value("CashBalance", currency='USD')
+    def get_cash_balance_value(self):
+        return self.get_account_value("CashBalance", currency='USD')

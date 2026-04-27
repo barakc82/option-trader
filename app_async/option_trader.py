@@ -29,29 +29,11 @@ class OptionTrader:
         self.target_delta_calculator = TargetDeltaCalculator()
         self.connection_failure_start_time = None
         self.config = {}
-        self.should_write_options_overnight = True
-        self.should_monitor_only = False
-
-    def load_config(self):
-        """Reads configuration from config/option_trader_config.json."""
-        config_path = "config/option_trader_config.json"
-        try:
-            if os.path.exists(config_path):
-                with open(config_path, "r") as f:
-                    self.config = json.load(f)
-                    self.should_write_options_overnight = self.config.get("should_write_options_overnight", True)
-                    self.should_monitor_only = self.config.get("should_monitor_only", False)
-                    logger.debug(f"Config loaded: monitor_only={self.should_monitor_only}")
-        except Exception as e:
-            logger.error(f"OptionTrader: Error reading config: {e}")
 
     async def run(self):
         logger.info("OptionTrader: Starting trading loop...")
         while True:
             try:
-                # Refresh configuration
-                self.load_config()
-
                 write_heartbeat()
                 
                 if not self.ib.isConnected():
@@ -60,9 +42,12 @@ class OptionTrader:
                     continue
 
                 # Consistent status message
-                logger.info(f"OptionTrader: Checking market status (Monitor Only: {self.should_monitor_only})...")
-                
-                await self.trade()
+                logger.info(f"OptionTrader: Checking market status...")
+
+                if is_market_open():
+                    await self.trade()
+                else:
+                    await self.verify_no_open_trades()
                 await self.sleep()
                 
                 if self.connection_failure_start_time is not None:
@@ -96,9 +81,9 @@ class OptionTrader:
             await asyncio.sleep(10)
 
     async def trade(self):
-        if is_market_open():
-            await self.positions_manager.manage_current_positions()
-            await self.guard_pending_trades()
+        await self.positions_manager.manage_current_positions()
+        await self.guard_pending_trades()
+        await self.opportunity_explorer.explore_opportunities()
 
     async def guard_pending_trades(self):
         logger.info("Checking pending trades")
@@ -108,7 +93,7 @@ class OptionTrader:
         )
         open_sell_trades = [trade for trade in open_trades if trade.order.action.upper() == 'SELL']
         logger.info(f"Number of open sell trades: {len(open_sell_trades)}")
-        target_delta = self.target_delta_calculator.calculate_target_delta()
+        target_delta = await self.target_delta_calculator.calculate_target_delta()
         logger.info(f"Target delta: {target_delta:.3f}")
         for open_sell_trade in open_sell_trades:
             logger.info(f"Working on open sell trade of option {get_option_name(open_sell_trade.contract)}")
@@ -205,3 +190,9 @@ class OptionTrader:
 
             if not matching_position:
                 self.trading_bot.cancel_trade(open_stop_loss_trade)
+
+    async def verify_no_open_trades(self):
+        open_trades = await self.trading_bot.get_open_trades()
+        for open_trade in open_trades:
+            if open_trade.order.orderType != 'STP':
+                self.trading_bot.cancel_trade(open_trade)

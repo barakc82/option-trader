@@ -4,7 +4,6 @@ import pickle
 from ib_insync import Index, Option
 import logging
 
-from utilities.utils import current_thread
 
 file_path = "cache/option_store.pql"
 
@@ -14,14 +13,14 @@ logger.setLevel(logging.DEBUG)
 
 class OptionCache:
 
-    def __init__(self):
-        self.market_data_fetcher = current_thread.market_data_fetcher
+    def __init__(self, market_data_fetcher):
+        self.market_data_fetcher = market_data_fetcher
 
-    def load(self, date):
+    async def load(self, date):
 
         options = []
         spx = Index('SPX', 'CBOE', 'USD')
-        spx_ticker = self.market_data_fetcher.req_mkt_data(spx)
+        spx_ticker = await self.market_data_fetcher.req_mkt_data(spx)
 
         options_obtained = False
         if os.path.exists(file_path):
@@ -54,7 +53,7 @@ class OptionCache:
 
         if not options_obtained:
             print(f"SPX Last Price: {spx_ticker.last}")
-            chains = self.market_data_fetcher.get_chains(spx)
+            chains = await self.market_data_fetcher.get_chains(spx)
             chain = next(c for c in chains if c.exchange == 'CBOE' and c.tradingClass == 'SPXW')
             put_options = []
             call_options = []
@@ -68,7 +67,7 @@ class OptionCache:
                                     exchange='CBOE', currency='USD', tradingClass='SPXW')
                     call_options.append(option)
 
-            self.market_data_fetcher.qualify(put_options + call_options)
+            await self.market_data_fetcher.qualify(put_options + call_options)
             put_options = list(filter(lambda contract: contract.conId, put_options))
             call_options = list(filter(lambda contract: contract.conId, call_options))
             options = put_options + call_options

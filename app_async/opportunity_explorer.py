@@ -160,8 +160,8 @@ class OpportunityExplorer:
 
         logger.info("Exploring new opportunities")
         date = get_current_trading_day()
-        options_cache = OptionCache()
-        options = options_cache.load(date)
+        options_cache = OptionCache(self.market_data_fetcher)
+        options = await options_cache.load(date)
         open_trades = await self.trading_bot.get_open_trades()
         self.can_submit_orders = time.time() - self.last_submit_order_attempt_time > TIME_UNTIL_NEXT_SELL_CHECK
 
@@ -271,11 +271,11 @@ class OpportunityExplorer:
             logger.error("Np put options found")
             return sell_option_result
         target_delta_calculator = TargetDeltaCalculator()
-        target_delta = target_delta_calculator.calculate_target_delta()
+        target_delta = await target_delta_calculator.calculate_target_delta()
         strike_finder = StrikeFinder()
 
         logger.info("Searching for a suitable low-delta put option")
-        put_option = strike_finder.get_low_delta_put_option(put_options, target_delta)
+        put_option = await strike_finder.get_low_delta_put_option(put_options, target_delta)
         if not put_option:
             logger.error("Put option candidate for selling could not be found")
             return sell_option_result

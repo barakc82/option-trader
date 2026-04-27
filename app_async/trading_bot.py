@@ -37,6 +37,8 @@ class TradingBot:
             self.market_data_fetcher = MarketDataFetcher()
             self.account_data = AccountData()
 
+            self.req_all_open_orders_lock = asyncio.Lock()
+            self.req_positions_lock = asyncio.Lock()
             self.last_request_all_open_trades_time = 0
             self.price_increments = []
             logger.info("TradingBot singleton initialized.")
@@ -48,7 +50,8 @@ class TradingBot:
                 original_timeout = self.ib.RequestTimeout
                 self.ib.RequestTimeout = 10.0
                 try:
-                    await self.ib.reqPositionsAsync()
+                    async with self.req_positions_lock:
+                        await self.ib.reqPositionsAsync()
                 except TimeoutError:
                     logger.warning("reqPositions timed out")
                 finally:
@@ -76,7 +79,8 @@ class TradingBot:
     async def get_open_trades(self):
         should_use_cache = time.time() - self.last_request_all_open_trades_time < 300
         if not should_use_cache:
-            await self.ib.reqAllOpenOrdersAsync()
+            async with self.req_all_open_orders_lock:
+                await self.ib.reqAllOpenOrdersAsync()
             self.last_request_all_open_trades_time = time.time()
 
         open_trades = [t for t in self.ib.openTrades() if not is_trade_cancelled(t) and t.contract.secType == 'OPT']
@@ -135,7 +139,7 @@ class TradingBot:
         if not self.price_increments:
             details = await self.ib.reqContractDetailsAsync(contract)
             market_rule_id = int(details[0].marketRuleIds.split(',')[0])
-            rule = self.ib.reqMarketRule(market_rule_id)
+            rule = await self.ib.reqMarketRuleAsync(market_rule_id)
             self.price_increments = sorted(rule, key=lambda i: i.lowEdge)
 
     async def adjust_limit_to_market_rules(self, contract, raw_limit):

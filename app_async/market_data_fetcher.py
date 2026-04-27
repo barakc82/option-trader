@@ -2,12 +2,12 @@ import asyncio
 import math
 import exchange_calendars as ecals
 import pandas as pd
-from datetime import timedelta, datetime
 
-from ib_insync import IB, Index
+from ib_insync import Index
 
 from utilities.utils import *
-from utilities.ib_utils import get_delta, req_id_to_target_delta
+from utilities.ib_utils import get_delta, req_id_to_target_delta, is_hollow
+
 from .connection_manager import ConnectionManager
 from .option_cache import OptionCache
 
@@ -36,17 +36,8 @@ class MarketDataFetcher:
             self.ib = ConnectionManager().ib
             self.market_data_state = LIVE_DATA
             self.registered_con_ids = set()
-            self._qualified_con_ids = set()
             logger.info("MarketDataFetcher initialized.")
             self._initialized = True
-
-    async def _qualify_contracts(self, *contracts):
-        to_qualify = [c for c in contracts if c.conId not in self._qualified_con_ids]
-        if to_qualify:
-            logger.debug(f"Qualifying {len(to_qualify)} new contracts...")
-            await self.ib.qualifyContractsAsync(*to_qualify)
-            for c in to_qualify:
-                self._qualified_con_ids.add(c.conId)
 
     def _register_ticker(self, ticker):
         if not ticker:
@@ -154,7 +145,7 @@ class MarketDataFetcher:
 
     async def update_ticker_data(self, contracts):
         assert contracts
-        await self._qualify_contracts(*contracts)
+        await self.ib.qualifyContractsAsync(*contracts)
         self.set_market_data_state()
 
         missing_tickers_in_cache = []
@@ -169,15 +160,18 @@ class MarketDataFetcher:
                 contract.ticker = ticker
                 current_tickers.append(ticker)
 
-        if missing_tickers_in_cache:
-            new_tickers = await self.ib.reqTickersAsync(*missing_tickers_in_cache)
-            for ticker in new_tickers:
-                self._register_ticker(ticker)
-                contract_id_to_ticker[ticker.contract.conId] = ticker
-                current_tickers.append(ticker)
+        if not missing_tickers_in_cache:
+            return
 
-        if all(ticker is None or (math.isnan(ticker.ask) and math.isnan(ticker.bid)) for ticker in current_tickers):
-            raise ValueError("Could not fetch ticker data for all contracts")
+        new_tickers = await self.ib.reqTickersAsync(*missing_tickers_in_cache)
+        for ticker in new_tickers:
+            self._register_ticker(ticker)
+            contract_id_to_ticker[ticker.contract.conId] = ticker
+            current_tickers.append(ticker)
+            ticker.contract.ticker = ticker
+
+        if all(is_hollow(ticker) for ticker in current_tickers):
+            raise ValueError(f"Could not fetch ticker data for all {len(current_tickers)} contracts")
 
         for contract in missing_tickers_in_cache:
             if contract.conId in contract_id_to_ticker:
@@ -187,12 +181,10 @@ class MarketDataFetcher:
         ticker = self.ib.ticker(contract)
         if ticker is not None:
             self._register_ticker(ticker)
-            is_ticker_valid = is_snapshot or datetime.now().astimezone() - ticker.time < timedelta(seconds=4)
-            if is_ticker_valid:
-                contract.ticker = ticker
-                return ticker
+            contract.ticker = ticker
+            return ticker
 
-        await self._qualify_contracts(contract)
+        await self.ib.qualifyContractsAsync(contract)
         self.set_market_data_state()
         ticker = self.ib.reqMktData(contract, "", snapshot=is_snapshot, regulatorySnapshot=False)
         
@@ -216,7 +208,7 @@ class MarketDataFetcher:
     async def get_spx_implied_volatility(self):
         global last_implied_volatility
         spx_price = await self.get_spx_price()
-        options_cache = OptionCache()
+        options_cache = OptionCache(self)
         options = options_cache.load_cached_options()
         if not options:
             return last_implied_volatility
@@ -275,3 +267,11 @@ class MarketDataFetcher:
 
         last_implied_volatility = implied_volatility
         return implied_volatility
+
+    async def get_chains(self, underlying):
+        await self.ib.qualifyContractsAsync(underlying)
+        result = self.ib.reqSecDefOptParams(underlying.symbol, '', underlying.secType, underlying.conId)
+        return result
+
+    async def qualify(self, options_to_check):
+        return await  self.ib.qualifyContractsAsync(*options_to_check)
