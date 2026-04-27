@@ -66,7 +66,7 @@ class StateUpdater:
         
         try:
             # 1. Gather account metrics
-            state['cash'] = round(await self.account_data.get_cash_balance_value())
+            state['cash'] = round(self.account_data.get_cash_balance_value())
             excess_liq = await self.account_data.get_excess_liquidity()
             state['excess_liquidity'] = '' if excess_liq == sys.float_info.max else round(excess_liq)
             state['cushion'] = round(await self.account_data.get_cushion(), 2)
@@ -133,6 +133,7 @@ class StateUpdater:
 
             # 6. Finalize and Post
             self.store_state_locally(state)
+            logger.info(f"Sending state to {UPDATE_STATE_URL}")
             await self._post_data(UPDATE_STATE_URL, state)
             
         except Exception as e:
