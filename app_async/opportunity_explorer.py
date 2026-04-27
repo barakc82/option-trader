@@ -198,7 +198,7 @@ class OpportunityExplorer:
         target_delta_calculator = TargetDeltaCalculator()
         target_delta = target_delta_calculator.calculate_target_delta()
         strike_finder = StrikeFinder()
-        call_option = strike_finder.get_low_delta_call_option(call_options, target_delta)
+        call_option = await strike_finder.get_low_delta_call_option(call_options, target_delta)
         if not call_option:
             logger.error("Call option candidate for selling could not be found")
             return sell_option_result
@@ -285,7 +285,7 @@ class OpportunityExplorer:
             logger.info(f"The current price level for put options changed from {self.last_put_option_price} to {last_price}")
             self.last_put_option_price = last_price
 
-        stop_loss_per_option = calculate_max_loss('P', should_consider_only_effective=True)
+        stop_loss_per_option = await calculate_max_loss('P', should_consider_only_effective=True)
         if stop_loss_per_option < last_price:
             logger.warning(f"Failed to sell {get_option_name(put_option)} since the acceptable loss ({stop_loss_per_option}) is smaller than the option price ({last_price})")
             return sell_option_result
