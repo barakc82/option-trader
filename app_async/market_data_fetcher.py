@@ -22,6 +22,14 @@ def get_gamma(ticker):
         return ticker.modelGreeks.gamma
     return None
 
+def get_implied_volatility(ticker):
+    if ticker.lastGreeks and ticker.lastGreeks.impliedVol:
+        return ticker.lastGreeks.impliedVol
+    if ticker.modelGreeks and ticker.modelGreeks.impliedVol:
+        return ticker.modelGreeks.impliedVol
+    return None
+
+
 class MarketDataFetcher:
     _instance = None
 
@@ -199,6 +207,15 @@ class MarketDataFetcher:
         self._register_ticker(ticker)
         return ticker
 
+    def get_delta(self, option):
+        ticker = self.get_ticker(option)
+        if not ticker:
+            return ''
+        delta = get_delta(ticker)
+        if not delta or math.isnan(delta):
+            return ''
+        return str(round(abs(delta) * 1000) / 1000)
+
     def get_ask(self, option):
         ticker = self.get_ticker(option)
         if not ticker or math.isnan(ticker.ask) or ticker.ask < 0:
@@ -208,6 +225,8 @@ class MarketDataFetcher:
     async def get_spx_implied_volatility(self):
         global last_implied_volatility
         spx_price = await self.get_spx_price()
+        if math.isnan(spx_price):
+            return last_implied_volatility
         options_cache = OptionCache(self)
         options = options_cache.load_cached_options()
         if not options:
@@ -265,6 +284,8 @@ class MarketDataFetcher:
                 f"call: {get_option_name(at_the_money_options['C'])}, put: {get_option_name(at_the_money_options['P'])}")
             return last_implied_volatility if last_implied_volatility else 0
 
+        if implied_volatility > 0.9:
+            logger.info(f"Implied volatility for calls is {call_implied_volatility}, implied volatility for puts is {put_implied_volatility}, S&P 500 is {spx_price}")
         last_implied_volatility = implied_volatility
         return implied_volatility
 
