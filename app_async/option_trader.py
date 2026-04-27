@@ -1,5 +1,7 @@
 import math
 import asyncio
+import time
+from datetime import timedelta, datetime
 
 from utilities.utils import *
 
@@ -11,6 +13,7 @@ from .positions_manager import PositionsManager
 from .connection_manager import ConnectionManager
 from .market_data_fetcher import MarketDataFetcher
 from .target_delta_calculator import TargetDeltaCalculator
+from .state_updater import StateUpdater, post_current_state
 
 
 logger = logging.getLogger(__name__)
@@ -27,6 +30,8 @@ class OptionTrader:
         self.positions_manager = PositionsManager()
         self.market_data_fetcher = MarketDataFetcher()
         self.target_delta_calculator = TargetDeltaCalculator()
+        self.state_updater = StateUpdater()
+        
         self.connection_failure_start_time = None
         self.config = {}
 
@@ -44,10 +49,19 @@ class OptionTrader:
                 # Consistent status message
                 logger.info(f"OptionTrader: Checking market status...")
 
-                if is_market_open():
+                is_open = is_market_open()
+                state = {'market_state': 'Open' if is_open else 'Closed'}
+                
+                if is_open:
                     await self.trade()
+                    state['status'] = 'Active'
                 else:
                     await self.verify_no_open_trades()
+                    state['status'] = 'Closed'
+
+                # Report state to Render/Local JSON
+                await self.state_updater.update_state(state)
+                
                 await self.sleep()
                 
                 if self.connection_failure_start_time is not None:
@@ -64,6 +78,11 @@ class OptionTrader:
                     sys.exit(1)
                 
                 logger.exception(f"OptionTrader: Loop error ({elapsed:.0f}s):")
+                # Attempt to report error status
+                try:
+                    await post_current_state({'status': 'Error'})
+                except:
+                    pass
                 await asyncio.sleep(10)
 
     async def sleep(self):
@@ -116,7 +135,6 @@ class OptionTrader:
 
             remaining = open_sell_trade.remaining()
             if remaining and (self.opportunity_explorer.should_cancel_all_sell_orders or is_after_hours()):
-                # Fix: Added await for async test_order
                 result = await self.trading_bot.test_order(open_sell_trade.contract, remaining, open_sell_trade.order.lmtPrice)
                 if result.is_low_projected_cushion:
                     logger.info(
@@ -124,14 +142,14 @@ class OptionTrader:
                     self.trading_bot.cancel_trade(open_sell_trade)
                     continue
                 if open_sell_trade.contract.right == 'P':
-                    max_options_for_market_drop = calculate_max_options_for_market_drop(open_sell_trade.contract)
+                    max_options_for_market_drop = await calculate_max_options_for_market_drop(open_sell_trade.contract)
                     if max_options_for_market_drop < remaining:
                         logger.info(
                             f"Cancelling sell of {get_option_name(open_sell_trade.contract)} to avoid exposure fee")
                         self.trading_bot.cancel_trade(open_sell_trade)
                         continue
                 if open_sell_trade.contract.right == 'C':
-                    max_options_for_market_rise = calculate_max_options_for_market_rise(open_sell_trade.contract)
+                    max_options_for_market_rise = await calculate_max_options_for_market_rise(open_sell_trade.contract)
                     if max_options_for_market_rise < remaining:
                         logger.info(
                             f"Cancelling sell of {get_option_name(open_sell_trade.contract)} to avoid exposure fee")
@@ -144,7 +162,6 @@ class OptionTrader:
         for buy_limit_trade in buy_limit_trades:
             corresponding_position_found = any(
                 buy_limit_trade.contract.conId == position.contract.conId for position in positions)
-            # Fix: Using singleton MarketDataFetcher
             option_ask_value = self.market_data_fetcher.get_ask(buy_limit_trade.contract)
             if (not corresponding_position_found and option_ask_value > 0.05):
                 logger.info(f"Cancelling {get_option_name(buy_limit_trade.contract)} because it has no corresponding "
@@ -169,7 +186,6 @@ class OptionTrader:
                 required_stop_loss = required_max_loss_per_option + sell_price
                 stop_loss_ratio = required_stop_loss / current_stop_loss
 
-                # Fix: Using instance market_data_fetcher
                 current_price = self.market_data_fetcher.get_last_price(option)
                 logger.info(
                     f"Matching position found for {get_option_name(option)}, the current stop loss is {current_stop_loss:.2f} and the required "
@@ -182,7 +198,6 @@ class OptionTrader:
 
                 if stop_loss_ratio > 1.1 or (stop_loss_ratio < 0.9 and required_stop_loss > current_price * 2):
                     logger.info(f"Going to modify stop loss for {get_option_name(option)}, since the max loss ratio is {stop_loss_ratio:.2f}.")
-                    # Fix: Added await for async modify_stop_loss
                     await self.trading_bot.modify_stop_loss(open_stop_loss_trade, required_stop_loss)
                 if stop_loss_ratio > 1.1 or (stop_loss_ratio < 0.9 and required_stop_loss <= current_price * 2):
                     logger.warning(f"Cannot modify stop loss because the required stop loss ratio ({required_stop_loss:.2f})"
