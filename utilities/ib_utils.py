@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import numpy as np
 import logging
+import math
 
 from utilities.tws_connection import TwsConnection
 
@@ -40,6 +41,12 @@ def extract_ask(ticker):
 
 def extract_last_median_price(ticker):
     return np.nanmedian([ticker.bid, ticker.ask, ticker.last])
+
+
+def is_hollow(ticker):
+    if ticker is None:
+        return True
+    return math.isnan(ticker.last) and math.isnan(ticker.bid) and math.isnan(ticker.ask)
 
 
 def get_delta(ticker):
