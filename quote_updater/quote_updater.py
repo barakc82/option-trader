@@ -1,11 +1,8 @@
 import math
 import time
 import gspread
-from aiohttp.helpers import QUOTED_ETAG_RE
 from ib_insync import *
 from datetime import datetime
-
-from yfinance.const import quote_summary_valid_modules
 
 from utilities.ib_utils import connect
 from utilities.database_access import SERVICE_ACCOUNT_FILE, get_worksheet
@@ -69,14 +66,26 @@ def periodic_sheet_updater(quotes_worksheet, leverage_worksheet):
 
 def update_google_leverage_sheet_sync(leverage_worksheet, changed_quotes):
 
+    if 'UPRO' not in latest_quotes or 'SP5Y' not in latest_quotes:
+        return
+
     upro_quote = latest_quotes['UPRO'][1]
     sp5y_quote = latest_quotes['SP5Y'][1]
-    print(f"upro_quote: {upro_quote}, sp5y_quote: {sp5y_quote}")
     if 'UPRO' in changed_quotes and 'SP5Y' in changed_quotes:
-        leverage_worksheet.batch_update([
-            {'range': 'X3', 'values': [[upro_quote]]},
-            {'range': 'X4', 'values': [[sp5y_quote]]}
-        ])
+        try:
+            leverage_worksheet.batch_update([
+                {'range': 'X3', 'values': [[upro_quote]]},
+                {'range': 'X4', 'values': [[sp5y_quote]]}
+            ])
+        except Exception as e:
+            print(f"Failed to update Google Leverage Sheet: {e}")
+
+
+def setup_subscriptions(ib, contracts):
+    ib.qualifyContracts(*contracts)
+    for contract in contracts:
+        ib.reqMktData(contract, '', False, False)
+    ib.pendingTickersEvent += on_pending_tickers    
 
 
 def main():
@@ -96,32 +105,43 @@ def main():
     tws_connection = connect(QUOTE_UPDATER_CLIENT_ID)
     ib = tws_connection.ib
 
-    # 3. Create contracts and request market data
+    # 3. Create contracts
     contracts = [Stock(symbol, 'SMART', 'USD') for symbol in SYMBOLS]
-
     if 'SP5Y' in SYMBOLS:
         sp5y_index = SYMBOLS.index('SP5Y')
         contracts[sp5y_index].primaryExchange = 'LSEETF'
 
-    ib.qualifyContracts(*contracts)
-
-    for contract in contracts:
-        ib.reqMktData(contract, '', False, False)
-
-    # 4. Attach the reactive callback to pending tickers
-    ib.pendingTickersEvent += on_pending_tickers
-
-    print(f"System active. Reacting to live quotes and updating sheet every {UPDATE_INTERVAL_SECONDS} seconds...")
+    if ib.isConnected():
+        setup_subscriptions(ib, contracts)
+        print(f"System active. Reacting to live quotes and updating sheet every {UPDATE_INTERVAL_SECONDS} seconds...")
+    else:
+        print("Initial connection failed. Will attempt to reconnect in the loop.")
 
     # 5. Run the event loop, waking up every UPDATE_INTERVAL_SECONDS to flush to Google Sheets
     last_update_time = time.time()
 
     try:
         while True:
+            if not ib.isConnected():
+                print("Disconnected from IB. Attempting to reconnect...")
+                try:
+                    ib.disconnect() # Ensure old connection is closed
+                    tws_connection.connect(QUOTE_UPDATER_CLIENT_ID)
+                    ib = tws_connection.ib
+                    setup_subscriptions(ib, contracts)
+                    print("Reconnected and re-subscribed.")
+                except Exception as e:
+                    print(f"Reconnect failed: {e}. Retrying in 10 seconds...")
+                    time.sleep(10)
+                    continue
+
             ib.sleep(1)
 
             if time.time() - last_update_time >= UPDATE_INTERVAL_SECONDS:
-                periodic_sheet_updater(quotes_worksheet, leverage_worksheet)
+                try:
+                    periodic_sheet_updater(quotes_worksheet, leverage_worksheet)
+                except Exception as e:
+                    print(f"Error during periodic update: {e}")
                 last_update_time = time.time()
 
     except KeyboardInterrupt:

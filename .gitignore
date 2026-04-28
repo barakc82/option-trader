@@ -6,3 +6,6 @@ thread_architecture/
 .idea/
 logs/*
 option-trader-image.tar
+cache/
+clientportal.gw/
+resources/service_account.json

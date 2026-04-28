@@ -79,7 +79,7 @@ class OptionCache:
                 logger.info(
                     f"Minimal strike for call options: {min(call_strikes)}, Maximal strike for call options: {max(call_strikes)}")
             else:
-                logger.error(f"No put strikes, size of put options: {len(put_options)}, size of chain.strikes: {len(chain.strikes)}, date: {date}")
+                logger.error(f"No put strikes, size of put options: {len(put_options)}, size of chain.strikes: {len(chain.strikes)}, size of call options: {len(call_options)}, date: {date}")
 
             with open(file_path, "wb") as file:
                 # noinspection PyTypeChecker

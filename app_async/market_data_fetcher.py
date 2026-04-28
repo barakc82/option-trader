@@ -172,7 +172,10 @@ class MarketDataFetcher:
         if not missing_tickers_in_cache:
             return
 
+        write_heartbeat()
         new_tickers = await self.ib.reqTickersAsync(*missing_tickers_in_cache)
+        write_heartbeat()
+
         for ticker in new_tickers:
             self._register_ticker(ticker)
             contract_id_to_ticker[ticker.contract.conId] = ticker

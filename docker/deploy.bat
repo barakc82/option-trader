@@ -53,3 +53,4 @@ if %ERRORLEVEL% neq 0 (
 
 :send_files_successful
 gcloud compute ssh %VM_NAME% --command "sudo docker cp option-trader:/home/option-trader/cache /tmp && sudo docker rm -f option-trader && sudo docker system prune -af && cd ../barakc82 && sudo docker load -i option-trader-image.tar && sudo docker run -d --env-file /home/barakc82/option-trader.env -p 8050:8050 -v /home/barakc82/logs:/home/option-trader/logs --name option-trader option-trader-image && sudo docker cp /tmp/cache/. option-trader:/home/option-trader/cache"
+echo Current time: %TIME%
