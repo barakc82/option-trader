@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
     cron \
     python3 \
     python3-pip
-RUN pip3 install ib_insync colorlog pytz exchange_calendars gspread psutil twilio dash aiohttp nest_asyncio --break-system-packages \
+RUN pip3 install ib_insync colorlog pytz exchange_calendars gspread psutil twilio dash aiohttp nest_asyncio Brotli --break-system-packages \
     && rm -rf /var/lib/apt/lists/*
 #USER ibgateway  # Switch back to non-root for security
 

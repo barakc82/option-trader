@@ -14,6 +14,7 @@ from .option_cache import OptionCache
 logger = logging.getLogger(__name__)
 LIVE_DATA = 1
 FROZEN_DATA = 2
+last_implied_volatility = 0
 
 def get_gamma(ticker):
     if ticker.lastGreeks and ticker.lastGreeks.gamma:
