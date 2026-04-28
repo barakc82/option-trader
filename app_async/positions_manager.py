@@ -144,8 +144,8 @@ class PositionsManager:
                     break
 
                 logger.info(
-                    f"Submitting a buy trade for position of {get_option_name(position.contract)}, quantity: {position.position}")
-                await self.trading_bot.close_short_option(option, abs(position.position))
+                    f"Submitting a buy trade for position of {get_option_name(position.contract)}, quantity: {position.position}, bid is {bid}")
+                # await self.trading_bot.close_short_option(option, abs(position.position))
 
             if not self.was_option_positions_data_changed:
                 logger.info("Checking of current positions is done")

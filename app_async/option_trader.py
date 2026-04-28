@@ -37,6 +37,8 @@ class OptionTrader:
 
     async def run(self):
         logger.info("OptionTrader: Starting trading loop...")
+        await post_current_state({'status': 'Loading...'})
+
         while True:
             try:
                 write_heartbeat()

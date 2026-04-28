@@ -45,23 +45,17 @@ class TradingBot:
             self._initialized = True
 
     async def get_short_options(self, should_use_cache=True):
-        for attempt in range(2):
-            if not should_use_cache or attempt == 1:
-                original_timeout = self.ib.RequestTimeout
-                self.ib.RequestTimeout = 10.0
-                try:
-                    async with self.req_positions_lock:
-                        await self.ib.reqPositionsAsync()
-                except TimeoutError:
-                    logger.warning("reqPositions timed out")
-                finally:
-                    await asyncio.sleep(2)
-                    self.ib.RequestTimeout = original_timeout
-
+        """Fetches active short option positions with optional server refresh."""
+        if not should_use_cache:
+            async with self.req_positions_lock:
+                logger.debug("Requesting fresh positions from IB server...")
+                # reqPositionsAsync returns the list directly (Optimization)
+                positions = await self.ib.reqPositionsAsync()
+        else:
             positions = self.ib.positions(MY_ACCOUNT)
-            if positions or not should_use_cache:
-                break
-            logger.info("No positions in cache, retrying...")
+            if not positions:
+                # If cache is empty, automatically trigger a non-cached refresh
+                return await self.get_short_options(should_use_cache=False)
 
         option_positions = []
         for position in positions:

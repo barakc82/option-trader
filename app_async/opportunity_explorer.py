@@ -220,7 +220,7 @@ class OpportunityExplorer:
             return sell_option_result
 
         self.cancel_all_buy_trades(open_trades, call_option)  # To allow a sell
-        asyncio.sleep(0.2)
+        await asyncio.sleep(0.2)
 
         sell_option_result = await self.try_to_sell(call_option, 2, target_delta)
         if sell_option_result.success:
@@ -297,7 +297,7 @@ class OpportunityExplorer:
             return sell_option_result
 
         self.cancel_all_buy_trades(open_trades, put_option)  # To allow a sell
-        asyncio.sleep(0.2)
+        await asyncio.sleep(0.2)
 
         quantity = min(max_options_for_market_drop, 2)
         sell_option_result = await self.try_to_sell(put_option, quantity, target_delta)
@@ -351,8 +351,8 @@ class OpportunityExplorer:
         strike_finder = StrikeFinder()
         positions = await self.trading_bot.get_short_options()
         min_strike = min(position.contract.strike for position in positions)
-        available_cheap_call_option = strike_finder.get_available_cheap_call_option(call_options, min_strike)
-        initial_margin_change = self.trading_bot.get_initial_margin_change(available_cheap_call_option, 1)
+        available_cheap_call_option = await strike_finder.get_available_cheap_call_option(call_options, min_strike)
+        initial_margin_change = await self.trading_bot.get_initial_margin_change(available_cheap_call_option, 1)
         logger.info(f"try_to_reduce_initial_margin_for_call_options, required initial margin: {required_initial_margin}, initial margin after sell: {initial_margin_after_sell},"
                     f"initial margin change due to buy: {initial_margin_change}, option to be sold: {get_option_name(call_option_to_be_sold)}, option to buy: {get_option_name(available_cheap_call_option)}")
 
@@ -388,11 +388,11 @@ class OpportunityExplorer:
         strike_finder = StrikeFinder()
         positions = await self.trading_bot.get_short_options()
         max_strike = max(position.contract.strike for position in positions)
-        available_cheap_put_option = strike_finder.get_available_cheap_put_option(put_options, max_strike)
-        initial_margin_change = self.trading_bot.get_initial_margin_change(available_cheap_put_option, 1)
+        available_cheap_put_option = await strike_finder.get_available_cheap_put_option(put_options, max_strike)
+        initial_margin_change = await self.trading_bot.get_initial_margin_change(available_cheap_put_option, 1)
         if initial_margin_change == 0:
             logging.info(f"Initial margin change for buying {get_option_name(available_cheap_put_option)} is 0, will not buy it")
-            initial_margin_change = self.trading_bot.get_initial_margin_change(available_cheap_put_option, 2)
+            initial_margin_change = await self.trading_bot.get_initial_margin_change(available_cheap_put_option, 2)
             logging.info(
                 f"Initial margin change for 2 units is {initial_margin_change}")
             return

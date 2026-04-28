@@ -14,6 +14,8 @@ from .market_data_fetcher import MarketDataFetcher
 from .max_loss_calculator import MaxLossCalculator
 from .target_delta_calculator import TargetDeltaCalculator
 from .trading_bot import TradingBot
+from .opportunity_explorer import OpportunityExplorer
+
 
 TEMP_PATH = 'shared/state_temp.json'
 JSON_PATH = 'shared/state.json'
@@ -121,6 +123,10 @@ class StateUpdater:
                 'time': f.time.timestamp(), 'comment': comment
             })
         state['fills'] = sorted(state_fills, key=lambda x: x['time'], reverse=True)
+
+        opportunity_explorer = OpportunityExplorer()
+        state['last_put_option_price'] = round(opportunity_explorer.last_put_option_price, 2)
+        state['last_call_option_price'] = round(opportunity_explorer.last_call_option_price, 2)
 
         # 6. Finalize and Post
         self.store_state_locally(state)
