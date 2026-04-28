@@ -1,8 +1,4 @@
 import math
-import traceback
-import json
-import time
-from datetime import datetime, timedelta
 
 from utilities.utils import *
 from utilities.ib_utils import get_delta
@@ -13,7 +9,7 @@ from .market_data_fetcher import MarketDataFetcher
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-DEFAULT_MAX_LOSS = 1
+DEFAULT_MAX_LOSS = 1.0
 WINDOW_SECONDS = 7 * 24 * 60 * 60  # 1 week
 STOP_LOSS_CHANGE_INTERVAL = 900
 
@@ -45,10 +41,10 @@ class MaxLossCalculator:
             self.trading_bot = TradingBot()
             self.last_max_loss = {'C': DEFAULT_MAX_LOSS, 'P': DEFAULT_MAX_LOSS}
             self.last_effective_max_loss = {'C': DEFAULT_MAX_LOSS, 'P': DEFAULT_MAX_LOSS}
-            self.last_save_time = {'C': 0, 'P': 0}
-            self.last_effective_calculation_time = {'C': 0, 'P': 0}
+            self.last_save_time = {'C': 0.0, 'P': 0.0}
+            self.last_effective_calculation_time = {'C': 0.0, 'P': 0.0}
             self.quantity = {'C': [], 'P': []}
-            self.risk_fraction = {'C': 1, 'P': 1}
+            self.risk_fraction = {'C': 1.0, 'P': 1.0}
             try:
                 if os.path.exists(CALL_OPTIONS_FILE_NAME):
                     with open(CALL_OPTIONS_FILE_NAME, "r") as f:

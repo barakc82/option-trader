@@ -8,11 +8,13 @@ from utilities.utils import *
 from utilities.ib_utils import req_id_to_target_delta, get_delta
 from app.option_cache import OptionCache
 
+
 LIVE_DATA = 1
 FROZEN_DATA = 2
 
 logger = logging.getLogger(__name__)
 last_implied_volatility = 0
+
 
 def on_spx_ticker_update(ticker):
     logger.info(f"{ticker.contract} {ticker.contract.symbol} {ticker.contract.secType}, ticker update")
