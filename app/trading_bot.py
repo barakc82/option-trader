@@ -1,3 +1,4 @@
+import asyncio
 import math
 import re
 
@@ -313,24 +314,24 @@ class TradingBot:
         # self.ib.sleep(2)
         return trade
 
-    def get_short_options(self, should_use_cache=True):
+    async def get_short_options(self, should_use_cache=True):
+        for attempt in range(2):
+            if not should_use_cache or attempt == 1:
+                original_timeout = self.ib.RequestTimeout
+                self.ib.RequestTimeout = 10.0
+                try:
+                    async with self.req_positions_lock:
+                        await self.ib.reqPositionsAsync()
+                except TimeoutError:
+                    logger.warning("reqPositions timed out")
+                finally:
+                    await asyncio.sleep(2)
+                    self.ib.RequestTimeout = original_timeout
 
-        if not should_use_cache:
-            original_request_timeout = self.ib.RequestTimeout
-            self.ib.RequestTimeout = 10.0
-            try:
-                self.ib.reqPositions()
-            except TimeoutError:
-                logger.warning("reqPositions timed out")
-            finally:
-                self.ib.sleep(2)
-                self.ib.RequestTimeout = original_request_timeout
-
-        logger.debug("Requesting positions from cache")
-        positions = self.ib.positions(MY_ACCOUNT)
-        if not positions and should_use_cache:
-            logger.info("No positions, retrying using should_use_cache=False")
-            return self.get_short_options(should_use_cache=False)
+            positions = self.ib.positions(MY_ACCOUNT)
+            if positions or not should_use_cache:
+                break
+            logger.info("No positions in cache, retrying...")
 
         option_positions = []
         for position in positions:
