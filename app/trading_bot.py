@@ -314,18 +314,18 @@ class TradingBot:
         # self.ib.sleep(2)
         return trade
 
-    async def get_short_options(self, should_use_cache=True):
+    def get_short_options(self, should_use_cache=True):
+        positions = []
         for attempt in range(2):
             if not should_use_cache or attempt == 1:
                 original_timeout = self.ib.RequestTimeout
                 self.ib.RequestTimeout = 10.0
                 try:
-                    async with self.req_positions_lock:
-                        await self.ib.reqPositionsAsync()
+                    self.ib.reqPositionsAsync()
                 except TimeoutError:
                     logger.warning("reqPositions timed out")
                 finally:
-                    await asyncio.sleep(2)
+                    asyncio.sleep(2)
                     self.ib.RequestTimeout = original_timeout
 
             positions = self.ib.positions(MY_ACCOUNT)
