@@ -2,6 +2,7 @@ import asyncio
 import math
 import re
 import sys
+import time
 from datetime import date, datetime
 
 from ib_insync import IB, LimitOrder, MarketOrder, StopOrder
@@ -39,23 +40,26 @@ class TradingBot:
 
             self.req_all_open_orders_lock = asyncio.Lock()
             self.req_positions_lock = asyncio.Lock()
+            self.last_request_positions_time = 0
             self.last_request_all_open_trades_time = 0
             self.price_increments = []
             logger.info("TradingBot singleton initialized.")
             self._initialized = True
 
-    async def get_short_options(self, should_use_cache=True):
+    async def get_short_options(self):
         """Fetches active short option positions with optional server refresh."""
-        if not should_use_cache:
+
+        should_use_cache = time.time() - self.last_request_positions_time < 60
+        if not should_use_cache and not self.req_positions_lock.locked():
             async with self.req_positions_lock:
                 logger.debug("Requesting fresh positions from IB server...")
                 # reqPositionsAsync returns the list directly (Optimization)
-                positions = await self.ib.reqPositionsAsync()
-        else:
-            positions = self.ib.positions(MY_ACCOUNT)
-            if not positions:
-                # If cache is empty, automatically trigger a non-cached refresh
-                return await self.get_short_options(should_use_cache=False)
+                await self.ib.reqPositionsAsync()
+                self.last_request_positions_time = time.time()
+
+        positions = self.ib.positions(MY_ACCOUNT)
+        if not positions:
+            logger.warning("No position were found")
 
         option_positions = []
         for position in positions:
@@ -110,20 +114,21 @@ class TradingBot:
     def cancel_trade(self, trade):
         return self.cancel_order(trade.order)
 
-    async def close_short_option(self, option, quantity):
+    async def close_short_option(self, option, quantity, limit=None):
         open_trades = await self.get_open_trades()
         for t in open_trades:
             if option.conId == t.contract.conId and t.order.action.upper() == 'BUY':
                 self.cancel_trade(t)
 
-        ticker = self.ib.ticker(option)
-        if is_regular_hours():
+        if is_regular_hours() and limit is None:
             order = MarketOrder('BUY', quantity, account=MY_ACCOUNT, usePriceMgmtAlgo=False)
         else:
-            order = LimitOrder('BUY', quantity, ticker.ask, account=MY_ACCOUNT, usePriceMgmtAlgo=False)
+            if limit is None:
+                ticker = self.ib.ticker(option)
+                limit = ticker.ask
+            order = LimitOrder('BUY', quantity, limit, account=MY_ACCOUNT, usePriceMgmtAlgo=False)
             order.outsideRth = True
             order.tif = 'GTC'
-        
         return self.place_order(option, order)
 
     async def close_short_option_position(self, position):

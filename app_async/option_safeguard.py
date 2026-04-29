@@ -83,7 +83,7 @@ class OptionSafeguard:
 
         logger.debug("Checking current positions")
         positions, open_trades = await asyncio.gather(
-            self.trading_bot.get_short_options(should_use_cache=False),
+            self.trading_bot.get_short_options(),
             self.trading_bot.get_open_trades()
         )
         
