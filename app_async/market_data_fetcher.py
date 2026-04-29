@@ -2,7 +2,6 @@ import asyncio
 import math
 import exchange_calendars as ecals
 import pandas as pd
-
 from ib_insync import Index
 
 from utilities.utils import *
@@ -12,24 +11,24 @@ from .connection_manager import ConnectionManager
 from .option_cache import OptionCache
 
 logger = logging.getLogger(__name__)
+
+# Market Data Types
 LIVE_DATA = 1
 FROZEN_DATA = 2
-last_implied_volatility = 0
 
 def get_gamma(ticker):
-    if ticker.lastGreeks and ticker.lastGreeks.gamma:
+    if ticker.lastGreeks and ticker.lastGreeks.gamma is not None:
         return ticker.lastGreeks.gamma
-    if ticker.modelGreeks and ticker.modelGreeks.gamma:
+    if ticker.modelGreeks and ticker.modelGreeks.gamma is not None:
         return ticker.modelGreeks.gamma
-    return None
+    return math.nan
 
 def get_implied_volatility(ticker):
-    if ticker.lastGreeks and ticker.lastGreeks.impliedVol:
+    if ticker.lastGreeks and ticker.lastGreeks.impliedVol is not None:
         return ticker.lastGreeks.impliedVol
-    if ticker.modelGreeks and ticker.modelGreeks.impliedVol:
+    if ticker.modelGreeks and ticker.modelGreeks.impliedVol is not None:
         return ticker.modelGreeks.impliedVol
-    return None
-
+    return math.nan
 
 class MarketDataFetcher:
     _instance = None
@@ -45,6 +44,12 @@ class MarketDataFetcher:
             self.ib = ConnectionManager().ib
             self.market_data_state = LIVE_DATA
             self.registered_con_ids = set()
+            self.last_implied_volatility = 0.0
+
+            # Use a lock for market data type switching
+
+            self._state_lock = asyncio.Lock()
+            
             logger.info("MarketDataFetcher initialized.")
             self._initialized = True
 
@@ -57,12 +62,10 @@ class MarketDataFetcher:
             self.registered_con_ids.add(con_id)
             logger.debug(f"Registered update handler for {get_option_name(ticker.contract)}")
 
-    def on_spx_ticker_update(self, ticker):
-        logger.info(f"SPX Ticker Update: {ticker.last}")
-
     async def get_spx_price(self):
         spx = Index('SPX', 'CBOE', 'USD')
         spx_ticker = self.ib.ticker(spx)
+        
         if not spx_ticker or math.isnan(spx_ticker.last):
             spx_ticker = await self.req_mkt_data(spx)
         
@@ -71,50 +74,43 @@ class MarketDataFetcher:
             
         if math.isnan(spx_ticker.last):
             if not is_market_open():
-                logger.warning("The close price of S&P 500 is used instead of the last price")
-            return spx_ticker.close
+                logger.warning("Market closed; using SPX close price.")
+                return spx_ticker.close
+            return math.nan
+            
         return spx_ticker.last
 
     def get_ticker(self, option):
         ticker = self.ib.ticker(option)
         if ticker:
             return ticker
-        if hasattr(option, "ticker"):
-            return option.ticker
-        return None
+        return getattr(option, 'ticker', None)
 
     def get_last_price(self, option):
         ticker = self.get_ticker(option)
-        if not ticker:
+        if not ticker or math.isnan(ticker.last):
             return math.nan
-        last_price = ticker.last
-        if math.isnan(last_price):
-            return math.nan
-        return last_price
+        return ticker.last
 
-    def set_market_data_state(self):
-        cboe = ecals.get_calendar("XCBF")
-        is_open = cboe.is_open_at_time(pd.Timestamp.now(), side="both")
+    async def ensure_market_data_type(self):
+        """Ensures the correct market data type (Live vs Frozen) based on market hours."""
+        async with self._state_lock:
+            cboe = ecals.get_calendar("XCBF")
+            is_open = cboe.is_open_at_time(pd.Timestamp.now(), side="both")
 
-        if is_open:
-            if self.market_data_state != LIVE_DATA:
-                self.ib.reqMarketDataType(LIVE_DATA)
-                self.market_data_state = LIVE_DATA
-        else:
-            if self.market_data_state != FROZEN_DATA:
-                self.ib.reqMarketDataType(FROZEN_DATA)
-                self.market_data_state = FROZEN_DATA
+            target_state = LIVE_DATA if is_open else FROZEN_DATA
+            if self.market_data_state != target_state:
+                logger.info(f"Switching market data type to {'LIVE' if target_state == LIVE_DATA else 'FROZEN'}")
+                self.ib.reqMarketDataType(target_state)
+                self.market_data_state = target_state
 
     def on_option_ticker_update(self, ticker):
-        # Point 2: Throttling high-frequency updates
+        """Handle real-time updates for options, with throttling."""
         now = time.time()
         last_time = getattr(ticker, 'last_processed_time', 0)
         
-        # Calculate gamma to determine throttle interval
         gamma = get_gamma(ticker)
-        gamma = math.nan if gamma is None else gamma
-        
-        # If gamma is 0.0 or unknown, wait 5 seconds; otherwise 0.5 seconds
+        # Slower updates for low-gamma options (further out of money or illiquid)
         throttle_interval = 5.0 if (math.isnan(gamma) or gamma == 0.0) else 0.5
         
         if now - last_time < throttle_interval:
@@ -123,102 +119,53 @@ class MarketDataFetcher:
 
         option = ticker.contract
         delta = get_delta(ticker)
-        delta = math.nan if delta is None else abs(delta)
-        gamma = get_gamma(ticker)
-        gamma = math.nan if gamma is None else gamma
-        price = self.get_last_price(option)
+        price = ticker.last
 
-        delta_str = f"{delta:.3f}" if not math.isnan(delta) else "N/A"
+        delta_str = f"{abs(delta):.3f}" if delta is not None else "N/A"
         gamma_str = f"{gamma:.3f}" if not math.isnan(gamma) else "N/A"
-        
-        logger.info(f"{get_option_name(option)} {option.symbol}, price: {price}, delta: {delta_str}, gamma: {gamma_str}")
+        logger.info(f"Update: {get_option_name(option)} | Price: {price} | Delta: {delta_str} | Gamma: {gamma_str}")
 
-        option_monitoring_required = False
-        for trade in self.ib.openTrades():
-            if trade.contract.conId == option.conId:
-                option_monitoring_required = True
-                target_delta = req_id_to_target_delta.get(trade.order.orderId, 1)
-                if delta > target_delta:
-                    logger.info(f"Should cancel order {trade.order.orderId} as delta({delta:.3f}) > target({target_delta:.3f})")
-
-        for position in self.ib.positions():
-            if position.contract.conId == option.conId:
-                option_monitoring_required = True
-                break
-
-        if not option_monitoring_required:
-            self.ib.cancelMktData(option)
-            if option.conId in self.registered_con_ids:
-                ticker.updateEvent -= self.on_option_ticker_update
-                self.registered_con_ids.remove(option.conId)
+        # Note: Subscription cleanup is handled separately or can be added here if highly selective.
+        # Periodic cleanup is usually safer to avoid constant churning during volatile markets.
 
     async def update_ticker_data(self, contracts):
-        assert contracts
-        await self.ib.qualifyContractsAsync(*contracts)
-        self.set_market_data_state()
-
-        missing_tickers_in_cache = []
-        contract_id_to_ticker = {}
-        current_tickers = []
-        for contract in contracts:
-            ticker = self.ib.ticker(contract)
-            if ticker is None:
-                missing_tickers_in_cache.append(contract)
-            else:
-                self._register_ticker(ticker)
-                contract.ticker = ticker
-                current_tickers.append(ticker)
-
-        if not missing_tickers_in_cache:
+        """Qualify contracts and request fresh tickers for a batch of contracts."""
+        if not contracts:
             return
 
-        write_heartbeat()
-        new_tickers = await self.ib.reqTickersAsync(*missing_tickers_in_cache)
-        write_heartbeat()
+        await self.qualify(contracts)
+        await self.ensure_market_data_type()
 
-        for ticker in new_tickers:
-            self._register_ticker(ticker)
-            contract_id_to_ticker[ticker.contract.conId] = ticker
-            current_tickers.append(ticker)
-            ticker.contract.ticker = ticker
-
-        if all(is_hollow(ticker) for ticker in current_tickers):
-            raise ValueError(f"Could not fetch ticker data for all {len(current_tickers)} contracts")
-
-        for contract in missing_tickers_in_cache:
-            if contract.conId in contract_id_to_ticker:
-                contract.ticker = contract_id_to_ticker[contract.conId]
-
-    async def req_mkt_data(self, contract, is_snapshot=True):
-        ticker = self.ib.ticker(contract)
-        if ticker is not None:
-            self._register_ticker(ticker)
-            contract.ticker = ticker
-            return ticker
-
-        await self.ib.qualifyContractsAsync(contract)
-        self.set_market_data_state()
-        ticker = self.ib.reqMktData(contract, "", snapshot=is_snapshot, regulatorySnapshot=False)
+        # Filter out what we already have active
+        missing = [c for c in contracts if self.ib.ticker(c) is None]
         
-        start_time = time.time()
-        while math.isnan(ticker.last) and math.isnan(ticker.bid) and (time.time() - start_time < 3.0):
-            await asyncio.sleep(0.1)
+        if missing:
+            write_heartbeat()
+            new_tickers = await self.ib.reqTickersAsync(*missing)
+            write_heartbeat()
+            for ticker in new_tickers:
+                self._register_ticker(ticker)
 
-        if math.isnan(ticker.last) and math.isnan(ticker.bid):
-            tickers = await self.ib.reqTickersAsync(contract)
-            ticker = tickers[0]
+        # Ensure all contracts have their internal ticker reference updated (for convenience)
+        for contract in contracts:
+            contract.ticker = self.ib.ticker(contract)
 
+    async def req_mkt_data(self, contract, is_snapshot=False):
+        """Request market data for a single contract using reqTickersAsync."""
+        await self.qualify([contract])
+        await self.ensure_market_data_type()
+        
+        tickers = await self.ib.reqTickersAsync(contract)
+        ticker = tickers[0]
         self._register_ticker(ticker)
         return ticker
 
     def get_delta(self, option):
         ticker = self.get_ticker(option)
-        if not ticker:
-            return ''
-        delta = get_delta(ticker)
-        if not delta or math.isnan(delta):
-            return ''
-        return str(round(abs(delta) * 1000) / 1000)
+        delta = get_delta(ticker) if ticker else None
+        if delta is None or math.isnan(delta):
+            return ""
+        return str(round(abs(delta), 3))
 
     def get_ask(self, option):
         ticker = self.get_ticker(option)
@@ -227,76 +174,57 @@ class MarketDataFetcher:
         return ticker.ask
 
     async def get_spx_implied_volatility(self):
-        global last_implied_volatility
+        """Calculate average implied volatility from ATM SPX options."""
         spx_price = await self.get_spx_price()
         if math.isnan(spx_price):
-            return last_implied_volatility
+            logger.error("The SPX price is NaN")
+            return self.last_implied_volatility
+
         options_cache = OptionCache(self)
         options = options_cache.load_cached_options()
         if not options:
-            return last_implied_volatility
+            logger.error("No options cached in options_cache")
+            return self.last_implied_volatility
 
-        at_the_money_options = {'C': options[0], 'P': options[0]}
-        for right in ['C', 'P']:
-            for option in options:
-                if option.right == right and abs(option.strike - spx_price) < abs(
-                        at_the_money_options[right].strike - spx_price):
-                    at_the_money_options[right] = option
+        # Find ATM Call and Put
+        atm_call = min((o for o in options if o.right == 'C'), key=lambda o: abs(o.strike - spx_price), default=None)
+        atm_put = min((o for o in options if o.right == 'P'), key=lambda o: abs(o.strike - spx_price), default=None)
 
-        logger.info("Obtaining implied volatility")
+        if not atm_call or not atm_put:
+            logger.error(f"At the money levels could not be found: {atm_call} and {atm_put}")
+            return self.last_implied_volatility
+
         write_heartbeat()
-        await self.update_ticker_data(list(at_the_money_options.values()))
+        await self.update_ticker_data([atm_call, atm_put])
         write_heartbeat()
+        
+        iv_call = get_implied_volatility(atm_call.ticker)
+        iv_put = get_implied_volatility(atm_put.ticker)
 
-        at_the_money_call_option = at_the_money_options['C']
-        if not hasattr(at_the_money_call_option, "ticker"):
-            return last_implied_volatility
+        if not iv_call or not iv_put:
+            logger.warning(f"Implied volatility missing for ATM options. SPX: {spx_price}. Using last known: {self.last_implied_volatility}")
+            return self.last_implied_volatility
 
-        call_ticker = at_the_money_call_option.ticker
-        call_implied_volatility = get_implied_volatility(call_ticker)
+        implied_volatility = (iv_call + iv_put) / 2
 
-        if not call_implied_volatility:
-            logger.warning(f"Implied volatility missing in the ticker of {get_option_name(at_the_money_call_option)}, "
-                           f"S&P 500: {spx_price}, thus using an implied volatility of {last_implied_volatility}")
-            return last_implied_volatility
-
-        at_the_money_put_option = at_the_money_options['P']
-        if not hasattr(at_the_money_put_option, "ticker"):
-            return last_implied_volatility
-
-        put_ticker = at_the_money_put_option.ticker
-        put_implied_volatility = get_implied_volatility(put_ticker)
-
-        if not put_implied_volatility:
-            logger.warning(f"Implied volatility missing in the ticker of {get_option_name(at_the_money_put_option)}, s&P 500: {spx_price}")
-            return last_implied_volatility
-
-        implied_volatility = (call_implied_volatility + put_implied_volatility) / 2
+        # Sanity checks
         if implied_volatility > 1.9:
-            logger.error(
-                f"Implied volatility is {implied_volatility}, discarding. last call iv: {call_ticker.lastGreeks.impliedVol}, model call iv: {call_ticker.modelGreeks.impliedVol}, "
-                f"last put iv: {put_ticker.lastGreeks.impliedVol if put_ticker.lastGreeks else 'lastGreeks is None'},  "
-                f"model put iv: {put_ticker.modelGreeks.impliedVol if put_ticker.modelGreeks else 'modelGreeks is None'}, "
-                f"call: {get_option_name(at_the_money_options['C'])}, put: {get_option_name(at_the_money_options['P'])}")
-            return last_implied_volatility if last_implied_volatility else 0
+            logger.error(f"Implied volatility {implied_volatility:.3f} is too high (> 1.9), discarding. Fallback: {self.last_implied_volatility}")
+            return self.last_implied_volatility
 
-        if abs(implied_volatility - last_implied_volatility) > 1:
-            logger.error(
-                f"Implied volatility is {implied_volatility} while the last implied volatility is {last_implied_volatility}, "
-                f"discarding. last call iv: {call_ticker.lastGreeks.impliedVol}, model call iv: {call_ticker.modelGreeks.impliedVol},"
-                f" last put iv: {put_ticker.lastGreeks.impliedVol},  model put iv: {put_ticker.modelGreeks.impliedVol}, "
-                f"call: {get_option_name(at_the_money_options['C'])}, put: {get_option_name(at_the_money_options['P'])}")
-            return last_implied_volatility if last_implied_volatility else 0
+        if self.last_implied_volatility > 0 and abs(implied_volatility - self.last_implied_volatility) > 1.0:
+            logger.error(f"IV jump too large ({self.last_implied_volatility:.3f} -> {implied_volatility:.3f}), discarding.")
+            return self.last_implied_volatility
 
         if implied_volatility > 0.9:
-            logger.info(f"Implied volatility for calls is {call_implied_volatility}, implied volatility for puts is {put_implied_volatility}, S&P 500 is {spx_price}")
-        last_implied_volatility = implied_volatility
+            logger.info(f"High IV detected: {implied_volatility:.3f} (Call: {iv_call:.3f}, Put: {iv_put:.3f}) at SPX: {spx_price}")
+
+        self.last_implied_volatility = implied_volatility
         return implied_volatility
 
     async def get_chains(self, underlying):
-        await self.ib.qualifyContractsAsync(underlying)
-        result = await self.ib.reqSecDefOptParamsAsync(underlying.symbol, '', underlying.secType, underlying.conId)
-        return result
+        await self.qualify([underlying])
+        return await self.ib.reqSecDefOptParamsAsync(underlying.symbol, '', underlying.secType, underlying.conId)
 
-    async def qualify(self, options_to_check):
-        return await  self.ib.qualifyContractsAsync(*options_to_check)
+    async def qualify(self, contracts):
+        return await self.ib.qualifyContractsAsync(*contracts)
