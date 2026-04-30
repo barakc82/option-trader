@@ -132,8 +132,10 @@ class StrikeFinder:
                 available_cheap = options_block[-1]
                 options_block = await self.fetch_options_block(h_idx + 1, num_strikes - 1, strike_to_option, relevant_strikes)
         else:
-            if extract_ask(options_block[0].ticker) > 0.05 and l_idx > 0:
-                options_block = await self.fetch_options_block(0, l_idx - 1, strike_to_option, relevant_strikes)
+            if extract_ask(options_block[0].ticker) > 0.05:
+                if l_idx > 0:
+                    options_block = await self.fetch_options_block(0, l_idx - 1, strike_to_option, relevant_strikes)
+            
             if options_block and extract_ask(options_block[-1].ticker) == 0.05 and h_idx + 1 < num_strikes:
                 available_cheap = options_block[-1]
                 options_block = await self.fetch_options_block(h_idx + 1, num_strikes - 1, strike_to_option, relevant_strikes)
@@ -148,4 +150,8 @@ class StrikeFinder:
                 if available_cheap is None or option.strike > available_cheap.strike:
                     available_cheap = option
 
+        if available_cheap is None:
+            logger.error(f"No available cheap {right} option was found")
+            return None
+            
         return available_cheap
