@@ -71,18 +71,6 @@ class AccountData:
     async def get_margin_maintenance_requirement(self): return await self.get_account_summary_item('MaintMarginReq')
     async def get_available_funds(self): return await self.get_account_summary_item('AvailableFunds')
 
-    async def get_margin_related_values(self):
-        return {
-            "SMA": await self.get_account_summary_item("SMA"),
-            "LookAheadAvailableFunds": await self.get_account_summary_item("LookAheadAvailableFunds"),
-            "LookAheadExcessLiquidity": await self.get_account_summary_item("LookAheadExcessLiquidity"),
-            "HighestSeverity": await self.get_account_summary_item("HighestSeverity")
-        }
-
-    async def get_margin_related_values_async(self):
-        # Kept for backward compatibility, but now uses the cache internally
-        return await self.get_margin_related_values()
-
     def is_portfolio_margin(self):
         return self.margin_type == PORTFOLIO_MARGIN
 
