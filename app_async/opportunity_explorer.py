@@ -1,6 +1,11 @@
 import asyncio
 import random
-from datetime import date
+import logging
+import json
+import os
+import sys
+import math
+from datetime import date, datetime, timedelta
 
 from utilities.utils import *
 from utilities.ib_utils import *
@@ -115,31 +120,33 @@ async def calculate_max_options_for_market_drop(put_option):
 class OpportunityExplorer:
     _instance = None
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls):
         if cls._instance is None:
             cls._instance = super(OpportunityExplorer, cls).__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
     def __init__(self):
-        if not self._initialized:
-            self.ib = ConnectionManager().ib
-            self.account_data = AccountData()
-            self.market_data_fetcher = MarketDataFetcher()
-            self.trading_bot = TradingBot()
-            self.last_submit_order_attempt_time = 0
-            self.should_cancel_all_sell_orders = False
-            self.no_put_options_above_minimal_sell_price = False
-            self.no_call_options_above_minimal_sell_price = False
-            self.can_submit_orders = True
-            self.last_put_option_price = 0
-            self.last_call_option_price = 0
+        if self._initialized:
+            return
             
-            # Dynamic config fields
-            self.should_write_options_overnight = True
-            self.should_monitor_only = False
+        self.ib = ConnectionManager().ib
+        self.account_data = AccountData()
+        self.market_data_fetcher = MarketDataFetcher()
+        self.trading_bot = TradingBot()
+        self.last_submit_order_attempt_time = 0
+        self.should_cancel_all_sell_orders = False
+        self.no_put_options_above_minimal_sell_price = False
+        self.no_call_options_above_minimal_sell_price = False
+        self.can_submit_orders = True
+        self.last_put_option_price = 0
+        self.last_call_option_price = 0
+        
+        # Dynamic config fields
+        self.should_write_options_overnight = True
+        self.should_monitor_only = False
 
-            self._initialized = True
+        self._initialized = True
 
     def load_config(self):
         """Reads configuration from config/option_trader_config.json."""
@@ -364,7 +371,7 @@ class OpportunityExplorer:
         required_number_of_units = math.ceil(missing_sum / initial_margin_change)
 
         logger.info(f"try_to_reduce_initial_margin_for_call_options, required initial margin: {required_initial_margin}, initial margin after sell: {initial_margin_after_sell}, "
-                    f"initial margin change due to buy: {initial_margin_change:.2f}, option to be sold: {get_option_name(call_option_to_be_sold)}, option to buy: {get_option_name(available_cheap_call_option)}, missing_sum: {missing_sum:.0f}, required number of units = {required_number_of_units}, last call price: {self.last_call_option_price}")
+                    f"initial margin change due to buy: {initial_margin_change:.2f}, option to be sold: {get_option_name(call_option_to_be_sold)}, option to buy: {get_option_name(available_cheap_call_option)}, missing_sum: {missing_sum:.0f}, required number of units = {required_number_of_units}, last_call_price: {self.last_call_option_price}")
 
         if required_number_of_units < 0:
             logger.error(f"The required number of units is {required_number_of_units}")

@@ -1,4 +1,9 @@
 import math
+import os
+import json
+import time
+import logging
+from datetime import datetime, timedelta
 
 from utilities.utils import *
 from utilities.ib_utils import get_delta
@@ -28,34 +33,36 @@ async def calculate_max_loss(right, should_consider_only_effective=False):
 class MaxLossCalculator:
     _instance = None
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls):
         if cls._instance is None:
             cls._instance = super(MaxLossCalculator, cls).__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
     def __init__(self):
-        if not self._initialized:
-            self.account_data = AccountData()
-            self.market_data_fetcher = MarketDataFetcher()
-            self.trading_bot = TradingBot()
-            self.last_max_loss = {'C': DEFAULT_MAX_LOSS, 'P': DEFAULT_MAX_LOSS}
-            self.last_effective_max_loss = {'C': DEFAULT_MAX_LOSS, 'P': DEFAULT_MAX_LOSS}
-            self.last_save_time = {'C': 0.0, 'P': 0.0}
-            self.last_effective_calculation_time = {'C': 0.0, 'P': 0.0}
-            self.quantity = {'C': [], 'P': []}
-            self.risk_fraction = {'C': 1.0, 'P': 1.0}
-            try:
-                if os.path.exists(CALL_OPTIONS_FILE_NAME):
-                    with open(CALL_OPTIONS_FILE_NAME, "r") as f:
-                        self.quantity['C'] = json.load(f)
-                if os.path.exists(PUT_OPTIONS_FILE_NAME):
-                    with open(PUT_OPTIONS_FILE_NAME, "r") as f:
-                        self.quantity['P'] = json.load(f)
-            except Exception as e:
-                logger.error(f"Error loading max loss data: {e}")
+        if self._initialized:
+            return
+            
+        self.account_data = AccountData()
+        self.market_data_fetcher = MarketDataFetcher()
+        self.trading_bot = TradingBot()
+        self.last_max_loss = {'C': DEFAULT_MAX_LOSS, 'P': DEFAULT_MAX_LOSS}
+        self.last_effective_max_loss = {'C': DEFAULT_MAX_LOSS, 'P': DEFAULT_MAX_LOSS}
+        self.last_save_time = {'C': 0.0, 'P': 0.0}
+        self.last_effective_calculation_time = {'C': 0.0, 'P': 0.0}
+        self.quantity = {'C': [], 'P': []}
+        self.risk_fraction = {'C': 1.0, 'P': 1.0}
+        try:
+            if os.path.exists(CALL_OPTIONS_FILE_NAME):
+                with open(CALL_OPTIONS_FILE_NAME, "r") as f:
+                    self.quantity['C'] = json.load(f)
+            if os.path.exists(PUT_OPTIONS_FILE_NAME):
+                with open(PUT_OPTIONS_FILE_NAME, "r") as f:
+                    self.quantity['P'] = json.load(f)
+        except Exception as e:
+            logger.error(f"Error loading max loss data: {e}")
 
-            self._initialized = True
+        self._initialized = True
 
     async def calculate_max_loss(self, right):
         if time.time() - self.last_save_time[right] < 3600:

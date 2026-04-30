@@ -14,19 +14,21 @@ logger.setLevel(logging.INFO)
 class AccountData:
     _instance = None
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls):
         if cls._instance is None:
             cls._instance = super(AccountData, cls).__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
     def __init__(self):
-        if not self._initialized:
-            # Accessing shared singleton connection
-            self.ib = ConnectionManager().ib
-            self.margin_type = PORTFOLIO_MARGIN
-            logger.info("AccountData singleton initialized.")
-            self._initialized = True
+        if self._initialized:
+            return
+            
+        # Accessing shared singleton connection
+        self.ib = ConnectionManager().ib
+        self.margin_type = PORTFOLIO_MARGIN
+        logger.info("AccountData singleton initialized.")
+        self._initialized = True
 
     async def get_quantity(self, option):
         positions = await self.ib.reqPositionsAsync()

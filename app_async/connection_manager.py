@@ -9,26 +9,28 @@ logger = logging.getLogger(__name__)
 class ConnectionManager:
     _instance = None
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls):
         if cls._instance is None:
             cls._instance = super(ConnectionManager, cls).__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
     def __init__(self):
-        if not self._initialized:
-            self.ib = IB()
-            self.client_id = 1
-            self.host = '127.0.0.1'
-            self.port = 4001 if is_in_docker() else 7496
-            self.reconnect_delay = 1
-            self.is_connecting = False
-            
-            # Hook events
-            self.ib.disconnectedEvent += self.on_disconnected
-            self.ib.errorEvent += self.on_error
-            
-            self._initialized = True
+        if self._initialized:
+            return
+        
+        self.ib = IB()
+        self.client_id = 1
+        self.host = '127.0.0.1'
+        self.port = 4001 if is_in_docker() else 7496
+        self.reconnect_delay = 1
+        self.is_connecting = False
+        
+        # Hook events
+        self.ib.disconnectedEvent += self.on_disconnected
+        self.ib.errorEvent += self.on_error
+        
+        self._initialized = True
 
     async def connect(self, client_id=1):
         """Handle the initial connection and keep-alive loop."""

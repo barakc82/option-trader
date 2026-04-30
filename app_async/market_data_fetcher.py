@@ -1,5 +1,7 @@
 import asyncio
 import math
+import time
+import logging
 import exchange_calendars as ecals
 import pandas as pd
 from ib_insync import Index
@@ -33,25 +35,26 @@ def get_implied_volatility(ticker):
 class MarketDataFetcher:
     _instance = None
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls):
         if cls._instance is None:
             cls._instance = super(MarketDataFetcher, cls).__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
     def __init__(self):
-        if not self._initialized:
-            self.ib = ConnectionManager().ib
-            self.market_data_state = LIVE_DATA
-            self.registered_con_ids = set()
-            self.last_implied_volatility = 0.0
-
-            # Use a lock for market data type switching
-
-            self._state_lock = asyncio.Lock()
+        if self._initialized:
+            return
             
-            logger.info("MarketDataFetcher initialized.")
-            self._initialized = True
+        self.ib = ConnectionManager().ib
+        self.market_data_state = LIVE_DATA
+        self.registered_con_ids = set()
+        self.last_implied_volatility = 0.0
+
+        # Use a lock for market data type switching
+        self._state_lock = asyncio.Lock()
+        
+        logger.info("MarketDataFetcher initialized.")
+        self._initialized = True
 
     def _register_ticker(self, ticker):
         if not ticker:
@@ -124,9 +127,6 @@ class MarketDataFetcher:
         delta_str = f"{abs(delta):.3f}" if delta is not None else "N/A"
         gamma_str = f"{gamma:.3f}" if not math.isnan(gamma) else "N/A"
         logger.info(f"Update: {get_option_name(option)} | Price: {price} | Delta: {delta_str} | Gamma: {gamma_str}")
-
-        # Note: Subscription cleanup is handled separately or can be added here if highly selective.
-        # Periodic cleanup is usually safer to avoid constant churning during volatile markets.
 
     async def update_ticker_data(self, contracts):
         """Qualify contracts and request fresh tickers for a batch of contracts."""

@@ -25,14 +25,15 @@ CANCELLED_TRADE_MESSAGE_PATTERN = r"INITIAL MARGIN\s+\[(?P<init_margin>[\d,.]+).
 class TradingBot:
     _instance = None
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls):
         if cls._instance is None:
             cls._instance = super(TradingBot, cls).__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
     def __init__(self):
-        if not self._initialized:
+        if self._initialized:
+            return
             # Accessing shared singleton dependencies
             self.ib = ConnectionManager().ib
             self.market_data_fetcher = MarketDataFetcher()
