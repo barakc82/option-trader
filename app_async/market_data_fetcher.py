@@ -216,7 +216,7 @@ class MarketDataFetcher:
             logger.error(f"IV jump too large ({self.last_implied_volatility:.3f} -> {implied_volatility:.3f}), discarding.")
             return self.last_implied_volatility
 
-        if implied_volatility > 0.9:
+        if implied_volatility > 0.6:
             logger.info(f"High IV detected: {implied_volatility:.3f} (Call: {iv_call:.3f}, Put: {iv_put:.3f}) at SPX: {spx_price}")
 
         self.last_implied_volatility = implied_volatility
