@@ -64,13 +64,13 @@ class TestStrikeFinder(unittest.IsolatedAsyncioTestCase):
 
     async def test_get_low_delta_call_option_initial_deltas_too_high(self):
         options = [self.create_mock_option(4000 + i*5, 'C', delta=0.1) for i in range(200)]
-        options[190].ticker.lastGreeks.delta = 0.04
+        options[10].ticker.lastGreeks.delta = 0.04 # strike 4050
         result = await self.strike_finder.get_low_delta_call_option(options, 0.05)
         self.assertIsNotNone(result)
 
     async def test_get_low_delta_call_option_initial_deltas_too_low(self):
         options = [self.create_mock_option(4000 + i*5, 'C', delta=0.01) for i in range(200)]
-        options[10].ticker.lastGreeks.delta = 0.04
+        options[180].ticker.lastGreeks.delta = 0.04
         result = await self.strike_finder.get_low_delta_call_option(options, 0.05)
         self.assertIsNotNone(result)
 
@@ -132,23 +132,45 @@ class TestStrikeFinder(unittest.IsolatedAsyncioTestCase):
 
     async def test_get_low_delta_put_option_candidate_no_delta_and_too_high(self):
         options = [self.create_mock_option(4000, 'P', delta=-0.04)]
-        # Missing delta at candidate check
         with patch('app_async.strike_finder.get_delta') as mock_gd:
-            mock_gd.side_effect = [-0.04, None]
+            mock_gd.side_effect = [-0.04, -0.04, None, -0.04, -0.04, -0.06]
             result = await self.strike_finder.get_low_delta_put_option(options, 0.05)
             self.assertIsNone(result)
-        # Delta too high at candidate check
-        with patch('app_async.strike_finder.get_delta') as mock_gd:
-            mock_gd.side_effect = [-0.04, -0.06]
+            
             result = await self.strike_finder.get_low_delta_put_option(options, 0.05)
             self.assertIsNone(result)
 
     async def test_get_low_delta_call_option_candidate_no_delta(self):
         options = [self.create_mock_option(4000, 'C', delta=0.04)]
         with patch('app_async.strike_finder.get_delta') as mock_gd:
-            mock_gd.side_effect = [0.04, None]
+            mock_gd.side_effect = [0.04, 0.04, None]
             result = await self.strike_finder.get_low_delta_call_option(options, 0.05)
             self.assertIsNone(result)
+
+    async def test_get_low_delta_option_no_candidate(self):
+        # Trigger "No {right} option candidate found" (line 87)
+        # All options have delta >= target_delta and none are selected.
+        options = [self.create_mock_option(4000, 'P', delta=-0.06)]
+        result = await self.strike_finder.get_low_delta_put_option(options, 0.05)
+        self.assertIsNone(result)
+
+    async def test_get_available_cheap_option_fetch_more_put_edge_cases(self):
+        # Trigger line 142 (options_block = await self.fetch_options_block(0, l_idx - 1...))
+        # Trigger line 145/146 (last_ask == 0.05 and h_idx + 1 < num_strikes)
+        options = [self.create_mock_option(4000 - i*5, 'P', ask=0.1) for i in range(200)]
+        # mid=100. l_idx=50, h_idx=150.
+        # strikes[50]=3750, strikes[150]=3250.
+        # first_ask = ask at strike 3750.
+        options[50].ticker.ask = 0.06 # > 0.05
+        # last_ask = ask at strike 3250.
+        options[150].ticker.ask = 0.05
+        
+        # We also need a cheap option in the new blocks to avoid getting None if we want to check success,
+        # but here we just want to hit the lines.
+        options[0].ticker.ask = 0.05 # For the first block fetch (0 to 49)
+        
+        result = await self.strike_finder.get_available_cheap_put_option(options, 4100)
+        self.assertIsNotNone(result)
 
 if __name__ == '__main__':
     unittest.main()

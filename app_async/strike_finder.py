@@ -87,7 +87,12 @@ class StrikeFinder:
             logger.error(f"No {right} option candidate found")
             return None
 
-        final_delta = abs(get_delta(current_candidate.ticker))
+        final_delta_signed = get_delta(current_candidate.ticker)
+        if final_delta_signed is None:
+            logger.error(f"No delta data available for the candidate {right} option")
+            return None
+            
+        final_delta = abs(final_delta_signed)
         if final_delta > target_delta:
             logger.error(f"Selected {right} option {get_option_name(current_candidate)} delta {final_delta:.3f} > target {target_delta:.3f}")
             return None
