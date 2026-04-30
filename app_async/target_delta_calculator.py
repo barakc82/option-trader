@@ -1,4 +1,5 @@
 import statistics
+import math
 from collections import deque
 import traceback
 
@@ -63,16 +64,18 @@ class TargetDeltaCalculator:
         implied_volatility = None
         try:
             implied_volatility = await self.market_data_fetcher.get_spx_implied_volatility()
-            if implied_volatility:
+            if implied_volatility and not math.isnan(implied_volatility):
                 logger.info(f"Implied volatility: {implied_volatility:.2f}")
                 iv_history.append(implied_volatility)
                 with open(IMPLIED_VOLATILITY_FILE_NAME, "w") as f:
                     for entry in iv_history:
                         f.write(f"{entry:.2f}\n")
+            else:
+                logger.error(f"Invalid implied volatility: {implied_volatility}")
         except Exception as e:
             logger.error(f"{e}")
             traceback.print_exc()
-        if not implied_volatility:
+        if not implied_volatility or math.isnan(implied_volatility):
             return self.last_target_delta
 
         iv_mean = statistics.mean(iv_history)
