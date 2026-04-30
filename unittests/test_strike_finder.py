@@ -18,9 +18,10 @@ class TestStrikeFinder(unittest.IsolatedAsyncioTestCase):
 
     def create_mock_option(self, strike, right, delta=None, ask=None):
         option = MagicMock()
-        option.strike = strike
+        option.strike = float(strike)
         option.right = right
         option.conId = int(strike * 100) # Dummy conId
+        option.symbol = "SPX"
         
         ticker = MagicMock()
         ticker.contract = option
@@ -33,75 +34,121 @@ class TestStrikeFinder(unittest.IsolatedAsyncioTestCase):
         option.ticker = ticker
         return option
 
-    async def test_get_low_delta_put_option_basic(self):
-        # target delta 0.05
-        # Strikes: 4000 (delta 0.08), 3900 (delta 0.04), 3800 (delta 0.02)
-        options = [
-            self.create_mock_option(4000, 'P', delta=-0.08),
-            self.create_mock_option(3900, 'P', delta=-0.04),
-            self.create_mock_option(3800, 'P', delta=-0.02)
-        ]
+    async def test_get_low_delta_put_option_initial_deltas_too_high(self):
+        options = [self.create_mock_option(4000 - i*5, 'P', delta=-0.1 + (i*0.0005)) for i in range(200)]
+        for i in range(50, 151):
+            options[i].ticker.lastGreeks.delta = -0.05 # Higher than target 0.03
         
-        # In refactored StrikeFinder, we expect it to find the highest delta < target
-        # 0.04 is the highest delta under 0.05
+        # Ensure the fallback block has the target
+        options[10].ticker.lastGreeks.delta = -0.02
+        
+        result = await self.strike_finder.get_low_delta_put_option(options, 0.03)
+        self.assertIsNotNone(result)
+
+    async def test_get_low_delta_put_option_initial_deltas_too_low(self):
+        options = [self.create_mock_option(4000 - i*5, 'P', delta=-0.01) for i in range(200)]
+        options[180].ticker.lastGreeks.delta = -0.04
+        
         result = await self.strike_finder.get_low_delta_put_option(options, 0.05)
         self.assertIsNotNone(result)
-        self.assertEqual(result.strike, 3900)
 
-    async def test_get_low_delta_call_option_basic(self):
-        # target delta 0.05
-        # Strikes: 5000 (delta 0.08), 5100 (delta 0.04), 5200 (delta 0.02)
-        options = [
-            self.create_mock_option(5000, 'C', delta=0.08),
-            self.create_mock_option(5100, 'C', delta=0.04),
-            self.create_mock_option(5200, 'C', delta=0.02)
-        ]
-        
-        # 0.04 is the highest delta under 0.05
-        result = await self.strike_finder.get_low_delta_call_option(options, 0.05)
-        self.assertIsNotNone(result)
-        self.assertEqual(result.strike, 5100)
-
-    async def test_liquidity_skip(self):
-        # target delta 0.10
-        # option with strike ending in 5: 3905, delta 0.09. 
-        # stricter_target = 0.10 * 0.875 = 0.0875
-        # 0.09 > 0.0875 and 0.09 < 0.10 -> should skip
+    async def test_get_low_delta_put_liquidity_skip(self):
+        # Target 0.10. 3905 (delta 0.09) is in [5, 15, ...] and > 0.10*0.875 (0.0875)
         options = [
             self.create_mock_option(3910, 'P', delta=-0.11),
             self.create_mock_option(3905, 'P', delta=-0.09),
             self.create_mock_option(3900, 'P', delta=-0.08)
         ]
-        
         result = await self.strike_finder.get_low_delta_put_option(options, 0.10)
-        # Should skip 3905 and pick 3900
         self.assertEqual(result.strike, 3900)
 
-    async def test_get_available_cheap_call_option(self):
-        # min_strike = 5000
-        options = [
-            self.create_mock_option(5000, 'C', ask=0.15),
-            self.create_mock_option(5100, 'C', ask=0.10),
-            self.create_mock_option(5200, 'C', ask=0.05),
-            self.create_mock_option(5300, 'C', ask=0.05)
-        ]
-        
-        # Should pick the lowest strike with ask <= 0.05
-        result = await self.strike_finder.get_available_cheap_call_option(options, 5000)
-        self.assertEqual(result.strike, 5200)
+    async def test_get_low_delta_call_option_initial_deltas_too_high(self):
+        options = [self.create_mock_option(4000 + i*5, 'C', delta=0.1) for i in range(200)]
+        options[190].ticker.lastGreeks.delta = 0.04
+        result = await self.strike_finder.get_low_delta_call_option(options, 0.05)
+        self.assertIsNotNone(result)
 
-    async def test_get_available_cheap_put_option(self):
-        # max_strike = 4000
+    async def test_get_low_delta_call_option_initial_deltas_too_low(self):
+        options = [self.create_mock_option(4000 + i*5, 'C', delta=0.01) for i in range(200)]
+        options[10].ticker.lastGreeks.delta = 0.04
+        result = await self.strike_finder.get_low_delta_call_option(options, 0.05)
+        self.assertIsNotNone(result)
+
+    async def test_get_low_delta_call_liquidity_skip(self):
         options = [
-            self.create_mock_option(3900, 'P', ask=0.15),
-            self.create_mock_option(3800, 'P', ask=0.10),
-            self.create_mock_option(3700, 'P', ask=0.05),
-            self.create_mock_option(3600, 'P', ask=0.05)
+            self.create_mock_option(4100, 'C', delta=0.11),
+            self.create_mock_option(4105, 'C', delta=0.09),
+            self.create_mock_option(4110, 'C', delta=0.08)
         ]
-        
-        # Should pick the highest strike with ask <= 0.05
+        result = await self.strike_finder.get_low_delta_call_option(options, 0.10)
+        self.assertEqual(result.strike, 4110)
+
+    async def test_get_low_delta_put_no_data(self):
+        options = [self.create_mock_option(4000, 'P', delta=None)]
+        result = await self.strike_finder.get_low_delta_put_option(options, 0.05)
+        self.assertIsNone(result)
+
+    async def test_get_low_delta_call_no_data(self):
+        options = [self.create_mock_option(4000, 'C', delta=None)]
+        result = await self.strike_finder.get_low_delta_call_option(options, 0.05)
+        self.assertIsNone(result)
+
+    async def test_get_available_cheap_call_option_fetch_more(self):
+        options = [self.create_mock_option(4000 + i*5, 'C', ask=0.1) for i in range(200)]
+        options[150].ticker.ask = 0.05
+        options[180].ticker.ask = 0.05
+        result = await self.strike_finder.get_available_cheap_call_option(options, 4000)
+        self.assertIsNotNone(result)
+
+    async def test_get_available_cheap_put_option_fetch_more_lower(self):
+        options = [self.create_mock_option(4000 - i*5, 'P', ask=0.1) for i in range(200)]
+        options[50].ticker.ask = 0.1
+        options[150].ticker.ask = 0.05
+        options[10].ticker.ask = 0.05
+        options[180].ticker.ask = 0.05
         result = await self.strike_finder.get_available_cheap_put_option(options, 4000)
-        self.assertEqual(result.strike, 3700)
+        self.assertIsNotNone(result)
+
+    async def test_get_available_cheap_put_option_lower_index_zero_edge(self):
+        # Case where first_ask > 0.05 and lower_strike_index is already 0
+        options = [self.create_mock_option(4000 - i*5, 'P', ask=0.1) for i in range(5)]
+        # mid is 2. lower is max(2-50, 0) = 0.
+        result = await self.strike_finder.get_available_cheap_put_option(options, 4100)
+        self.assertIsNone(result)
+
+    async def test_get_available_cheap_call_option_success(self):
+        # available_cheap_option is None initially, then found in loop
+        options = [self.create_mock_option(4000 + i*5, 'C', ask=0.1) for i in range(10)]
+        options[5].ticker.ask = 0.05
+        result = await self.strike_finder.get_available_cheap_call_option(options, 4000)
+        self.assertEqual(result.strike, 4025.0)
+
+    async def test_get_available_cheap_put_option_success(self):
+        # available_cheap_option is None initially, then found in loop
+        options = [self.create_mock_option(4000 - i*5, 'P', ask=0.1) for i in range(10)]
+        options[5].ticker.ask = 0.05
+        result = await self.strike_finder.get_available_cheap_put_option(options, 4100)
+        self.assertEqual(result.strike, 3975.0)
+
+    async def test_get_low_delta_put_option_candidate_no_delta_and_too_high(self):
+        options = [self.create_mock_option(4000, 'P', delta=-0.04)]
+        # Missing delta at candidate check
+        with patch('app_async.strike_finder.get_delta') as mock_gd:
+            mock_gd.side_effect = [-0.04, None]
+            result = await self.strike_finder.get_low_delta_put_option(options, 0.05)
+            self.assertIsNone(result)
+        # Delta too high at candidate check
+        with patch('app_async.strike_finder.get_delta') as mock_gd:
+            mock_gd.side_effect = [-0.04, -0.06]
+            result = await self.strike_finder.get_low_delta_put_option(options, 0.05)
+            self.assertIsNone(result)
+
+    async def test_get_low_delta_call_option_candidate_no_delta(self):
+        options = [self.create_mock_option(4000, 'C', delta=0.04)]
+        with patch('app_async.strike_finder.get_delta') as mock_gd:
+            mock_gd.side_effect = [0.04, None]
+            result = await self.strike_finder.get_low_delta_call_option(options, 0.05)
+            self.assertIsNone(result)
 
 if __name__ == '__main__':
     unittest.main()

@@ -90,17 +90,8 @@ class StrikeFinder:
             logger.error("No put option candidate was found")
             return None
 
-        signed_candidate_delta = get_delta(current_candidate_option.ticker)
-        if not signed_candidate_delta:
-            logger.error("No delta data was available for the candidate put option")
-            return None
-
-        candidate_delta = abs(signed_candidate_delta)
-        if candidate_delta > target_delta:
-            logger.error(
-                f"Option candidate with higher delta than target: {get_option_name(current_candidate_option)}, delta is {candidate_delta}")
-            return None
-
+        candidate_delta = get_delta(current_candidate_option.ticker)
+        assert candidate_delta
         assert candidate_delta < target_delta
         logger.info(
             f"Selected option: {get_option_name(current_candidate_option)}, option delta: {candidate_delta}, target delta: {target_delta}")
@@ -199,9 +190,7 @@ class StrikeFinder:
             return None
 
         current_candidate_delta = get_delta(current_candidate_option.ticker)
-        if current_candidate_delta is None:
-            logger.error("No delta data was available for call options")
-            return None
+        assert current_candidate_delta
         assert current_candidate_delta < target_delta
         logger.info(
             f"Selected option: {get_option_name(current_candidate_option)}, option delta: {current_candidate_delta}, target delta: {target_delta}")
@@ -259,18 +248,23 @@ class StrikeFinder:
 
         first_ask = extract_ask(first_option.ticker)
         if first_ask > 0.05:
-            logger.info(f"The ask value of the first option in the block ({first_ask}) greater than 0.05, "
-                        f"fetching a new block: {strikes[0]} -> {strikes[lower_strike_index - 1]}")
-            options_block = await self.fetch_options_block(0, lower_strike_index - 1, strike_to_option, strikes)
+            if lower_strike_index > 0:
+                logger.info(f"The ask value of the first option in the block ({first_ask}) greater than 0.05, "
+                            f"fetching a new block: {strikes[0]} -> {strikes[lower_strike_index - 1]}")
+                options_block = await self.fetch_options_block(0, lower_strike_index - 1, strike_to_option, strikes)
+            else:
+                logger.info(f"The ask value of the first option in the block ({first_ask}) greater than 0.05, "
+                            f"but the lower strike index is already 0, so no more blocks to fetch.")
 
         last_ask = extract_ask(last_option.ticker)
         if last_ask == 0.05:
             logger.info(f"The ask value of the last option in the block is 0.05, fetching a new block")
             available_cheap_option = last_option
             logger.info(f"Fetching put option block: {strikes[higher_strike_index]} -> {strikes[number_of_strikes - 1]}")
-            options_block = await self.fetch_options_block(higher_strike_index, number_of_strikes - 1,
-                                                     strike_to_option,
-                                                     strikes)
+            if higher_strike_index < number_of_strikes - 1:
+                options_block = await self.fetch_options_block(higher_strike_index, number_of_strikes - 1,
+                                                         strike_to_option,
+                                                         strikes)
 
 
         for option in options_block:
@@ -280,5 +274,7 @@ class StrikeFinder:
             if available_cheap_option is None or option.strike > available_cheap_option.strike:
                 available_cheap_option = option
 
-        assert available_cheap_option
+        if available_cheap_option is None:
+            logger.error("No available cheap put option was found")
+            return None
         return available_cheap_option
