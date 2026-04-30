@@ -85,7 +85,7 @@ def setup_subscriptions(ib, contracts):
     ib.qualifyContracts(*contracts)
     for contract in contracts:
         ib.reqMktData(contract, '', False, False)
-    ib.pendingTickersEvent += on_pending_tickers    
+    ib.pendingTickersEvent += on_pending_tickers
 
 
 def main():
@@ -117,26 +117,33 @@ def main():
     else:
         print("Initial connection failed. Will attempt to reconnect in the loop.")
 
-    # 5. Run the event loop, waking up every UPDATE_INTERVAL_SECONDS to flush to Google Sheets
     last_update_time = time.time()
 
     try:
         while True:
+            # --- RECONNECT BLOCK ---
             if not ib.isConnected():
                 print("Disconnected from IB. Attempting to reconnect...")
-                try:
-                    ib.disconnect() # Ensure old connection is closed
-                    tws_connection.connect(QUOTE_UPDATER_CLIENT_ID)
-                    ib = tws_connection.ib
-                    setup_subscriptions(ib, contracts)
-                    print("Reconnected and re-subscribed.")
-                except Exception as e:
-                    print(f"Reconnect failed: {e}. Retrying in 10 seconds...")
-                    time.sleep(10)
-                    continue
+                while True:  # Keep retrying until reconnected
+                    try:
+                        ib.disconnect()
+                        tws_connection.connect(QUOTE_UPDATER_CLIENT_ID)
+                        ib = tws_connection.ib
+                        setup_subscriptions(ib, contracts)
+                        print("Reconnected and re-subscribed.")
+                        break
+                    except Exception as e:
+                        print(f"Reconnect failed: {e}. Retrying in 10 seconds...")
+                        time.sleep(10)
 
-            ib.sleep(1)
+            # --- MAIN SLEEP (catches mid-sleep disconnects) ---
+            try:
+                ib.sleep(1)
+            except (ConnectionError, Exception) as e:
+                print(f"Connection lost during sleep: {e}. Will attempt to reconnect...")
+                continue  # Jump back to top of loop → triggers reconnect block
 
+            # --- PERIODIC SHEET UPDATE ---
             if time.time() - last_update_time >= UPDATE_INTERVAL_SECONDS:
                 try:
                     periodic_sheet_updater(quotes_worksheet, leverage_worksheet)

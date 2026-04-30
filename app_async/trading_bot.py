@@ -3,9 +3,11 @@ import math
 import re
 import sys
 import time
+import logging
 from datetime import date, datetime
+from typing import Optional, List, Union, Dict, Any
 
-from ib_insync import IB, LimitOrder, MarketOrder, StopOrder
+from ib_insync import IB, LimitOrder, MarketOrder, StopOrder, Contract, Position, Trade, Ticker
 
 from utilities.ib_utils import SellOptionResult, MINIMAL_SELL_PRICE
 from utilities.utils import *
@@ -14,52 +16,56 @@ from .market_data_fetcher import MarketDataFetcher
 from .account_data import AccountData
 from .connection_manager import ConnectionManager
 
-
 logger = logging.getLogger(__name__)
-MAIN_MINIMAL_SAFE_CUSHION = 0
-LATE_MINIMAL_SAFE_CUSHION = 0
-SAFETY_MARGIN = 1000
+
+MAIN_MINIMAL_SAFE_CUSHION = 0.0
+LATE_MINIMAL_SAFE_CUSHION = 0.0
+SAFETY_MARGIN = 1000.0
 CANCELLED_TRADE_MESSAGE_PATTERN = r"INITIAL MARGIN\s+\[(?P<init_margin>[\d,.]+).*?VALUATION UNCERTAINTY\s+\[(?P<uncertainty>[\d,.]+)"
 
-
 class TradingBot:
-    _instance = None
+    """
+    Singleton manager for high-level trading operations.
+    Handles position management, order placement, and margin checks.
+    """
+    _instance: Optional['TradingBot'] = None
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls) -> 'TradingBot':
         if cls._instance is None:
             cls._instance = super(TradingBot, cls).__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self):
-        if not self._initialized:
-            # Accessing shared singleton dependencies
-            self.ib = ConnectionManager().ib
-            self.market_data_fetcher = MarketDataFetcher()
-            self.account_data = AccountData()
+    def __init__(self) -> None:
+        if self._initialized:
+            return
+            
+        self.ib = ConnectionManager().ib
+        self.market_data_fetcher = MarketDataFetcher()
+        self.account_data = AccountData()
 
-            self.req_all_open_orders_lock = asyncio.Lock()
-            self.req_positions_lock = asyncio.Lock()
-            self.last_request_positions_time = 0
-            self.last_request_all_open_trades_time = 0
-            self.price_increments = []
-            logger.info("TradingBot singleton initialized.")
-            self._initialized = True
+        self.req_all_open_orders_lock = asyncio.Lock()
+        self.req_positions_lock = asyncio.Lock()
+        self.last_request_positions_time = 0.0
+        self.last_request_all_open_trades_time = 0.0
+        self.price_increments: List[Any] = []
+        
+        logger.info("TradingBot singleton initialized.")
+        self._initialized = True
 
-    async def get_short_options(self):
-        """Fetches active short option positions with optional server refresh."""
-
+    async def get_short_options(self) -> List[Position]:
+        """Fetches active short option positions with a 60s cache."""
         should_use_cache = time.time() - self.last_request_positions_time < 60
         if not should_use_cache and not self.req_positions_lock.locked():
             async with self.req_positions_lock:
                 logger.debug("Requesting fresh positions from IB server...")
-                # reqPositionsAsync returns the list directly (Optimization)
                 await self.ib.reqPositionsAsync()
                 self.last_request_positions_time = time.time()
 
         positions = self.ib.positions(MY_ACCOUNT)
         if not positions:
-            logger.warning("No position were found")
+            logger.warning("No positions were found")
+            return []
 
         option_positions = []
         for position in positions:
@@ -74,7 +80,8 @@ class TradingBot:
             await self.market_data_fetcher.update_ticker_data(options)
         return option_positions
 
-    async def get_open_trades(self):
+    async def get_open_trades(self) -> List[Trade]:
+        """Fetches open option trades with a 300s cache."""
         should_use_cache = time.time() - self.last_request_all_open_trades_time < 300
         if not should_use_cache:
             async with self.req_all_open_orders_lock:
@@ -84,13 +91,12 @@ class TradingBot:
         open_trades = [t for t in self.ib.openTrades() if not is_trade_cancelled(t) and t.contract.secType == 'OPT']
         
         # Link tickers
-        tickers = self.ib.tickers()
+        tickers = {t.contract.conId: t for t in self.ib.tickers()}
         for trade in open_trades:
             if not hasattr(trade.contract, 'ticker'):
-                for t in tickers:
-                    if t.contract.conId == trade.contract.conId:
-                        trade.contract.ticker = t
-                        break
+                con_id = trade.contract.conId
+                if con_id in tickers:
+                    trade.contract.ticker = tickers[con_id]
 
         # Update sell trade tickers
         sell_trades = [t for t in open_trades if t.order.action.upper() == 'SELL']
@@ -99,22 +105,26 @@ class TradingBot:
         
         return open_trades
 
-    def place_order(self, contract, order):
+    def place_order(self, contract: Contract, order: Union[LimitOrder, MarketOrder, StopOrder]) -> Trade:
+        """Places an order and invalidates the open trades cache."""
         logger.info(f"Placing {order.action} order for {get_option_name(contract)}")
         trade = self.ib.placeOrder(contract, order)
-        self.last_request_all_open_trades_time = 0
+        self.last_request_all_open_trades_time = 0.0
         return trade
 
-    def cancel_order(self, order):
+    def cancel_order(self, order: Union[LimitOrder, MarketOrder, StopOrder]) -> Trade:
+        """Cancels an order and invalidates the open trades cache."""
         trade = self.ib.cancelOrder(order)
         logger.info(f"Status of cancel: {trade.orderStatus.status}")
-        self.last_request_all_open_trades_time = 0
+        self.last_request_all_open_trades_time = 0.0
         return trade
 
-    def cancel_trade(self, trade):
+    def cancel_trade(self, trade: Trade) -> Trade:
+        """Helper to cancel a Trade's underlying order."""
         return self.cancel_order(trade.order)
 
-    async def close_short_option(self, option, quantity, limit=None):
+    async def close_short_option(self, option: Contract, quantity: float, limit: Optional[float] = None) -> Trade:
+        """Closes a short option position, cancelling existing BUY orders first."""
         open_trades = await self.get_open_trades()
         for t in open_trades:
             if option.conId == t.contract.conId and t.order.action.upper() == 'BUY':
@@ -131,25 +141,33 @@ class TradingBot:
             order.tif = 'GTC'
         return self.place_order(option, order)
 
-    async def close_short_option_position(self, position):
+    async def close_short_option_position(self, position: Position) -> Trade:
+        """Helper to close an entire short position."""
         return await self.close_short_option(position.contract, -position.position)
 
-    async def verify_price_increments_exist(self, contract):
+    async def verify_price_increments_exist(self, contract: Contract) -> None:
+        """Ensures the price_increments cache is populated for the given contract."""
         if not self.price_increments:
             details = await self.ib.reqContractDetailsAsync(contract)
-            market_rule_id = int(details[0].marketRuleIds.split(',')[0])
-            rule = await self.ib.reqMarketRuleAsync(market_rule_id)
-            self.price_increments = sorted(rule, key=lambda i: i.lowEdge)
+            if details:
+                market_rule_id = int(details[0].marketRuleIds.split(',')[0])
+                rule = await self.ib.reqMarketRuleAsync(market_rule_id)
+                self.price_increments = sorted(rule, key=lambda i: i.lowEdge)
 
-    async def adjust_limit_to_market_rules(self, contract, raw_limit):
+    async def adjust_limit_to_market_rules(self, contract: Contract, raw_limit: float) -> float:
+        """Adjusts a raw limit price to comply with exchange tick size rules."""
         await self.verify_price_increments_exist(contract)
+        if not self.price_increments:
+            return round(raw_limit, 2)
+            
         current_increment = self.price_increments[0].increment
         for i in self.price_increments:
             if raw_limit > i.lowEdge:
                 current_increment = i.increment
         return round(round(raw_limit / current_increment) * current_increment, 6)
 
-    async def add_stop_loss(self, position, stop_loss_per_option):
+    async def add_stop_loss(self, position: Position, stop_loss_per_option: float) -> Trade:
+        """Adds a GTC stop loss order for a position."""
         raw_stop = position.avgCost / 100 + stop_loss_per_option
         stop_price = await self.adjust_limit_to_market_rules(position.contract, raw_stop)
         
@@ -160,7 +178,8 @@ class TradingBot:
         logger.info(f"Adding stop loss for {get_option_name(position.contract)} at {stop_price}")
         return self.ib.placeOrder(position.contract, order)
 
-    async def test_order(self, option, number_of_options, limit):
+    async def test_order(self, option: Contract, number_of_options: float, limit: float) -> SellOptionResult:
+        """Performs a what-if order check to validate margin impact."""
         assert number_of_options > 0
         logger.debug(f"Checking {option.right} {option.strike} for {number_of_options} options")
 
@@ -170,40 +189,36 @@ class TradingBot:
         result = SellOptionResult()
         order_state = await self.ib.whatIfOrderAsync(option, order)
         
-        if not hasattr(order_state, 'equityWithLoanAfter'):
-            logger.error(f"ib.whatIfOrderAsync returned an Order state with no 'equityWithLoanAfter' field.")
-            return result
-
-        if float(order_state.equityWithLoanAfter) == sys.float_info.max:
-            logger.error(f"Response has no real data, the market is probably closed")
+        if not hasattr(order_state, 'equityWithLoanAfter') or float(order_state.equityWithLoanAfter) == sys.float_info.max:
+            logger.error("What-if check failed: invalid data or market closed.")
             return result
 
         init_margin_after = float(order_state.initMarginAfter)
-        previous_day_equity_with_loan = await self.account_data.get_previous_day_equity_with_loan()
-        safe_init_margin_after = init_margin_after + SAFETY_MARGIN
-        is_order_possible = safe_init_margin_after < previous_day_equity_with_loan
+        previous_day_equity = await self.account_data.get_previous_day_equity_with_loan()
+        
+        if (init_margin_after + SAFETY_MARGIN) >= previous_day_equity:
+            return result
 
-        maintenance_margin_after = float(order_state.maintMarginAfter)
-        net_liquidation_value = await self.account_data.get_net_liquidation_value()
-        margin_maintenance_requirement = await self.account_data.get_margin_maintenance_requirement()
+        maint_margin_after = float(order_state.maintMarginAfter)
+        net_liq = await self.account_data.get_net_liquidation_value()
+        maint_req = await self.account_data.get_margin_maintenance_requirement()
         
-        current_cushion = (net_liquidation_value - margin_maintenance_requirement) / net_liquidation_value
-        projected_cushion = (net_liquidation_value - maintenance_margin_after) / net_liquidation_value
+        current_cushion = (net_liq - maint_req) / net_liq
+        projected_cushion = (net_liq - maint_margin_after) / net_liq
         
-        minimal_safe_cushion = self.calculate_minimal_safe_cushion(current_cushion)
-        if projected_cushion < minimal_safe_cushion:
+        if projected_cushion < self.calculate_minimal_safe_cushion(current_cushion):
             result.is_low_projected_cushion = True
             return result
 
-        result.success = is_order_possible
+        result.success = True
         return result
 
-    def calculate_minimal_safe_cushion(self, current_cushion):
-        if is_reduced_safe_cushion_time():
-            return LATE_MINIMAL_SAFE_CUSHION
-        return MAIN_MINIMAL_SAFE_CUSHION
+    def calculate_minimal_safe_cushion(self, current_cushion: float) -> float:
+        """Returns the minimal safe cushion based on the time of day."""
+        return LATE_MINIMAL_SAFE_CUSHION if is_reduced_safe_cushion_time() else MAIN_MINIMAL_SAFE_CUSHION
 
-    async def modify_stop_loss(self, stop_loss_trade, new_stop_loss):
+    async def modify_stop_loss(self, stop_loss_trade: Trade, new_stop_loss: float) -> Trade:
+        """Updates an existing stop loss order."""
         stop_loss_price = await self.adjust_limit_to_market_rules(stop_loss_trade.contract, new_stop_loss)
         stop_loss_trade.order.auxPrice = stop_loss_price
         stop_loss_trade.order.usePriceMgmtAlgo = False
@@ -211,20 +226,17 @@ class TradingBot:
         stop_loss_trade.order.tif = 'GTC'
         stop_loss_trade.order.transmit = True
         logger.info(f"Modifying a stop loss order for {get_option_name(stop_loss_trade.contract)}")
-        trade = self.ib.placeOrder(stop_loss_trade.contract, stop_loss_trade.order)
-        return trade
+        return self.ib.placeOrder(stop_loss_trade.contract, stop_loss_trade.order)
 
-    async def calculate_limit(self, contract, bid, ask):
-        assert not math.isnan(bid)
-        assert not math.isnan(ask)
-
+    async def calculate_limit(self, contract: Contract, bid: float, ask: float) -> float:
+        """Calculates a mid-point limit price adjusted for market rules."""
         if bid < 0:
             return ask
-        spread = ask - bid
-        raw_limit = bid + spread / 2
+        raw_limit = bid + (ask - bid) / 2
         return await self.adjust_limit_to_market_rules(contract, raw_limit)
 
-    async def sell(self, contract, quantity):
+    async def sell(self, contract: Contract, quantity: float) -> Trade:
+        """Executes a sell order."""
         ticker = contract.ticker
         assert ticker
         limit = await self.calculate_limit(contract, ticker.bid, ticker.ask)
@@ -238,14 +250,12 @@ class TradingBot:
         await asyncio.sleep(2)
         return trade
 
-    async def try_to_sell(self, contract, quantity):
+    async def try_to_sell(self, contract: Contract, quantity: float) -> SellOptionResult:
+        """High-level attempt to sell an option, including validation and what-if checks."""
         ticker = contract.ticker
         assert ticker
 
         result = SellOptionResult()
-        result.success = False
-        result.no_option_above_minimal_sell_price = False
-
         if math.isnan(ticker.bid) or ticker.ask < 0:
             logger.info(f"Sell of {get_option_name(contract)} failed: bid={ticker.bid}, ask={ticker.ask}")
             return result
@@ -262,45 +272,49 @@ class TradingBot:
             return result
 
         trade = await self.sell(contract, quantity)
-        is_cancelled = is_trade_cancelled(trade)
-        if is_cancelled and quantity == 1:
-            for trade_log_entry in trade.log:
-                if "PLUS VALUATION UNCERTAINTY" in trade_log_entry.message:
-                    match = re.search(CANCELLED_TRADE_MESSAGE_PATTERN, trade_log_entry.message)
-                    init_margin_after = float(match.group('init_margin').replace(',', ''))
-                    valuation_uncertainty = float(match.group('uncertainty').replace(',', ''))
-                    logger.info(f"Initial margin: {init_margin_after}, valuation uncertainty: {valuation_uncertainty}")
-                    result.required_initial_margin = await self.account_data.get_previous_day_equity_with_loan()
-                    result.initial_margin_after = init_margin_after + valuation_uncertainty
-                    break
+        if is_trade_cancelled(trade):
+            if quantity == 1:
+                self._handle_cancelled_trade_info(trade, result)
+            return result
 
-        if not is_cancelled:
-            result.trade = trade
-
-        result.success = not is_cancelled
+        result.trade = trade
+        result.success = True
         return result
 
-    def calculate_minimal_sell_price(self, last_price):
+    def _handle_cancelled_trade_info(self, trade: Trade, result: SellOptionResult) -> None:
+        """Extracts margin info from a cancelled trade's log."""
+        for entry in trade.log:
+            if "PLUS VALUATION UNCERTAINTY" in entry.message:
+                match = re.search(CANCELLED_TRADE_MESSAGE_PATTERN, entry.message)
+                if match:
+                    init = float(match.group('init_margin').replace(',', ''))
+                    uncert = float(match.group('uncertainty').replace(',', ''))
+                    result.initial_margin_after = init + uncert
+                    break
+
+    def calculate_minimal_sell_price(self, last_price: float) -> float:
+        """Determines the minimum price for selling based on account type and time."""
         if self.account_data.is_portfolio_margin() and is_late_regular_hours():
-            return 0
+            return 0.0
         if last_price == 0.05 and is_regular_hours():
             return 0.1
         return MINIMAL_SELL_PRICE
 
-    def buy_low_cost(self, option, quantity):
+    def buy_low_cost(self, option: Contract, quantity: float) -> Trade:
+        """Places a low-cost buy order (e.g., for margin relaxation)."""
         order = LimitOrder('BUY', quantity, 0.05, account=MY_ACCOUNT, usePriceMgmtAlgo=False)
         order.outsideRth = True
         order.tif = 'GTC'
-        trade = self.ib.placeOrder(option, order)
-        return trade
+        return self.ib.placeOrder(option, order)
 
-    async def get_initial_margin_change(self, option, quantity):
+    async def get_initial_margin_change(self, option: Contract, quantity: float) -> float:
+        """Calculates the projected initial margin change for a potential buy order."""
         order = LimitOrder('BUY', quantity, 0.05, whatIf=True, account=MY_ACCOUNT,
                            usePriceMgmtAlgo=False, outsideRth=True, tif='GTC')
         order_state = await self.ib.whatIfOrderAsync(option, order)
 
         if float(order_state.equityWithLoanAfter) == sys.float_info.max:
-            logger.error(f"Response has no real data, the market is probably closed")
-            return 0
+            logger.error("What-if check for margin change failed.")
+            return 0.0
 
         return float(order_state.initMarginChange)

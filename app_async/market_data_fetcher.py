@@ -1,8 +1,11 @@
 import asyncio
 import math
+import time
+import logging
+from typing import Optional, List, Set, Union, Any
 import exchange_calendars as ecals
 import pandas as pd
-from ib_insync import Index
+from ib_insync import Index, Ticker, Contract
 
 from utilities.utils import *
 from utilities.ib_utils import get_delta, req_id_to_target_delta, is_hollow
@@ -16,14 +19,16 @@ logger = logging.getLogger(__name__)
 LIVE_DATA = 1
 FROZEN_DATA = 2
 
-def get_gamma(ticker):
+def get_gamma(ticker: Ticker) -> float:
+    """Extracts gamma from ticker greeks (last or model)."""
     if ticker.lastGreeks and ticker.lastGreeks.gamma is not None:
         return ticker.lastGreeks.gamma
     if ticker.modelGreeks and ticker.modelGreeks.gamma is not None:
         return ticker.modelGreeks.gamma
     return math.nan
 
-def get_implied_volatility(ticker):
+def get_implied_volatility(ticker: Ticker) -> float:
+    """Extracts implied volatility from ticker greeks (last or model)."""
     if ticker.lastGreeks and ticker.lastGreeks.impliedVol is not None:
         return ticker.lastGreeks.impliedVol
     if ticker.modelGreeks and ticker.modelGreeks.impliedVol is not None:
@@ -31,29 +36,35 @@ def get_implied_volatility(ticker):
     return math.nan
 
 class MarketDataFetcher:
-    _instance = None
+    """
+    Singleton manager for fetching and monitoring market data.
+    Handles real-time ticker updates and SPX-related calculations.
+    """
+    _instance: Optional['MarketDataFetcher'] = None
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls) -> 'MarketDataFetcher':
         if cls._instance is None:
             cls._instance = super(MarketDataFetcher, cls).__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self):
-        if not self._initialized:
-            self.ib = ConnectionManager().ib
-            self.market_data_state = LIVE_DATA
-            self.registered_con_ids = set()
-            self.last_implied_volatility = 0.0
-
-            # Use a lock for market data type switching
-
-            self._state_lock = asyncio.Lock()
+    def __init__(self) -> None:
+        if self._initialized:
+            return
             
-            logger.info("MarketDataFetcher initialized.")
-            self._initialized = True
+        self.ib = ConnectionManager().ib
+        self.market_data_state = LIVE_DATA
+        self.registered_con_ids: Set[int] = set()
+        self.last_implied_volatility = 0.0
 
-    def _register_ticker(self, ticker):
+        # Use a lock for market data type switching
+        self._state_lock = asyncio.Lock()
+        
+        logger.info("MarketDataFetcher initialized.")
+        self._initialized = True
+
+    def _register_ticker(self, ticker: Optional[Ticker]) -> None:
+        """Registers a callback for ticker updates if not already registered."""
         if not ticker:
             return
         con_id = ticker.contract.conId
@@ -62,7 +73,8 @@ class MarketDataFetcher:
             self.registered_con_ids.add(con_id)
             logger.debug(f"Registered update handler for {get_option_name(ticker.contract)}")
 
-    async def get_spx_price(self):
+    async def get_spx_price(self) -> float:
+        """Returns the current SPX index price, falling back to close price if market is closed."""
         spx = Index('SPX', 'CBOE', 'USD')
         spx_ticker = self.ib.ticker(spx)
         
@@ -80,19 +92,21 @@ class MarketDataFetcher:
             
         return spx_ticker.last
 
-    def get_ticker(self, option):
+    def get_ticker(self, option: Contract) -> Optional[Ticker]:
+        """Retrieves a ticker from the cache or from an attribute on the contract."""
         ticker = self.ib.ticker(option)
         if ticker:
             return ticker
         return getattr(option, 'ticker', None)
 
-    def get_last_price(self, option):
+    def get_last_price(self, option: Contract) -> float:
+        """Returns the last price for a given contract."""
         ticker = self.get_ticker(option)
         if not ticker or math.isnan(ticker.last):
             return math.nan
         return ticker.last
 
-    async def ensure_market_data_type(self):
+    async def ensure_market_data_type(self) -> None:
         """Ensures the correct market data type (Live vs Frozen) based on market hours."""
         async with self._state_lock:
             cboe = ecals.get_calendar("XCBF")
@@ -104,10 +118,10 @@ class MarketDataFetcher:
                 self.ib.reqMarketDataType(target_state)
                 self.market_data_state = target_state
 
-    def on_option_ticker_update(self, ticker):
+    def on_option_ticker_update(self, ticker: Ticker) -> None:
         """Handle real-time updates for options, with throttling."""
         now = time.time()
-        last_time = getattr(ticker, 'last_processed_time', 0)
+        last_time = getattr(ticker, 'last_processed_time', 0.0)
         
         gamma = get_gamma(ticker)
         # Slower updates for low-gamma options (further out of money or illiquid)
@@ -125,10 +139,7 @@ class MarketDataFetcher:
         gamma_str = f"{gamma:.3f}" if not math.isnan(gamma) else "N/A"
         logger.info(f"Update: {get_option_name(option)} | Price: {price} | Delta: {delta_str} | Gamma: {gamma_str}")
 
-        # Note: Subscription cleanup is handled separately or can be added here if highly selective.
-        # Periodic cleanup is usually safer to avoid constant churning during volatile markets.
-
-    async def update_ticker_data(self, contracts):
+    async def update_ticker_data(self, contracts: List[Contract]) -> None:
         """Qualify contracts and request fresh tickers for a batch of contracts."""
         if not contracts:
             return
@@ -150,7 +161,7 @@ class MarketDataFetcher:
         for contract in contracts:
             contract.ticker = self.ib.ticker(contract)
 
-    async def req_mkt_data(self, contract, is_snapshot=False):
+    async def req_mkt_data(self, contract: Contract, is_snapshot: bool = False) -> Ticker:
         """Request market data for a single contract using reqTickersAsync."""
         await self.qualify([contract])
         await self.ensure_market_data_type()
@@ -160,20 +171,22 @@ class MarketDataFetcher:
         self._register_ticker(ticker)
         return ticker
 
-    def get_delta(self, option):
+    def get_delta(self, option: Contract) -> str:
+        """Returns the absolute delta as a formatted string."""
         ticker = self.get_ticker(option)
         delta = get_delta(ticker) if ticker else None
         if delta is None or math.isnan(delta):
             return ""
         return str(round(abs(delta), 3))
 
-    def get_ask(self, option):
+    def get_ask(self, option: Contract) -> float:
+        """Returns the current ask price, or max float if unavailable."""
         ticker = self.get_ticker(option)
         if not ticker or math.isnan(ticker.ask) or ticker.ask < 0:
             return sys.float_info.max
         return ticker.ask
 
-    async def get_spx_implied_volatility(self):
+    async def get_spx_implied_volatility(self) -> float:
         """Calculate average implied volatility from ATM SPX options."""
         spx_price = await self.get_spx_price()
         if math.isnan(spx_price):
@@ -222,9 +235,11 @@ class MarketDataFetcher:
         self.last_implied_volatility = implied_volatility
         return implied_volatility
 
-    async def get_chains(self, underlying):
+    async def get_chains(self, underlying: Contract) -> List[Any]:
+        """Returns the option chains for a given underlying contract."""
         await self.qualify([underlying])
         return await self.ib.reqSecDefOptParamsAsync(underlying.symbol, '', underlying.secType, underlying.conId)
 
-    async def qualify(self, contracts):
+    async def qualify(self, contracts: List[Contract]) -> List[Contract]:
+        """Qualifies one or more contracts."""
         return await self.ib.qualifyContractsAsync(*contracts)
