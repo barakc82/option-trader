@@ -45,6 +45,7 @@ class MarketDataFetcher:
             self.market_data_state = LIVE_DATA
             self.registered_con_ids = set()
             self.last_implied_volatility = 0.0
+            self.last_implied_volatility_calculation_time = 0
 
             # Use a lock for market data type switching
 
@@ -174,6 +175,10 @@ class MarketDataFetcher:
         return ticker.ask
 
     async def get_spx_implied_volatility(self):
+
+        if self.last_implied_volatility_calculation_time < REGULAR_HOURS_END_TIME and time.time() > REGULAR_HOURS_END_TIME:
+            self.last_implied_volatility = 0.0
+
         """Calculate average implied volatility from ATM SPX options."""
         spx_price = await self.get_spx_price()
         if math.isnan(spx_price):
@@ -220,6 +225,7 @@ class MarketDataFetcher:
             logger.info(f"High IV detected: {implied_volatility:.3f} (Call: {iv_call:.3f}, Put: {iv_put:.3f}) at SPX: {spx_price}")
 
         self.last_implied_volatility = implied_volatility
+        self.last_implied_volatility_calculation_time = time.time()
         return implied_volatility
 
     async def get_chains(self, underlying):
