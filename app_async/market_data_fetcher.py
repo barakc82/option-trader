@@ -5,7 +5,7 @@ import pandas as pd
 from ib_insync import Index
 
 from utilities.utils import *
-from utilities.ib_utils import get_delta, req_id_to_target_delta, is_hollow
+from utilities.ib_utils import get_delta
 
 from .connection_manager import ConnectionManager
 from .option_cache import OptionCache
@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 # Market Data Types
 LIVE_DATA = 1
 FROZEN_DATA = 2
+
 
 def get_gamma(ticker):
     if ticker.lastGreeks and ticker.lastGreeks.gamma is not None:
@@ -176,7 +177,7 @@ class MarketDataFetcher:
 
     async def get_spx_implied_volatility(self):
 
-        if self.last_implied_volatility_calculation_time < REGULAR_HOURS_END_TIME and time.time() > REGULAR_HOURS_END_TIME:
+        if self.last_implied_volatility_calculation_time < REGULAR_HOURS_END_TIME and current_time_of_the_day() > REGULAR_HOURS_END_TIME:
             self.last_implied_volatility = 0.0
 
         """Calculate average implied volatility from ATM SPX options."""
@@ -225,7 +226,7 @@ class MarketDataFetcher:
             logger.info(f"High IV detected: {implied_volatility:.3f} (Call: {iv_call:.3f}, Put: {iv_put:.3f}) at SPX: {spx_price}")
 
         self.last_implied_volatility = implied_volatility
-        self.last_implied_volatility_calculation_time = time.time()
+        self.last_implied_volatility_calculation_time = current_time_of_the_day()
         return implied_volatility
 
     async def get_chains(self, underlying):
