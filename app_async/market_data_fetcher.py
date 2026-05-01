@@ -5,7 +5,7 @@ import pandas as pd
 from ib_insync import Index
 
 from utilities.utils import *
-from utilities.ib_utils import get_delta, req_id_to_target_delta, is_hollow
+from utilities.ib_utils import get_delta
 
 from .connection_manager import ConnectionManager
 from .option_cache import OptionCache
@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 # Market Data Types
 LIVE_DATA = 1
 FROZEN_DATA = 2
+
 
 def get_gamma(ticker):
     if ticker.lastGreeks and ticker.lastGreeks.gamma is not None:
@@ -45,6 +46,7 @@ class MarketDataFetcher:
             self.market_data_state = LIVE_DATA
             self.registered_con_ids = set()
             self.last_implied_volatility = 0.0
+            self.last_implied_volatility_calculation_time = current_time_of_the_day()
 
             # Use a lock for market data type switching
 
@@ -66,18 +68,18 @@ class MarketDataFetcher:
         spx = Index('SPX', 'CBOE', 'USD')
         spx_ticker = self.ib.ticker(spx)
         
-        if not spx_ticker or math.isnan(spx_ticker.last):
-            spx_ticker = await self.req_mkt_data(spx)
-        
         if not spx_ticker:
-            return math.nan
+            spx_ticker = await self.req_mkt_data(spx)
+            if not spx_ticker:
+                logger.error("Could not obtain SPX ticker")
+                return math.nan
             
         if math.isnan(spx_ticker.last):
-            if not is_market_open():
-                logger.warning("Market closed; using SPX close price.")
-                return spx_ticker.close
-            return math.nan
-            
+            if is_regular_hours():
+                return math.nan
+            logger.warning("Market closed; using SPX close price.")
+            return spx_ticker.close
+
         return spx_ticker.last
 
     def get_ticker(self, option):
@@ -174,6 +176,10 @@ class MarketDataFetcher:
         return ticker.ask
 
     async def get_spx_implied_volatility(self):
+
+        if self.last_implied_volatility_calculation_time < REGULAR_HOURS_END_TIME and current_time_of_the_day() > REGULAR_HOURS_END_TIME:
+            self.last_implied_volatility = 0.0
+
         """Calculate average implied volatility from ATM SPX options."""
         spx_price = await self.get_spx_price()
         if math.isnan(spx_price):
@@ -216,10 +222,11 @@ class MarketDataFetcher:
             logger.error(f"IV jump too large ({self.last_implied_volatility:.3f} -> {implied_volatility:.3f}), discarding.")
             return self.last_implied_volatility
 
-        if implied_volatility > 0.9:
+        if implied_volatility > 0.6:
             logger.info(f"High IV detected: {implied_volatility:.3f} (Call: {iv_call:.3f}, Put: {iv_put:.3f}) at SPX: {spx_price}")
 
         self.last_implied_volatility = implied_volatility
+        self.last_implied_volatility_calculation_time = current_time_of_the_day()
         return implied_volatility
 
     async def get_chains(self, underlying):

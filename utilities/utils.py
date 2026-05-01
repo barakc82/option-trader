@@ -40,8 +40,11 @@ logger.setLevel(logging.DEBUG)
 current_thread = threading.local()
 
 
+def current_time_of_the_day() -> dt_time:
+    return datetime.now(new_york_timezone).time()
+
 def get_current_trading_day():
-    now_in_nyc = datetime.now(new_york_timezone).time()
+    now_in_nyc = current_time_of_the_day()
     is_next_day = NEW_OPTION_EXPLORATION_START_TIME < now_in_nyc < AFTER_HOURS_END_TIME
     # today = datetime.today()
     # is_today = today.time() < dt_time(22, 45)
