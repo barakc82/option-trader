@@ -46,7 +46,7 @@ class MarketDataFetcher:
             self.market_data_state = LIVE_DATA
             self.registered_con_ids = set()
             self.last_implied_volatility = 0.0
-            self.last_implied_volatility_calculation_time = 0
+            self.last_implied_volatility_calculation_time = current_time_of_the_day()
 
             # Use a lock for market data type switching
 
