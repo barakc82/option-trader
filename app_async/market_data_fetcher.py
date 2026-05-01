@@ -66,18 +66,18 @@ class MarketDataFetcher:
         spx = Index('SPX', 'CBOE', 'USD')
         spx_ticker = self.ib.ticker(spx)
         
-        if not spx_ticker or math.isnan(spx_ticker.last):
-            spx_ticker = await self.req_mkt_data(spx)
-        
         if not spx_ticker:
-            return math.nan
+            spx_ticker = await self.req_mkt_data(spx)
+            if not spx_ticker:
+                logger.error("Could not obtain SPX ticker")
+                return math.nan
             
         if math.isnan(spx_ticker.last):
-            if not is_market_open():
-                logger.warning("Market closed; using SPX close price.")
-                return spx_ticker.close
-            return math.nan
-            
+            if is_regular_hours():
+                return math.nan
+            logger.warning("Market closed; using SPX close price.")
+            return spx_ticker.close
+
         return spx_ticker.last
 
     def get_ticker(self, option):
