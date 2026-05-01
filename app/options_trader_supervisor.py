@@ -24,7 +24,7 @@ if not os.path.exists(OPTION_TRADER_DIR):
 
 LOGS_DIR = f"{OPTION_TRADER_DIR}/logs"
 CONFIG_PATH = f"{OPTION_TRADER_DIR}/config/supervisor_config.json"
-current_running_version = "sync"
+current_running_version = "async"
 
 # Console handler (prints to stdout)
 console_handler = logging.StreamHandler()
@@ -179,10 +179,10 @@ def get_desired_version():
         if os.path.exists(CONFIG_PATH):
             with open(CONFIG_PATH, "r") as f:
                 config = json.load(f)
-                return config.get("version", "sync")
+                return config.get("version", "async")
     except Exception as e:
         logger.error(f"Error reading supervisor config: {e}")
-    return "sync"
+    return "async"
 
 def start_option_trader():
     version = get_desired_version()
