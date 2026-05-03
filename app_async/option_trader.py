@@ -41,12 +41,12 @@ class OptionTrader:
 
         while True:
             try:
-                write_heartbeat()
-                
                 if not self.ib.isConnected():
                     logger.warning("OptionTrader: Task is waiting for IB connection...")
                     await asyncio.sleep(2)
                     continue
+
+                write_heartbeat()
 
                 # Consistent status message
                 logger.info(f"OptionTrader: Checking market status...")
