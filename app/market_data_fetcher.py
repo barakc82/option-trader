@@ -28,9 +28,9 @@ def get_gamma(ticker):
 
 
 def get_implied_volatility(ticker):
-    if ticker.lastGreeks and ticker.lastGreeks.impliedVol:
+    if ticker.lastGreeks and ticker.lastGreeks.impliedVol and not math.isnan(ticker.lastGreeks.impliedVol):
         return ticker.lastGreeks.impliedVol
-    if ticker.modelGreeks and ticker.modelGreeks.impliedVol:
+    if ticker.modelGreeks and ticker.modelGreeks.impliedVol and not math.isnan(ticker.modelGreeks.impliedVol):
         return ticker.modelGreeks.impliedVol
     return None
 

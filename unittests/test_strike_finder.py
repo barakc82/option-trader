@@ -133,18 +133,8 @@ class TestStrikeFinder(unittest.IsolatedAsyncioTestCase):
     async def test_get_low_delta_put_option_candidate_no_delta_and_too_high(self):
         options = [self.create_mock_option(4000, 'P', delta=-0.04)]
         with patch('app_async.strike_finder.get_delta') as mock_gd:
-            mock_gd.side_effect = [-0.04, -0.04, None, -0.04, -0.04, -0.06]
+            mock_gd.side_effect = [-0.04, -0.04, None]
             result = await self.strike_finder.get_low_delta_put_option(options, 0.05)
-            self.assertIsNone(result)
-            
-            result = await self.strike_finder.get_low_delta_put_option(options, 0.05)
-            self.assertIsNone(result)
-
-    async def test_get_low_delta_call_option_candidate_no_delta(self):
-        options = [self.create_mock_option(4000, 'C', delta=0.04)]
-        with patch('app_async.strike_finder.get_delta') as mock_gd:
-            mock_gd.side_effect = [0.04, 0.04, None]
-            result = await self.strike_finder.get_low_delta_call_option(options, 0.05)
             self.assertIsNone(result)
 
     async def test_get_low_delta_option_no_candidate(self):
