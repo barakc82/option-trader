@@ -150,5 +150,46 @@ class TestStrikeFinder(unittest.IsolatedAsyncioTestCase):
             result = await self.strike_finder.get_low_delta_call_option(options, 0.05)
             self.assertIsNone(result)
 
+    async def test_get_low_delta_call_option_block_end_edge(self):
+        # higher_strike_index + 1 > number_of_strikes - 1
+        options = [self.create_mock_option(4000 + i*5, 'C', delta=0.1) for i in range(10)]
+        options[9].ticker.lastGreeks.delta = 0.04 # One option < target
+        # This will make lowest_delta = 0.04.
+        # So it doesn't enter the `if lowest_delta > target_delta` block.
+        # Let's make ALL deltas in the block > target EXCEPT one that we fetch later? 
+        # No, we want to hit the False branch of `if higher_strike_index + 1 <= number_of_strikes - 1`.
+        # So we need all in block to be > target.
+        for opt in options: opt.ticker.lastGreeks.delta = 0.1
+        # Now lowest_delta = 0.1 > 0.05. Enters 145.
+        # current_candidate = options[9] (delta 0.1).
+        # higher=9, count=10. 10 <= 9 is False. Skips fetch.
+        # To avoid AssertionError at end, we need the loop at 170 to find a better one.
+        # But we didn't fetch more, so options_block is still options[0:10].
+        # If we make one of THEM have a delta < 0.05 in the second loop:
+        with patch('app_async.strike_finder.get_delta') as mock_gd:
+            # 10 calls for first loop, then it uses the same options_block.
+            # 10 calls for second loop.
+            mock_gd.side_effect = [0.1]*10 + [0.04]*10 + [0.04]
+            result = await self.strike_finder.get_low_delta_call_option(options, 0.05)
+            self.assertIsNotNone(result)
+            self.assertEqual(result.strike, 4000.0)
+
+    async def test_get_available_cheap_put_option_first_ask_low(self):
+        options = [self.create_mock_option(4000 - i*5, 'P', ask=0.05) for i in range(10)]
+        result = await self.strike_finder.get_available_cheap_put_option(options, 4100)
+        self.assertIsNotNone(result)
+
+    async def test_get_low_delta_call_option_loop_no_break(self):
+        options = [self.create_mock_option(4000 + i*5, 'C', delta=0.01) for i in range(200)]
+        # mid=100. lower=50. higher=150.
+        # To enter 155, highest_delta < 0.05 and lower > 0.
+        with patch('app_async.strike_finder.get_delta') as mock_gd:
+            # First loop: 101 calls. Let's say all 0.01.
+            # Second loop: 101 calls. Let's say all None.
+            # Third loop (after fetch 0-49): 50 calls. Let's say some 0.04.
+            mock_gd.side_effect = [0.01]*101 + [None]*101 + [0.04]*50 + [0.04]
+            result = await self.strike_finder.get_low_delta_call_option(options, 0.05)
+            self.assertIsNotNone(result)
+
 if __name__ == '__main__':
     unittest.main()
