@@ -206,6 +206,7 @@ class OptionTrader:
                                    f"is too close the current price ({current_price})")
 
             if not matching_position:
+                logger.info(f"Cancelling the stop loss for {get_option_name(open_stop_loss_trade.contract)} because it has no matching position")
                 self.trading_bot.cancel_trade(open_stop_loss_trade)
 
     async def verify_no_open_trades(self):
