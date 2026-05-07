@@ -8,14 +8,27 @@ def update_status_in_spreadsheet(name, program_type, status):
     main_sheet_name = this_user_data['main_sheet_name']
     user_sheet = get_worksheet(main_sheet_name)
     reference_row = this_user_data[program_type]['starting_row']
-    user_sheet.update(values=[[status['cash']]], range_name=f"D{reference_row}")
+    
+    # Collect all updates into a batch payload
+    updates_payload = [
+        {
+            'range': f"D{reference_row}",
+            'values': [[status['cash']]]
+        }
+    ]
 
     current_etf_id_order = [etf_id for etf_id in ETF_ID_ORDER if etf_id in status['holdings']]
 
     for etf_index, etf_id in enumerate(current_etf_id_order):
         holding = status['holdings'][etf_id]
         print(f"{etf_id} ---> {reference_row + etf_index + 3}")
-        user_sheet.update(values=[[holding['quantity']]], range_name=f"B{reference_row + etf_index + 3}")
+        updates_payload.append({
+            'range': f"B{reference_row + etf_index + 3}",
+            'values': [[holding['quantity']]]
+        })
+
+    if updates_payload:
+        user_sheet.batch_update(updates_payload)
 
     #ta125_ptf_holding = status['holdings'][5112628]
     #user_sheet.update(values=[[ta125_ptf_holding['quantity']]], range_name=f"B{reference_row + 4}")
