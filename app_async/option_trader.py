@@ -75,17 +75,20 @@ class OptionTrader:
                     self.connection_failure_start_time = time.time()
                 
                 elapsed = time.time() - self.connection_failure_start_time
-                if elapsed > 300:
-                    logger.critical(f"OptionTrader: Persistent failure for {elapsed:.0f}s. Exiting.")
-                    sys.exit(1)
-                
                 logger.exception(f"OptionTrader: Loop error ({elapsed:.0f}s):")
+                
+                if elapsed > 300:
+                    logger.error("OptionTrader: Persistent failure detected. Continuing to retry indefinitely...")
+                
                 # Attempt to report error status
                 try:
                     await post_current_state({'status': 'Error'})
                 except:
                     pass
-                await asyncio.sleep(10)
+                
+                # Progressive backoff for sleep
+                sleep_time = min(10 + (elapsed // 60) * 10, 60)
+                await asyncio.sleep(sleep_time)
 
     async def sleep(self):
         write_heartbeat()

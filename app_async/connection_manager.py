@@ -36,6 +36,8 @@ class ConnectionManager:
         
         while True:
             await self._ensure_connected()
+            if self.ib.isConnected():
+                await self._check_health()
             # Sleep to allow the event loop to run and periodically check status
             await asyncio.sleep(60)
 
@@ -55,6 +57,16 @@ class ConnectionManager:
             # the while True in connect() will trigger it.
         finally:
             self.is_connecting = False
+
+    async def _check_health(self):
+        """Check if the connection is actually responsive."""
+        try:
+            # reqCurrentTimeAsync is a lightweight way to ping the server
+            await asyncio.wait_for(self.ib.reqCurrentTimeAsync(), timeout=10)
+        except Exception as e:
+            logger.warning(f"Connection health check failed: {e}. Forcing reconnection.")
+            self.ib.disconnect()
+            await self.reconnect()
 
     def on_disconnected(self):
         logger.warning("Disconnected from IB.")

@@ -7,13 +7,25 @@ from pathlib import Path
 from utilities.utils import acquire_single_instance_lock
 from .logging_setup import setup_logging
 from .connection_manager import ConnectionManager
-from .market_data_fetcher import MarketDataFetcher
-from .trading_bot import TradingBot
-from .positions_manager import PositionsManager
 from .option_trader import OptionTrader
 from .option_safeguard import OptionSafeguard
 
 OPTION_TRADER_CLIENT_ID = 1
+
+async def supervisor(task_coro, name):
+    """Supervise a task and restart it if it crashes."""
+    while True:
+        try:
+            logger.info(f"Supervisor: Starting {name}...")
+            await task_coro
+            logger.warning(f"Supervisor: {name} finished unexpectedly. Restarting in 10s...")
+        except asyncio.CancelledError:
+            logger.info(f"Supervisor: {name} was cancelled.")
+            raise
+        except Exception:
+            logger.exception(f"Supervisor: {name} crashed with a fatal error. Restarting in 10s...")
+        
+        await asyncio.sleep(10)
 
 async def main():
     """Application entry point."""
@@ -23,16 +35,15 @@ async def main():
     connection_manager = ConnectionManager()
     
     # 2. Start Task Classes
-    # They will internally access Singletons (MarketDataFetcher, TradingBot, etc.)
     trader = OptionTrader()
     safeguard = OptionSafeguard()
 
     try:
-        # Run everything concurrently
+        # Run everything concurrently under supervision
         await asyncio.gather(
-            connection_manager.connect(client_id=OPTION_TRADER_CLIENT_ID),
-            trader.run(),
-            safeguard.run()
+            supervisor(connection_manager.connect(client_id=OPTION_TRADER_CLIENT_ID), "ConnectionManager"),
+            supervisor(trader.run(), "OptionTrader"),
+            supervisor(safeguard.run(), "OptionSafeguard")
         )
     except asyncio.CancelledError:
         logger.info("Tasks were cancelled during shutdown.")

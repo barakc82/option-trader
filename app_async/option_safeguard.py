@@ -59,12 +59,14 @@ class OptionSafeguard:
                     self.connection_failure_start_time = time.time()
                 
                 elapsed = time.time() - self.connection_failure_start_time
-                if elapsed > 300:
-                    logger.critical(f"OptionSafeguard: Persistent failure for {elapsed:.0f}s. Exiting.")
-                    sys.exit(1)
-                
                 logger.exception(f"OptionSafeguard: Safeguard error ({elapsed:.0f}s):")
-                await asyncio.sleep(10)
+
+                if elapsed > 300:
+                    logger.error("OptionSafeguard: Persistent failure detected. Continuing to retry indefinitely...")
+
+                # Progressive backoff for sleep
+                sleep_time = min(10 + (elapsed // 60) * 10, 60)
+                await asyncio.sleep(sleep_time)
 
     def load_config(self):
         config_path = "config/option_trader_config.json"
