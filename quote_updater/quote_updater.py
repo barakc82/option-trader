@@ -122,27 +122,34 @@ def main():
 
     try:
         while True:
-            if not ib.isConnected():
-                print("Disconnected from IB. Attempting to reconnect...")
-                try:
-                    ib.disconnect() # Ensure old connection is closed
-                    tws_connection.connect(QUOTE_UPDATER_CLIENT_ID)
-                    ib = tws_connection.ib
-                    setup_subscriptions(ib, contracts)
-                    print("Reconnected and re-subscribed.")
-                except Exception as e:
-                    print(f"Reconnect failed: {e}. Retrying in 10 seconds...")
-                    time.sleep(10)
-                    continue
+            try:
+                if not ib.isConnected():
+                    print("Disconnected from IB. Attempting to reconnect...")
+                    try:
+                        ib.disconnect() # Ensure old connection is closed
+                        tws_connection.connect(QUOTE_UPDATER_CLIENT_ID)
+                        ib = tws_connection.ib
+                        setup_subscriptions(ib, contracts)
+                        print("Reconnected and re-subscribed.")
+                    except Exception as e:
+                        print(f"Reconnect failed: {e}. Retrying in 10 seconds...")
+                        time.sleep(10)
+                        continue
 
-            ib.sleep(1)
+                ib.sleep(1)
 
-            if time.time() - last_update_time >= UPDATE_INTERVAL_SECONDS:
-                try:
-                    periodic_sheet_updater(quotes_worksheet, leverage_worksheet)
-                except Exception as e:
-                    print(f"Error during periodic update: {e}")
-                last_update_time = time.time()
+                if time.time() - last_update_time >= UPDATE_INTERVAL_SECONDS:
+                    try:
+                        periodic_sheet_updater(quotes_worksheet, leverage_worksheet)
+                    except Exception as e:
+                        print(f"Error during periodic update: {e}")
+                    last_update_time = time.time()
+            except (ConnectionError, BrokenPipeError) as e:
+                print(f"Connection issue: {e}. Reconnecting in next iteration...")
+                time.sleep(1)
+            except Exception as e:
+                print(f"Unexpected error in main loop: {e}. Continuing...")
+                time.sleep(1)
 
     except KeyboardInterrupt:
         print("Shutting down...")
