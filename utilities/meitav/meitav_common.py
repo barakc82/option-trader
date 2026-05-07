@@ -1,5 +1,7 @@
+import json
+import os
 from datetime import datetime
-
+from pathlib import Path
 
 Barak = 1
 Mom = 2
@@ -8,82 +10,48 @@ Hilush = 3
 Hishtalmut = 0
 Gemel = 1
 
-users_data = {
-    Barak: {
-        'main_sheet_name': 'ברק',
-        'transactions_sheet_name': "Barak-transactions",
-        'max_leveraged_share': 0.9,
-        'min_leveraged_share': 0.5,
-        'next_sell_price_cell': 'V10',
-        Hishtalmut: {
-            "username": "1366666962",
-            "password": "29",
-            'account_id': "098274",
-            'starting_row': 160
-        },
-        Gemel: {
-            "username": "1320193631",
-            "password": "29",
-            'account_id': "099305",
-            'starting_row': 172
-        }
-    },
+# Configuration file is now in the same folder as this script
+CONFIG_FILE = Path(__file__).resolve().parent / "meitav_accounts.json"
 
-    Mom: {
-        'main_sheet_name': 'אמא',
-        'transactions_sheet_name': "Mom-transactions",
-        'max_leveraged_share': 0.2,
-        'min_leveraged_share': 0.05,
-        'next_sell_price_cell': 'E66',
-        Hishtalmut: {
-            "username": "1320194894",
-            "password": "29",
-            'starting_row': 72,
-            'account_id': "099563"
-        },
-        Gemel: {
-            "username": "1320194895",
-            "password": "29",
-            'starting_row': 88,
-            'account_id': "099562"
-        }
-    },
+def _load_users_data():
+    if not CONFIG_FILE.exists():
+        print(f"Warning: Configuration file {CONFIG_FILE} not found.")
+        return {}
+    
+    try:
+        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            # Convert string keys back to integers for compatibility
+            processed_data = {}
+            for user_id, user_info in data.items():
+                processed_user_info = {}
+                for key, value in user_info.items():
+                    if key.isdigit():
+                        processed_user_info[int(key)] = value
+                    else:
+                        processed_user_info[key] = value
+                processed_data[int(user_id)] = processed_user_info
+            return processed_data
+    except Exception as e:
+        print(f"Error loading meitav_accounts.json: {e}")
+        return {}
 
-Hilush: {
-        'main_sheet_name': 'הילוש',
-        'transactions_sheet_name': "Hilush-transactions",
-        'max_leveraged_share': 0.7,
-        'min_leveraged_share': 0.1,
-        'next_sell_price_cell': 'F67',
-        Hishtalmut: {
-            "username": "1320195347",
-            "password": "29",
-            'starting_row': 76,
-            'account_id': "099623"
-        },
-        Gemel: {
-            "username": "1320195719",
-            "password": "29",
-            'starting_row': 88,
-            'account_id': "099686"
-        }
-    }
-}
+users_data = _load_users_data()
 
 hebrew_months = {
-        1: "ינואר",
-        2: "פברואר",
-        3: "מרץ",
-        4: "אפריל",
-        5: "מאי",
-        6: "יוני",
-        7: "יולי",
-        8: "אוגוסט",
-        9: "ספטמבר",
-        10: "אוקטובר",
-        11: "נובמבר",
-        12: "דצמבר"
-    }
+    1: "ינואר",
+    2: "פברואר",
+    3: "מרץ",
+    4: "אפריל",
+    5: "מאי",
+    6: "יוני",
+    7: "יולי",
+    8: "אוגוסט",
+    9: "ספטמבר",
+    10: "אוקטובר",
+    11: "נובמבר",
+    12: "דצמבר"
+}
 
 def get_hebrew_month_year():
     now = datetime.now()
