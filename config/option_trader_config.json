@@ -1,5 +1,6 @@
 {
     "should_guard_positions": true,
     "should_write_options_overnight": true,
-    "should_monitor_only": false
+    "should_monitor_only": false,
+    "spreadsheet_id": "1u2uLtVFnRCimMfymDMYygqg2zk2eK2TrQ4Bl18j8Uwc"
 }
