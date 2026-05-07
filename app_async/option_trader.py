@@ -202,7 +202,8 @@ class OptionTrader:
                         logger.info(f"The ticker for {get_option_name(option)} is missing")
 
                 if stop_loss_ratio > 1.1 or (stop_loss_ratio < 0.9 and required_stop_loss > current_price * 2):
-                    logger.info(f"Going to modify stop loss for {get_option_name(option)}, since the max loss ratio is {stop_loss_ratio:.2f}.")
+                    logger.info(f"Going to modify stop loss for {get_option_name(option)} from {current_stop_loss} to {required_stop_loss:.2f}, "
+                                f"since the max loss ratio is {stop_loss_ratio:.2f}. Order status is {open_stop_loss_trade.orderStatus.status}")
                     await self.trading_bot.modify_stop_loss(open_stop_loss_trade, required_stop_loss)
                 if stop_loss_ratio > 1.1 or (stop_loss_ratio < 0.9 and required_stop_loss <= current_price * 2):
                     logger.warning(f"Cannot modify stop loss because the required stop loss ratio ({required_stop_loss:.2f})"

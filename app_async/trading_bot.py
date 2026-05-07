@@ -204,13 +204,12 @@ class TradingBot:
         return MAIN_MINIMAL_SAFE_CUSHION
 
     async def modify_stop_loss(self, stop_loss_trade, new_stop_loss):
-        stop_loss_price = await self.adjust_limit_to_market_rules(stop_loss_trade.contract, new_stop_loss)
+        stop_loss_price  = await self.adjust_limit_to_market_rules(stop_loss_trade.contract, new_stop_loss)
         stop_loss_trade.order.auxPrice = stop_loss_price
         stop_loss_trade.order.usePriceMgmtAlgo = False
         stop_loss_trade.order.outsideRth = True
         stop_loss_trade.order.tif = 'GTC'
         stop_loss_trade.order.transmit = True
-        logger.info(f"Modifying a stop loss order for {get_option_name(stop_loss_trade.contract)}")
         trade = self.ib.placeOrder(stop_loss_trade.contract, stop_loss_trade.order)
         return trade
 
