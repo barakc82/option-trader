@@ -3,6 +3,8 @@ import sys
 import time
 import json
 import threading
+import pandas as pd
+import exchange_calendars as ecals
 
 from datetime import datetime, timedelta, time as dt_time
 from zoneinfo import ZoneInfo
@@ -11,8 +13,18 @@ from functools import cache
 import pytz
 import logging
 
+# Market hours configuration using New York time
+new_york_timezone = pytz.timezone('America/New_York')
+
+# Utility to get NYSE calendar
+@cache
+def get_nyse_calendar():
+    return ecals.get_calendar("XNYS")
+
+# Precise session markers (NYC time)
+# These are still used for internal logic relative to session boundaries
 JUST_BEFORE_TRADE_END_TIME = dt_time(20, 10)
-PREMARKET_START_TIME = dt_time(20, 15)  # 03:15
+PREMARKET_START_TIME = dt_time(20, 15)  # 20:15 (usually for overnight/early start)
 PREMARKET_END_TIME = dt_time(9, 25)  # 16:25
 REGULAR_HOURS_START_TIME = dt_time(9, 30)  # 16:30
 LATE_REGULAR_HOURS_START_TIME = dt_time(14, 30)  # 21:30
@@ -22,14 +34,6 @@ REGULAR_HOURS_END_TIME = dt_time(16, 00)  # 23:00
 EARLY_CLOSING_END_TIME = dt_time(16, 15)  # 23:15
 AFTER_HOURS_END_TIME = dt_time(17, 0)  # 00:00
 JUST_AFTER_TRADE_END_TIME = dt_time(17, 5)
-
-new_york_timezone = pytz.timezone('America/New_York')
-holidays = ['20250101', '20250109', '20250120', '20250217', '20250418', '20250526', '20250619', '20250704', '20250901',
-            '20251127', '20251225', '20260101', '20260119', '20260216', '20260403', '20260525', '20260619', '20260703',
-            '20260907', '20261126',
-            '20261225', '20270101', '20270118', '20270215', '20270326', '20270531', '20270618', '20270705', '20270906',
-            '20271125',
-            '20271231']
 
 MY_ACCOUNT = 'U15897350'
 
@@ -44,19 +48,21 @@ def current_time_of_the_day() -> dt_time:
     return datetime.now(new_york_timezone).time()
 
 def get_current_trading_day():
-    now_in_nyc = current_time_of_the_day()
-    is_next_day = NEW_OPTION_EXPLORATION_START_TIME < now_in_nyc < AFTER_HOURS_END_TIME
-    # today = datetime.today()
-    # is_today = today.time() < dt_time(22, 45)
-
-    added_days = 1 if is_next_day else 0
-    while True:
-        day = datetime.today() + timedelta(days=added_days)
-        day_string = day.strftime('%Y%m%d')
-        if day.weekday() in range(5) and day_string not in holidays:
-            return day_string
-
-        added_days += 1
+    """Returns the YYYYMMDD string of the current or next trading day."""
+    cal = get_nyse_calendar()
+    now_in_nyc = datetime.now(new_york_timezone)
+    
+    # If we are in the 'overnight' window for the next day's trades
+    if NEW_OPTION_EXPLORATION_START_TIME < now_in_nyc.time() < AFTER_HOURS_END_TIME:
+        # Move to next trading day
+        next_session = cal.next_open(now_in_nyc)
+        return next_session.strftime('%Y%m%d')
+    
+    # If currently a trading day, return it, else return the next one
+    if cal.is_session(now_in_nyc.date().strftime('%Y-%m-%d')):
+        return now_in_nyc.strftime('%Y%m%d')
+    
+    return cal.next_open(now_in_nyc).strftime('%Y%m%d')
 
 
 def is_trade_cancelled(trade_result):
@@ -138,23 +144,33 @@ def get_elapsed_day_fraction():
 
 
 def is_weekend_break():
-    today = datetime.now(new_york_timezone).today()
-    return not is_market_open() and today.weekday() in [5, 6]
+    now_in_nyc = datetime.now(new_york_timezone)
+    return not is_market_open() and now_in_nyc.weekday() in [5, 6]
 
 
 def is_market_open():
-    today = datetime.now(new_york_timezone).today()
-    today_str = datetime.today().strftime('%Y%m%d')
-    is_holiday = today_str in holidays
-    if is_holiday:
-        return False
-    now_in_nyc = datetime.now(new_york_timezone).time()
-    weekday = today.weekday()
-    previous_weekday = (weekday - 1) % 7
+    """Checks if NYSE is currently open using defined times and exchange_calendars for holidays."""
+    cal = get_nyse_calendar()
+    now_in_nyc = datetime.now(new_york_timezone)
+    now_date_str = now_in_nyc.date().strftime('%Y-%m-%d')
+    
+    # Holiday check: if today is a session day on NYSE
+    is_holiday = not cal.is_session(now_date_str)
+    
+    now_time = now_in_nyc.time()
+    weekday = now_in_nyc.weekday()
+    
+    # Day session: Mon-Fri, early morning or late afternoon
     in_day_session = (weekday in range(5) and
-                      (now_in_nyc < PREMARKET_END_TIME or REGULAR_HOURS_START_TIME < now_in_nyc < AFTER_HOURS_END_TIME))
-    # in_day_session = weekday in range(5) and now_in_nyc < dt_time(17, 0)
-    in_evening_session = previous_weekday in [6, 0, 1, 2, 3] and now_in_nyc >= PREMARKET_START_TIME
+                      (now_time < PREMARKET_END_TIME or REGULAR_HOURS_START_TIME < now_time < AFTER_HOURS_END_TIME))
+    
+    # Evening session start (Sundays/Mondays etc at 20:15)
+    previous_weekday = (weekday - 1) % 7
+    in_evening_session = previous_weekday in [6, 0, 1, 2, 3] and now_time >= PREMARKET_START_TIME
+    
+    if is_holiday and not in_evening_session:
+        return False
+        
     return in_day_session or in_evening_session
 
 def is_buffer_time_around_trade_time():
@@ -213,17 +229,24 @@ def write_heartbeat():
 def acquire_single_instance_lock(lock_path, process_name):
     """
     Attempts to acquire an OS-level lock to prevent multiple instances.
-    Returns the file object if successful. Exits the script if already locked.
+    Works on both Windows and Unix.
     """
+    if sys.platform == 'win32':
+        import msvcrt
+        try:
+            lock_file = open(lock_path, 'w')
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+            return lock_file
+        except (IOError, OSError):
+            logger.warning(f"Another instance of {process_name} is already running. Exiting.")
+            sys.exit(0)
+    else:
+        import fcntl
+        try:
+            lock_file = open(lock_path, 'w')
+            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return lock_file
+        except BlockingIOError:
+            logger.warning(f"Another instance of {process_name} is already running. Exiting.")
+            sys.exit(0)
 
-    import fcntl
-    # Open the file (creates it if it doesn't exist)
-    lock_file = open(lock_path, 'w')
-
-    try:
-        # Try to acquire an exclusive, non-blocking lock
-        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        return lock_file  # Keep this object alive!
-    except BlockingIOError:
-        logger.warning("Another instance of {process_name} is already running. Exiting.")
-        sys.exit(0)
