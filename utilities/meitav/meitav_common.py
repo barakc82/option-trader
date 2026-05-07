@@ -8,15 +8,16 @@ Hilush = 3
 Hishtalmut = 0
 Gemel = 1
 
-user_data = {
+users_data = {
     Barak: {
         'main_sheet_name': 'ברק',
         'transactions_sheet_name': "Barak-transactions",
         'max_leveraged_share': 0.9,
         'min_leveraged_share': 0.5,
+        'next_sell_price_cell': 'V10',
         Hishtalmut: {
             "username": "1366666962",
-            "password": "28",
+            "password": "29",
             'account_id': "098274",
             'starting_row': 160
         },
@@ -33,15 +34,18 @@ user_data = {
         'transactions_sheet_name': "Mom-transactions",
         'max_leveraged_share': 0.2,
         'min_leveraged_share': 0.05,
+        'next_sell_price_cell': 'E66',
         Hishtalmut: {
             "username": "1320194894",
             "password": "29",
-            'starting_row': 72
+            'starting_row': 72,
+            'account_id': "099563"
         },
         Gemel: {
             "username": "1320194895",
-            "password": "28",
-            'starting_row': 88
+            "password": "29",
+            'starting_row': 88,
+            'account_id': "099562"
         }
     },
 
@@ -50,15 +54,18 @@ Hilush: {
         'transactions_sheet_name': "Hilush-transactions",
         'max_leveraged_share': 0.7,
         'min_leveraged_share': 0.1,
+        'next_sell_price_cell': 'F67',
         Hishtalmut: {
             "username": "1320195347",
-            "password": "28",
-            'starting_row': 76
+            "password": "29",
+            'starting_row': 76,
+            'account_id': "099623"
         },
         Gemel: {
             "username": "1320195719",
-            "password": "28",
-            'starting_row': 88
+            "password": "29",
+            'starting_row': 88,
+            'account_id': "099686"
         }
     }
 }

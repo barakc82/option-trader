@@ -1,10 +1,14 @@
 from string import ascii_uppercase
-from datetime import datetime
+
+from selenium.common import NoSuchElementException
+from selenium.webdriver.common.by import By
 from gspread_formatting import CellFormat, TextFormat, format_cell_range, get_effective_format
 import re
 
 from utilities.database_access import get_worksheet
+from utilities.meitav.get_status import extract_status, select_orders_tab
 from utilities.meitav.meitav_common import *
+from utilities.meitav.start import start
 
 CELL_REF_REGEX = re.compile(
     r'(\$?[A-Z]+)(\d+)'  # column (with optional $) + row number
@@ -12,10 +16,77 @@ CELL_REF_REGEX = re.compile(
 
 # =======================
 
-person = Hilush
-program_type = Gemel
-shares = 111
-trade_price = 8932
+#person = Mom
+#program_type = Gemel
+shares = 101
+trade_price = 9831
+
+driver = start()
+
+
+def extract_last_sell(driver):
+    select_orders_tab(driver)
+    orders_tab_element = driver.find_element(By.CSS_SELECTOR, "div[ph='ph4']")
+    try:
+        container = orders_tab_element.find_element(By.CSS_SELECTOR, "div[role='presentation']")
+    except NoSuchElementException:
+        container = orders_tab_element
+
+    header_cells = container.find_elements(By.CSS_SELECTOR, ".ui-grid-header-cell")
+    headers = []
+    for cell in header_cells:
+        # Extract title or visible text
+        title = cell.find_element(By.CLASS_NAME, "ui-grid-header-cell-label").text.strip()
+        # Find the specific column class (e.g., ui-grid-coluiGrid-01QN)
+        classes = cell.get_attribute("class").split()
+        col_class = next((c for c in classes if "ui-grid-col" in c), None)
+        headers.append({"text": title, "class": col_class})
+
+    rows = orders_tab_element.find_elements(By.CSS_SELECTOR, ".ui-grid-row")
+    operations = []
+    for row in rows:
+        operation = {}
+        for header in headers:
+            if not header["class"]: continue
+
+            # Find the cell in this row that matches the header's column class
+            try:
+                cell = row.find_element(By.CLASS_NAME, header["class"])
+                raw_value = cell.text.strip()
+
+                # Cleaning the data (remove commas, percent signs, etc.)
+                clean_value = re.sub(r'[^\d.\-]', '', raw_value) if raw_value else "0"
+                clean_value = float(clean_value)
+                terminology_map = {
+                    'מספר נייר': 'security_id',
+                    'ק/מ': 'operation_type',
+                    'כמות ביצוע': 'quantity',
+                    'מחיר ביצוע': 'price'
+                }
+                field = terminology_map.get(header["text"], None)
+                if field is None:
+                    continue
+                operation[field] = clean_value
+            except:
+                operation[header["text"]] = None
+
+        if not operation:
+            continue
+        print(operation)
+        assert operation['quantity']
+        operations.append(operation)
+
+    sell_operations = [operation for operation in operations if operation['operation_type'] == 'מכירה']
+    print(sell_operations)
+
+
+try:
+    status = extract_status(driver)
+    extract_last_sell(driver)
+    person = status['user']
+    program_type = status['program_type']
+finally:
+    driver.quit()
 
 # =======================
 

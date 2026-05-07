@@ -7,6 +7,7 @@ from selenium import webdriver
 from selenium.common import ElementNotVisibleException, ElementClickInterceptedException, StaleElementReferenceException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 
 from utilities.meitav.meitav_common import *
@@ -57,7 +58,7 @@ def launch_chrome_debug():
 
 
 # & "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="C:\ChromeDebug" --no-first-run
-def connect_to_investment_tab(name, account_type):
+def connect_to_investment_tab():
     # 1. Setup options to connect to the existing Chrome instance
     chrome_options = Options()
     chrome_options.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
@@ -84,18 +85,27 @@ def connect_to_investment_tab(name, account_type):
     return driver
 
 
-def try_to_click(btn):
+def try_to_click(driver, btn):
     try:
+        WebDriverWait(driver, 0.5).until(EC.element_to_be_clickable(btn))
         btn.click()
         return True
     except (ElementClickInterceptedException, StaleElementReferenceException):
-        print(f"Button is not ready: {btn.text}")
+        print(f"Button is not ready: {btn}")
         return False
+
+
+def try_to_read_text(btn):
+    try:
+        return btn.text
+    except StaleElementReferenceException:
+        print(f"Button is not ready: {btn}")
+        return ""
 
 
 def login(driver, name, account_type):
     print(f"Starting login")
-    account_data = user_data[name][account_type]
+    account_data = users_data[name][account_type]
     username_field = driver.find_element(By.NAME, "username")
     print(f"Is the username field enabled? {username_field.is_enabled()}")
     username_field.clear()
@@ -125,30 +135,31 @@ def login(driver, name, account_type):
         all_buttons = enter_system_buttons + approve_buttons + close_buttons
         print(f"barak: number of buttons is {len(all_buttons)}")
         for btn in all_buttons:
-            if "כניסה למערכת" in btn.text:
-                success_result = try_to_click(btn)
+            button_text = try_to_read_text(btn)
+            if "כניסה למערכת" in button_text:
+                success_result = try_to_click(driver, btn)
                 if success_result:
                     print("✅ 'Enter system' button clicked.")
                     break
-            if "אישור" in btn.text:
-                success_result = try_to_click(btn)
+            if "אישור" in button_text:
+                success_result = try_to_click(driver, btn)
                 if success_result:
                     print("✅ 'Confirm' button clicked.")
                     break
-            if "סגור" in btn.text:
-                success_result = try_to_click(btn)
+            if "סגור" in button_text:
+                success_result = try_to_click(driver, btn)
                 if success_result:
                     print("✅ 'Close' button clicked.")
                     break
             time.sleep(0.5)
 
 
-def start(name, program_type):
+def start(name=None, program_type=None):
     os.environ['NO_PROXY'] = '127.0.0.1,localhost'
     if not is_chrome_debug_active(DEBUG_PORT):
         launch_chrome_debug()
 
-    driver = connect_to_investment_tab(name, program_type)
+    driver = connect_to_investment_tab()
 
     # We use a Wait here in case the page is still loading or refreshing
     wait = WebDriverWait(driver, 10)

@@ -130,7 +130,7 @@ def calculate_next_buy2(driver, status):
     cash = status['cash']
     leveraged_price_for_transfer = 0
 
-    person_data = user_data[person]
+    person_data = users_data[person]
     max_leveraged_share = person_data['max_leveraged_share']
     min_leveraged_share = person_data['min_leveraged_share']
     buy_result = calculate_buy_result_given_leveraged_price(current_leveraged_price)

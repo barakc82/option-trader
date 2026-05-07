@@ -100,7 +100,7 @@ def calculate_next_buy(person, program_type):
         return leveraged_price_for_transfer
 
 
-    person_data = user_data[person]
+    person_data = users_data[person]
 
     sheet_name = person_data['main_sheet_name']
     sheet = get_worksheet(sheet_name)

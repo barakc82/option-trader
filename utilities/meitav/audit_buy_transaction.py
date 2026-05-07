@@ -8,7 +8,7 @@ program_type = Gemel
 units = 16
 purchase_price = 6591
 
-person_data = user_data[user]
+person_data = users_data[user]
 sheet_name = person_data['transactions_sheet_name']
 sheet = get_worksheet(sheet_name)
 

@@ -19,9 +19,9 @@ ib = IB()
 ib.connect('127.0.0.1', 7496, clientId=10)
 
 security_names = ['VT', 'AVUV', 'VGT', 'UPRO', 'SCHD', 'SCHY', 'SPHD', 'VIG', 'VIGI', 'INTU', 'MA', 'AXP', 'ASML', 'OXY']
-row_indices = [177, 178, None, None, 182, 183, 184, 185, 186, 189, 194, 198, 201, 202]
+row_indices = [177, 178, None, None, 182, 183, 184, 185, 186, 189, 195, 198, 201, 202]
 
-start_date = datetime(2026, 4, 23)
+start_date = datetime(2026, 5, 7)
 history_days = 36
 
 history_end_date = start_date - timedelta(days=1)

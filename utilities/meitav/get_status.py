@@ -6,18 +6,28 @@ from selenium.webdriver.common.by import By
 
 from utilities.meitav.meitav_common import *
 from utilities.meitav.start import start
-from utilities.spreadsheet_update import update_status_in_spreadsheet
+from utilities.spreadsheet_operations import update_status_in_spreadsheet
 
 
 # & C:\\"Program Files"\\Google\\Chrome\\Application\\chrome.exe --remote-debugging-port=9222 --user-data-dir=C:\\ChromeDebug --no-first-run
 
 def is_balance_values_tab_selected(holdings_tab_element):
-
     selection_div = holdings_tab_element.find_element(By.CSS_SELECTOR, ".settings-button.ng-scope")
     li_element = selection_div.find_element(By.XPATH, "following-sibling::li[1]")
     heading_value = li_element.get_attribute("heading").strip()
     print(f"Selected tab: {heading_value}")
     return heading_value == 'יתרות'
+
+
+def select_tab(driver, tab_title):
+    balance_values_tab = driver.find_element(By.XPATH, f"//*[normalize-space(text())='{tab_title}']")
+    balance_values_tab.click()
+
+def select_balance_values_tab(driver):
+    select_tab(driver, tab_title='יתרות')
+
+def select_orders_tab(driver):
+    select_tab(driver, tab_title='הוראות')
 
 def extract_holdings(driver):
 
@@ -25,10 +35,12 @@ def extract_holdings(driver):
 
     is_balance_values_tab_selected_result = is_balance_values_tab_selected(holdings_tab_element)
     if not is_balance_values_tab_selected_result:
-        print("Error: balance values tab not selected")
-        exit(1)
+        select_balance_values_tab(driver)
 
-    container = holdings_tab_element.find_element(By.CSS_SELECTOR, "div[role='presentation']")
+    try:
+        container = holdings_tab_element.find_element(By.CSS_SELECTOR, "div[role='presentation']")
+    except NoSuchElementException:
+        container = holdings_tab_element
 
     # 2. Get Headers - Map the column class to the header text
     header_cells = container.find_elements(By.CSS_SELECTOR, ".ui-grid-header-cell")
@@ -72,6 +84,7 @@ def extract_holdings(driver):
                 row_data[header["text"]] = None
 
         assert row_data['security_id']
+        row_data['security_id'] = int(row_data['security_id'])
         assert row_data['quantity']
         holdings[row_data['security_id']] = row_data
 
@@ -90,7 +103,14 @@ def extract_status(driver):
         first_span = driver.find_element(By.CSS_SELECTOR, ".account-container .ng-binding:nth-of-type(3)")
         account_id = first_span.text.strip()
         status = {'account_id': account_id}
-
+        for user, user_data in users_data.items():
+            if user_data[Hishtalmut]['account_id'] == account_id:
+                status['user'] = user
+                status['program_type'] = Hishtalmut
+            if user_data[Gemel]['account_id'] == account_id:
+                status['user'] = user
+                status['program_type'] = Gemel
+        assert status['user']
         all_spans = driver.find_elements(By.CSS_SELECTOR, "span.ng-binding[title]")
         for span in all_spans:
             field_value = span.get_attribute("title")
@@ -117,6 +137,7 @@ def extract_status(driver):
         # This usually involves finding a 'row' element
 
         holdings = extract_holdings(driver)
+        holdings.pop(1150242)
         status["holdings"] = holdings
         print("--- Current Status ---")
         print(status)
