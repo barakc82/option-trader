@@ -73,6 +73,12 @@ class TargetDeltaCalculator:
                         iv_str = line.strip()
                         if iv_str:
                             self.iv_history.append(float(iv_str))
+                
+                # Truncate the file on startup to match the max_entries limit
+                logger.info(f"TargetDeltaCalculator: Truncating IV log to {len(self.iv_history)} entries.")
+                with open(IMPLIED_VOLATILITY_FILE_NAME, "w") as f:
+                    for entry in self.iv_history:
+                        f.write(f"{entry:.2f}\n")
             else:
                 logger.warning(f"TargetDeltaCalculator: IV log file {IMPLIED_VOLATILITY_FILE_NAME} not found.")
         except Exception as e:
@@ -90,15 +96,19 @@ class TargetDeltaCalculator:
             if implied_volatility and not math.isnan(implied_volatility):
                 logger.info(f"Implied volatility: {implied_volatility:.2f}")
                 self.iv_history.append(implied_volatility)
-                with open(IMPLIED_VOLATILITY_FILE_NAME, "w") as f:
-                    for entry in self.iv_history:
-                        f.write(f"{entry:.2f}\n")
+                # Fast append to the log file
+                with open(IMPLIED_VOLATILITY_FILE_NAME, "a") as f:
+                    f.write(f"{implied_volatility:.2f}\n")
             else:
                 logger.error(f"Invalid implied volatility: {implied_volatility}")
         except Exception as e:
             logger.error(f"{e}")
             traceback.print_exc()
         if not implied_volatility or math.isnan(implied_volatility):
+            return self.last_target_delta
+
+        if len(self.iv_history) < 2:
+            logger.warning("TargetDeltaCalculator: Not enough IV history to calculate target delta.")
             return self.last_target_delta
 
         iv_mean = statistics.mean(self.iv_history)
