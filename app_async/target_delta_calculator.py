@@ -16,10 +16,7 @@ MIN_TARGET_DELTA = 0.003
 MAX_TARGET_DELTA = 0.013
 
 IMPLIED_VOLATILITY_FILE_NAME = "cache/iv_log.txt"
-MAX_ENTRIES = 10000
-
-iv_history = deque(maxlen=MAX_ENTRIES)
-
+DEFAULT_MAX_ENTRIES = 10000
 
 def get_implied_volatility(ticker):
     if ticker.lastGreeks and ticker.lastGreeks.impliedVol:
@@ -44,19 +41,45 @@ class TargetDeltaCalculator:
             self.last_target_delta = DEFAULT_TARGET_DELTA
             self.last_target_delta_calculation_time = 0
             self.last_target_delta_increase = 0
+            self.max_entries = DEFAULT_MAX_ENTRIES
+            self.iv_history = deque(maxlen=self.max_entries)
+            
+            self.load_config()
+            self.load_iv_history()
 
-            try:
+            self._initialized = True
+
+    def load_config(self):
+        config_path = "config/option_trader_config.json"
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, "r") as f:
+                    config = json.load(f)
+                    new_max_entries = config.get("iv_history_max_entries", DEFAULT_MAX_ENTRIES)
+                    if new_max_entries != self.max_entries:
+                        logger.info(f"TargetDeltaCalculator: Updating iv_history maxlen from {self.max_entries} to {new_max_entries}")
+                        self.max_entries = new_max_entries
+                        # Re-initialize deque with new maxlen, preserving existing entries if any
+                        old_history = list(self.iv_history)
+                        self.iv_history = deque(old_history, maxlen=self.max_entries)
+        except Exception as e:
+            logger.error(f"TargetDeltaCalculator: Error reading config: {e}")
+
+    def load_iv_history(self):
+        try:
+            if os.path.exists(IMPLIED_VOLATILITY_FILE_NAME):
                 with open(IMPLIED_VOLATILITY_FILE_NAME, "r") as f:
                     for line in f:
                         iv_str = line.strip()
                         if iv_str:
-                            iv_history.append(float(iv_str))
-            except FileNotFoundError:
-                logger.error("Log file not found.")
-
-            self._initialized = True
+                            self.iv_history.append(float(iv_str))
+            else:
+                logger.warning(f"TargetDeltaCalculator: IV log file {IMPLIED_VOLATILITY_FILE_NAME} not found.")
+        except Exception as e:
+            logger.error(f"TargetDeltaCalculator: Error loading IV history: {e}")
 
     async def calculate_target_delta(self):
+        self.load_config()
 
         if time.time() - self.last_target_delta_calculation_time < 60 or not is_market_open():
             return self.last_target_delta
@@ -66,9 +89,9 @@ class TargetDeltaCalculator:
             implied_volatility = await self.market_data_fetcher.get_spx_implied_volatility()
             if implied_volatility and not math.isnan(implied_volatility):
                 logger.info(f"Implied volatility: {implied_volatility:.2f}")
-                iv_history.append(implied_volatility)
+                self.iv_history.append(implied_volatility)
                 with open(IMPLIED_VOLATILITY_FILE_NAME, "w") as f:
-                    for entry in iv_history:
+                    for entry in self.iv_history:
                         f.write(f"{entry:.2f}\n")
             else:
                 logger.error(f"Invalid implied volatility: {implied_volatility}")
@@ -78,9 +101,9 @@ class TargetDeltaCalculator:
         if not implied_volatility or math.isnan(implied_volatility):
             return self.last_target_delta
 
-        iv_mean = statistics.mean(iv_history)
+        iv_mean = statistics.mean(self.iv_history)
         logger.info(f"Mean implied volatility: {iv_mean:.3f}")
-        iv_std = statistics.stdev(iv_history)
+        iv_std = statistics.stdev(self.iv_history)
         z_score = (implied_volatility - iv_mean) / iv_std
         target_delta_mean = (MAX_TARGET_DELTA + MIN_TARGET_DELTA) / 2
         target_delta_std = (target_delta_mean - MIN_TARGET_DELTA) / 2
