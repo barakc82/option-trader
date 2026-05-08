@@ -19,7 +19,7 @@ ib = IB()
 ib.connect('127.0.0.1', 7496, clientId=10)
 
 security_names = ['VT', 'AVUV', 'VGT', 'UPRO', 'SCHD', 'SCHY', 'SPHD', 'VIG', 'VIGI', 'INTU', 'MA', 'AXP', 'META', 'ASML', 'OXY']
-row_indices = [177, 178, None, None, 182, 183, 184, 185, 186, 189, 195, 198, 201, 202]
+row_indices = [177, 178, None, None, 182, 183, 184, 185, 186, 189, 195, 198, 199, 201, 202]
 
 start_date = datetime(2026, 5, 11)
 history_days = 36
@@ -54,12 +54,18 @@ def update_short_historical_bounds():
 
 def update_long_historical_bounds():
     global row_index, update_data
-    last_bar = bars[-1]
+    # Filter out the current day's bar if the script is run during market hours
+    historical_bars = [b for b in bars if b.date < datetime.now().date()]
+    if not historical_bars:
+        print(f"No completed historical bars found for {security_name}")
+        return
+
+    last_bar = historical_bars[-1]
     last_close = float(last_bar.close)
-    date = last_bar.date.strftime('%d.%m.%y')
-    print(f"Last close price for {security_name} is {last_close}, date: {date}")
+    date_val = last_bar.date.strftime('%d.%m.%y')
+    print(f"Last completed close price for {security_name} is {last_close}, date: {date_val}")
     row_index = etfs_status_starting_row_index + etf_index
-    update_data = [[last_close, date]]
+    update_data = [[last_close, date_val]]
     if last_close < float(etf_status_cells[2]):
         print(f"Updating minimal price for {security_name}")
         quotes_sheet.update(values=update_data, range_name=f"C{row_index}:D{row_index}")
