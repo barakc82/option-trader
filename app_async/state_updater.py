@@ -4,6 +4,7 @@ import math
 import os
 import sys
 import aiohttp
+import pytz
 from datetime import datetime
 from statistics import mean
 
@@ -63,7 +64,10 @@ class StateUpdater:
         excess_liq = await self.account_data.get_excess_liquidity()
         state['excess_liquidity'] = '' if excess_liq == sys.float_info.max else round(excess_liq)
         state['cushion'] = round(await self.account_data.get_cushion(), 2)
-        state['last_updated'] = datetime.now().strftime("%H:%M:%S")
+        
+        # Set last_updated in Israel time
+        israel_tz = pytz.timezone('Asia/Jerusalem')
+        state['last_updated'] = datetime.now(israel_tz).strftime("%H:%M:%S")
 
         # 2. Gather logic metrics
         state['target_delta'] = round(await self.target_delta_calculator.calculate_target_delta(), 4)
