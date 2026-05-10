@@ -63,6 +63,7 @@ class StateUpdater:
         excess_liq = await self.account_data.get_excess_liquidity()
         state['excess_liquidity'] = '' if excess_liq == sys.float_info.max else round(excess_liq)
         state['cushion'] = round(await self.account_data.get_cushion(), 2)
+        state['last_updated'] = datetime.now().strftime("%H:%M:%S")
 
         # 2. Gather logic metrics
         state['target_delta'] = round(await self.target_delta_calculator.calculate_target_delta(), 4)

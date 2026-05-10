@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Option Trader Dashboard</title>
+    <script src="dashboard.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #1a1a2e; color: #eee; }
+        .card { background: #16213e; border-radius: 8px; padding: 20px; margin: 10px 0; }
+        .value { font-size: 2em; font-weight: bold; color: #00d4ff; }
+        .cash-positive { color: #00ff88; }
+        .cash-negative { color: #ff4444; }
+        .last-updated { color: #888; font-size: 0.8em; }
+    </style>
+</head>
+<body>
+    <h1>📈 Option Trader</h1>
+    <div class="card">
+        <div>Cash</div>
+        <div class="value" id="cash">--</div>
+    </div>
+    <div class="last-updated" id="last-updated">Loading...</div>
+</body>
+</html>

@@ -44,6 +44,12 @@ done
 echo "" # Newline for cleaner logs
 echo "IB Gateway is ready. Starting ib_insync script." >> "$DOCKER_START_LOG_FILE"
 
+# --- Start nginx ---
+echo "$(date): Starting nginx..." >> "$DOCKER_START_LOG_FILE"
+nginx -t && nginx  # test config first, then start
+echo "$(date): nginx started" >> "$DOCKER_START_LOG_FILE"
+
+# --- Start option trader ---
 echo "$(date): Starting option trader supervisor..." >> "$DOCKER_START_LOG_FILE"
 cd /home/option-trader
 python3 -m app.options_trader_supervisor

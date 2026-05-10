@@ -10,7 +10,9 @@ RUN apt-get update && apt-get install -y \
     vim \
     cron \
     python3 \
-    python3-pip
+    python3-pip \
+    nginx
+
 RUN pip3 install ib_insync colorlog pytz exchange_calendars gspread psutil twilio dash aiohttp nest_asyncio Brotli --break-system-packages \
     && rm -rf /var/lib/apt/lists/*
 #USER ibgateway  # Switch back to non-root for security
@@ -26,6 +28,10 @@ COPY cache ${APP_DIR}/cache
 COPY config ${APP_DIR}/config
 COPY resources ${APP_DIR}/resources
 RUN mkdir -p ${APP_DIR}/shared
+
+# ── Nginx config ──────────────────────────────────────────────
+COPY docker/nginx.conf /etc/nginx/sites-available/default
+# ──────────────────────────────────────────────────────────────
 
 WORKDIR ${APP_DIR}
 
@@ -43,7 +49,7 @@ RUN echo "alias showsupervisor='less supervisor.log'" >> ~/.bashrc
 RUN echo "alias tailsupervisor='tail -f supervisor.log'" >> ~/.bashrc
 RUN echo "alias runsupervisor='python3 -m app.options_trader_supervisor'" >> ~/.bashrc
 
-EXPOSE 8050
+EXPOSE 8080
 
 # Set the wrapper script as the command to run when the container starts
 CMD ["../start.sh"]
