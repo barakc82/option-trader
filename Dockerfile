@@ -41,13 +41,13 @@ COPY docker/*.sh .
 RUN chmod +x *.sh
 RUN (crontab -l 2>/dev/null; echo "0 * * * * ${APP_DIR}/trim_log.sh") | crontab -
 
-WORKDIR ${APP_DIR}/app
+WORKDIR ${APP_DIR}/logs
 
 RUN echo "alias showlog='less \$(ls -1 option_trader_*.log | sort | tail -1)'" > ~/.bashrc
 RUN echo "alias taillog='tail -f \$(ls -1 option_trader_*.log | sort | tail -1)'" >> ~/.bashrc
 RUN echo "alias showsupervisor='less supervisor.log'" >> ~/.bashrc
 RUN echo "alias tailsupervisor='tail -f supervisor.log'" >> ~/.bashrc
-RUN echo "alias runsupervisor='python3 -m app.options_trader_supervisor'" >> ~/.bashrc
+RUN echo "alias runsupervisor='python3 -m app_async.options_trader_supervisor'" >> ~/.bashrc
 
 EXPOSE 8080
 

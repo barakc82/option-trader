@@ -207,7 +207,7 @@ class MarketDataFetcher:
         iv_call = get_implied_volatility(atm_call.ticker)
         iv_put = get_implied_volatility(atm_put.ticker)
 
-        if not iv_call or not iv_put:
+        if math.isnan(iv_call) or math.isnan(iv_put):
             logger.warning(f"Implied volatility missing for ATM options. SPX: {spx_price}. Using last known: {self.last_implied_volatility}")
             return self.last_implied_volatility
 
