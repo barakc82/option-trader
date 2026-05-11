@@ -137,7 +137,7 @@ class StateUpdater:
             })
         state['fills'] = sorted(state_fills, key=lambda x: x['time'], reverse=True)
 
-        opportunity_explorer = OpportunityExplorer()    
+        opportunity_explorer = OpportunityExplorer()
         state['last_put_option_price'] = round(opportunity_explorer.last_put_option_price, 2)
         state['last_call_option_price'] = round(opportunity_explorer.last_call_option_price, 2)
 
@@ -162,6 +162,7 @@ async def post_current_state(state):
 
 async def update_supervisor_state_async(supervisor_state):
     """Standalone async function for the supervisor."""
+    supervisor_state['time'] = int(time.time())
     updater = StateUpdater()
     updater.store_supervisor_state_locally(supervisor_state)
     try:
