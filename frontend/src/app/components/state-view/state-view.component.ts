@@ -6,6 +6,7 @@ import { SupervisorState } from '../../models/supervisor_state.model';
 
 @Component({
   selector: 'app-state-view',
+  standalone: true,
   templateUrl: './state-view.component.html',
   styleUrls: ['./state-view.component.scss'],
   imports: [CommonModule]

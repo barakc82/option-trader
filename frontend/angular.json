@@ -39,13 +39,11 @@
               "budgets": [
                 {
                   "type": "initial",
-                  "message": "extra large bundle size",
                   "maximumWarning": "500kb",
                   "maximumError": "1mb"
                 },
                 {
                   "type": "anyComponentStyle",
-                  "message": "any component style",
                   "maximumWarning": "2kb",
                   "maximumError": "4kb"
                 }

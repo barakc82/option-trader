@@ -15,13 +15,13 @@ export class StateService {
   constructor(private http: HttpClient) {}
 
   fetchState() {
-    this.http.get<State>('/api/state').subscribe(state => {
+    this.http.get<State>('/state.json').subscribe(state => {
       this.stateSubject.next(state);
     });
   }
 
   fetchSupervisorState() {
-    this.http.get<State>('/api/supervisor-state').subscribe(supervisorState => {
+    this.http.get<SupervisorState>('/supervisor_state.json').subscribe(supervisorState => {
       this.supervisorStateSubject.next(supervisorState);
     });
   }
