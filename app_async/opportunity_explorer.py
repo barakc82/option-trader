@@ -239,7 +239,7 @@ class OpportunityExplorer:
         return sell_option_result
 
     async def try_to_sell(self, option, quantity, target_delta):
-        delta = abs(get_delta(option.ticker))
+        delta = get_delta(option.ticker)
         if delta > target_delta:
             logger.warning(f"Failed to sell {get_option_name(option)} since the delta has risen to {delta:.3f}, "
                            f"beyond the target delta of {target_delta:.3f}")
@@ -252,7 +252,7 @@ class OpportunityExplorer:
         end_time = time.time()
         duration_of_sell_operation = end_time - start_time
 
-        delta = abs(get_delta(option.ticker))
+        delta = get_delta(option.ticker)
         if result.success and delta > target_delta:
             logger.warning(f"After selling {get_option_name(option)},the delta has risen to {delta:.2f}, "
                            f"beyond the target delta of {target_delta:.2f}. "

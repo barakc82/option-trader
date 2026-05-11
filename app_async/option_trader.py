@@ -1,8 +1,7 @@
 import math
 import asyncio
-import time
-from datetime import timedelta, datetime
 
+from utilities.ib_utils import get_delta
 from utilities.utils import *
 
 from .max_loss_calculator import calculate_max_loss
@@ -131,10 +130,10 @@ class OptionTrader:
                     continue
 
             option = open_sell_trade.contract
-            model_greeks = option.ticker.modelGreeks
-            if model_greeks and model_greeks.delta and abs(model_greeks.delta) > target_delta:
+            delta = get_delta(option.ticker)
+            if delta > target_delta:
                 logger.info(
-                    f"Cancelling sell of {get_option_name(open_sell_trade.contract)} since the delta ({abs(model_greeks.delta):.2f}) is lower than the target delta ({target_delta:.3f})")
+                    f"Cancelling sell of {get_option_name(open_sell_trade.contract)} since the delta ({delta:.2f}) is higher than the target delta ({target_delta:.3f})")
                 self.trading_bot.cancel_trade(open_sell_trade)
                 continue
 

@@ -6,6 +6,8 @@ from .trading_bot import TradingBot
 from .account_data import AccountData
 from .market_data_fetcher import MarketDataFetcher
 
+MIN_NUMBER_OF_RECORDED_OPTIONS_QUNATITIES = 5
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -78,7 +80,7 @@ class MaxLossCalculator:
         max_number_of_options = self.get_max_number_of_options(right)
 
         max_loss = DEFAULT_MAX_LOSS
-        if max_number_of_options > 0:
+        if max_number_of_options and len(self.quantity[right]) >= MIN_NUMBER_OF_RECORDED_OPTIONS_QUNATITIES:
             write_heartbeat()
             total_cash_value = self.account_data.get_cash_balance_value()
             extra_cash_per_contract = (total_cash_value - 1000) / max_number_of_options
@@ -154,6 +156,8 @@ class MaxLossCalculator:
         risk_fraction = min(raw_risk_fraction, 1)
         raw_max_loss = max(extra_cash_per_option * risk_fraction, DEFAULT_MAX_LOSS)
         max_loss = math.sqrt(fraction_of_time_left_to_expiration) * raw_max_loss
+        if len(self.quantity[right]) < MIN_NUMBER_OF_RECORDED_OPTIONS_QUNATITIES:
+            max_loss = DEFAULT_MAX_LOSS
         logger.info(f"Max Loss ({right}): {max_loss:.2f}, Risk Fraction: {risk_fraction:.2f}, Effective Options: {effective_number_of_options:.2f}")
 
         self.last_effective_calculation_time[right] = time.time()
