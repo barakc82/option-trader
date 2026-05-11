@@ -193,6 +193,8 @@ class TradingBot:
         minimal_safe_cushion = self.calculate_minimal_safe_cushion(current_cushion)
         if projected_cushion < minimal_safe_cushion:
             result.is_low_projected_cushion = True
+            logger.info(f"Testing the sell of {get_option_name(option)} failed because the projected cushion ({projected_cushion}) "
+                        f"is lower than the minimal safe cushion ({minimal_safe_cushion})")
             return result
 
         result.success = is_order_possible
