@@ -1,0 +1,147 @@
+  <div *ngIf="state">
+      <h2>Status: {{ state.status }}</h2>
+      <p><strong>Last Updated:</strong> {{ state.last_updated }}</p>
+      <p>
+        <strong>Cash:</strong> {{ state.cash }}
+      </p>
+      <p [ngStyle]="!is_supervisor_active() ? {'background-color': 'red'} : {}">
+        <strong>Supervisor Time:</strong> 
+        {{ supervisor_state ? (supervisor_state.time * 1000 | date:'dd/MM/yy HH:mm') : 'Inactive'}}
+      </p>
+      <p>
+        <strong>Target delta:</strong> {{ state.target_delta }}
+      </p>
+      <p>
+        <strong>Target delta increase:</strong> {{ state.target_delta_increase }}
+      </p>
+      <p>
+        <strong>Implied volatility:</strong> {{ state.implied_volatility }}
+      </p>
+      <p>
+        <strong>Risk fraction:</strong> {{ state.risk_fraction }}
+      </p>
+      <p>
+        <strong>Call Option Last Price:</strong> {{ state.last_call_option_price }}
+      </p>
+      <p>
+        <strong>Put Options Last Price:</strong> {{ state.last_put_option_price }}
+      </p>
+      <p>
+        <strong>Call Options above Minimal Price:</strong> {{ state.call_options_above_minimal_sell_price }}
+      </p>
+      <p>
+        <strong>Put Options above Minimal Price:</strong> {{ state.put_options_above_minimal_sell_price }}
+      </p>
+
+      <h3>Positions</h3>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Right</th>
+            <th>Strike</th>
+            <th>Quantity</th>
+            <th>Date</th>
+            <th>Last Price</th>
+            <th>Delta</th>
+            <th>Stop Loss</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let pos of state.positions" [ngClass]="{
+            'far-from-stop-loss-row': pos.last_price !== '' && +pos.last_price < pos.stop_loss * 0.5,
+            'close-to-stop-loss-row': pos.last_price !== '' && +pos.last_price >= pos.stop_loss * 0.5 && pos.stop_loss != 0,
+            'zero-stop-loss-row': pos.stop_loss == 0
+          }">
+            <td>{{ pos.right }}</td>
+            <td>{{ pos.strike }}</td>
+            <td>{{ pos.quantity }}</td>
+            <td>{{ pos.date }}</td>
+            <td>{{ pos.last_price }}</td>
+            <td>{{ pos.delta }}</td>
+            <td>{{ pos.stop_loss }}</td>
+          </tr>
+        </tbody>
+      </table>
+    
+      <h3>Recent Trades</h3>
+      <table class="table recent-trades">
+        <thead>
+          <tr>
+            <th>Action</th>
+            <th>Right</th>
+            <th>Strike</th>
+            <th>Quantity</th>
+            <th>Time</th>
+            <th>Price</th>
+            <th>Comment</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let trade of state.fills">
+            <td>{{ trade.action }}</td>
+            <td>{{ trade.right }}</td>
+            <td>{{ trade.strike }}</td>
+            <td>{{ trade.quantity }}</td>
+            <td>{{ trade.time * 1000 | date:'dd/MM/yy HH:mm' }}</td>
+            <td>{{ trade.price }}</td>
+            <td>{{ trade.comment }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Open Trades</h3>
+      <table class="table trades-table">
+        <thead>
+          <tr>
+            <th>Action</th>
+            <th>Right</th>
+            <th>Strike</th>
+            <th>Quantity</th>
+            <th>Date</th>
+            <th>Delta</th>
+            <th>Order Type</th>
+            <th>Limit</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let trade of state.trades" [ngClass]="{
+            'stp-row': trade.order_type === 'STP',
+            'sell-row': trade.action === 'SELL',
+            'buy-at-limit-row': trade.action === 'BUY' && trade.order_type === 'LMT'
+          }">
+            <td>{{ trade.action }}</td>
+            <td>{{ trade.right }}</td>
+            <td>{{ trade.strike }}</td>
+            <td>{{ trade.quantity }}</td>
+            <td>{{ trade.date }}</td>
+            <td>{{ trade.delta }}</td>
+            <td>{{ trade.order_type }}</td>
+            <td>{{ trade.limit }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p *ngIf="state.start_time !== ''">
+        <strong>Start Time:</strong> {{ state.start_time }}
+      </p>
+      <p>
+        <strong>Cushion:</strong> {{ state.cushion }}
+      </p>
+      <p *ngIf="state.excess_liquidity !== ''">
+        <strong>Excess Liquidity:</strong> {{ state.excess_liquidity }}
+      </p>
+      <p><strong>Liquidation Alert Time:</strong> {{ state.liquidation_alert_time === 0 
+        ? 'No alert' 
+        : (state.liquidation_alert_time * 1000 | date:'dd/MM/yy HH:mm') }}
+      </p>
+      <p><strong>Liquidation Time:</strong> {{ state.liquidation_time === 0 
+        ? 'No liquidation' 
+        : (state.liquidation_time * 1000 | date:'dd/MM/yy HH:mm') }}
+      </p>
+      <p *ngIf="state.margin_lock !== ''">
+        <strong>Margin Lock:</strong> {{ state.margin_lock }}
+      </p>
+    </div>
+    
+    <div *ngIf="!state">
+      <p>Loading state...</p>
+    </div>

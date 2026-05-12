@@ -33,16 +33,16 @@ echo "$(date): IB Gateway started with PID $! and logging to $IBG_LOG_FILE" | te
 # --- Wait for Gateway to be ready ---
 # Adjust the port if you are using a different one (e.g., 4002 for paper trading)
 PORT=4001
-echo "Waiting for IB Gateway to listen on port $PORT..." >> "$DOCKER_START_LOG_FILE"
+echo "$(date): Waiting for IB Gateway to listen on port $PORT..." >> "$DOCKER_START_LOG_FILE"
 
 WAIT_TEXT="Login has completed"
 until grep -q "$WAIT_TEXT" "$IBG_LOG_FILE"; do
-  echo "Waiting for login to complete..." >> "$DOCKER_START_LOG_FILE"
+  echo "$(date): Waiting for login to complete..." >> "$DOCKER_START_LOG_FILE"
   sleep 2
 done
 
 echo "" # Newline for cleaner logs
-echo "IB Gateway is ready. Starting ib_insync script." >> "$DOCKER_START_LOG_FILE"
+echo "$(date): IB Gateway is ready. Starting ib_insync script." >> "$DOCKER_START_LOG_FILE"
 
 # --- Start nginx ---
 echo "$(date): Starting nginx..." >> "$DOCKER_START_LOG_FILE"

@@ -20,6 +20,8 @@ from .opportunity_explorer import OpportunityExplorer
 
 TEMP_PATH = 'shared/state_temp.json'
 JSON_PATH = 'shared/state.json'
+SUPERVISOR_TEMP_PATH = 'shared/supervisor_state_temp.json'
+SUPERVISOR_JSON_PATH = 'shared/supervisor_state.json'
 API_URL = "https://option-trader.onrender.com/api"
 UPDATE_STATE_URL = API_URL + "/update-state"
 UPDATE_SUPERVISOR_STATE_URL = API_URL + "/update-supervisor-state"
@@ -54,6 +56,12 @@ class StateUpdater:
         with open(TEMP_PATH, 'w') as file:
             json.dump(state, file, indent=4)
         os.replace(TEMP_PATH, JSON_PATH)
+
+    def store_supervisor_state_locally(self, supervisor_state):
+        os.makedirs(os.path.dirname(SUPERVISOR_TEMP_PATH), exist_ok=True)
+        with open(SUPERVISOR_TEMP_PATH, 'w') as file:
+            json.dump(supervisor_state, file, indent=4)
+        os.replace(SUPERVISOR_TEMP_PATH, SUPERVISOR_JSON_PATH)
 
     async def update_state(self, base_state):
         """Orchestrates the asynchronous collection and reporting of bot state."""
@@ -133,19 +141,31 @@ class StateUpdater:
         state['last_put_option_price'] = round(opportunity_explorer.last_put_option_price, 2)
         state['last_call_option_price'] = round(opportunity_explorer.last_call_option_price, 2)
 
-        # 6. Finalize and Post
+        # 6. Finalize
         self.store_state_locally(state)
         logger.info(f"Sending state to {UPDATE_STATE_URL}")
-        await self._post_data(UPDATE_STATE_URL, state)
+        try:
+            await self._post_data(UPDATE_STATE_URL, state)
+        except Exception as e:
+            logger.error(f"Failed to post state to Render: {e}")
             
         return state
 
 async def post_current_state(state):
     """Standalone async helper for simple state reporting."""
     updater = StateUpdater()
-    await updater._post_data(UPDATE_STATE_URL, state)
+    updater.store_state_locally(state)
+    try:
+        await updater._post_data(UPDATE_STATE_URL, state)
+    except Exception as e:
+        logger.error(f"Failed to post current state to Render: {e}")
 
 async def update_supervisor_state_async(supervisor_state):
     """Standalone async function for the supervisor."""
+    supervisor_state['time'] = int(time.time())
     updater = StateUpdater()
-    await updater._post_data(UPDATE_SUPERVISOR_STATE_URL, supervisor_state)
+    updater.store_supervisor_state_locally(supervisor_state)
+    try:
+        await updater._post_data(UPDATE_SUPERVISOR_STATE_URL, supervisor_state)
+    except Exception as e:
+        logger.error(f"Failed to post supervisor state to Render: {e}")
