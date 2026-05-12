@@ -32,6 +32,7 @@ export interface Position {
   export interface State {
     status: string;
     time: number;
+    last_updated: string;
     excess_liquidity: string;
     cash: number;
     cushion: number;

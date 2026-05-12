@@ -1,6 +1,6 @@
   <div *ngIf="state">
       <h2>Status: {{ state.status }}</h2>
-      <p><strong>Time:</strong> {{ state.time * 1000 | date:'dd/MM/yy HH:mm' }}</p>
+      <p><strong>Last Updated:</strong> {{ state.last_updated }}</p>
       <p>
         <strong>Cash:</strong> {{ state.cash }}
       </p>
@@ -142,7 +142,6 @@
       </p>
     </div>
     
-    <div *
-    ="!state">
+    <div *ngIf="!state">
       <p>Loading state...</p>
     </div>
