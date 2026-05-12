@@ -26,12 +26,6 @@
       <p>
         <strong>Put Options Last Price:</strong> {{ state.last_put_option_price }}
       </p>
-      <p>
-        <strong>Call Options above Minimal Price:</strong> {{ state.call_options_above_minimal_sell_price }}
-      </p>
-      <p>
-        <strong>Put Options above Minimal Price:</strong> {{ state.put_options_above_minimal_sell_price }}
-      </p>
 
       <h3>Positions</h3>
       <table class="table">
@@ -59,32 +53,6 @@
             <td>{{ pos.last_price }}</td>
             <td>{{ pos.delta }}</td>
             <td>{{ pos.stop_loss }}</td>
-          </tr>
-        </tbody>
-      </table>
-    
-      <h3>Recent Trades</h3>
-      <table class="table recent-trades">
-        <thead>
-          <tr>
-            <th>Action</th>
-            <th>Right</th>
-            <th>Strike</th>
-            <th>Quantity</th>
-            <th>Time</th>
-            <th>Price</th>
-            <th>Comment</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr *ngFor="let trade of state.fills">
-            <td>{{ trade.action }}</td>
-            <td>{{ trade.right }}</td>
-            <td>{{ trade.strike }}</td>
-            <td>{{ trade.quantity }}</td>
-            <td>{{ trade.time * 1000 | date:'dd/MM/yy HH:mm' }}</td>
-            <td>{{ trade.price }}</td>
-            <td>{{ trade.comment }}</td>
           </tr>
         </tbody>
       </table>
@@ -120,6 +88,33 @@
           </tr>
         </tbody>
       </table>
+
+      <h3>Recent Trades</h3>
+      <table class="table recent-trades">
+        <thead>
+          <tr>
+            <th>Action</th>
+            <th>Right</th>
+            <th>Strike</th>
+            <th>Quantity</th>
+            <th>Time</th>
+            <th>Price</th>
+            <th>Comment</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let trade of state.fills">
+            <td>{{ trade.action }}</td>
+            <td>{{ trade.right }}</td>
+            <td>{{ trade.strike }}</td>
+            <td>{{ trade.quantity }}</td>
+            <td>{{ trade.time * 1000 | date:'dd/MM/yy HH:mm' }}</td>
+            <td>{{ trade.price }}</td>
+            <td>{{ trade.comment }}</td>
+          </tr>
+        </tbody>
+      </table>
+
       <p *ngIf="state.start_time !== ''">
         <strong>Start Time:</strong> {{ state.start_time }}
       </p>

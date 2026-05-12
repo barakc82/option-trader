@@ -91,17 +91,7 @@ class OptionTrader:
 
     async def sleep(self):
         write_heartbeat()
-        sleep_time_in_seconds = 180
-        if is_market_open() or is_buffer_time_around_trade_time():
-            sleep_time_in_seconds = 90 if is_in_docker() else 180
-        if is_early_closing_hours():
-            sleep_time_in_seconds = 40
-        logger.info(f"Sleeping for {sleep_time_in_seconds // 60} minutes")
-
-        times = sleep_time_in_seconds // 10
-        for _ in range(times):
-            write_heartbeat()
-            await asyncio.sleep(10)
+        await asyncio.sleep(0)
 
     async def trade(self):
         await self.positions_manager.manage_current_positions()

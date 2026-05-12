@@ -3,5 +3,5 @@
     "should_write_options_overnight": true,
     "should_monitor_only": false,
     "spreadsheet_id": "1u2uLtVFnRCimMfymDMYygqg2zk2eK2TrQ4Bl18j8Uwc",
-    "iv_history_max_entries": 10000
+    "iv_history_max_entries": 20000
 }
