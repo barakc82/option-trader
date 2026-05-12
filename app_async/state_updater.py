@@ -76,7 +76,7 @@ class StateUpdater:
         
         # Set last_updated in Israel time
         israel_tz = pytz.timezone('Asia/Jerusalem')
-        state['last_updated'] = datetime.now(israel_tz).strftime("%H:%M:%S")
+        state['last_updated'] = datetime.now(israel_tz).strftime("%d/%m/%y %H:%M")
 
         # 2. Gather logic metrics
         state['target_delta'] = round(await self.target_delta_calculator.calculate_target_delta(), 4)
