@@ -63,12 +63,12 @@ class OptionTrader:
                 # Report state to Render/Local JSON
                 await self.state_updater.update_state(state)
                 
-                await self.sleep()
-                
                 if self.connection_failure_start_time is not None:
                     logger.info("OptionTrader: Connection error resolved.")
                     self.connection_failure_start_time = None
-                
+
+                await self.yield_execution()
+
             except Exception:
                 if self.connection_failure_start_time is None:
                     self.connection_failure_start_time = time.time()
@@ -89,7 +89,7 @@ class OptionTrader:
                 sleep_time = min(10 + (elapsed // 60) * 10, 60)
                 await asyncio.sleep(sleep_time)
 
-    async def sleep(self):
+    async def yield_execution(self):
         write_heartbeat()
         await asyncio.sleep(0)
 

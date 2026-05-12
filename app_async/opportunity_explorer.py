@@ -1,4 +1,5 @@
 import asyncio
+import math
 import random
 from datetime import date
 
@@ -203,14 +204,14 @@ class OpportunityExplorer:
             logger.error("Call option candidate for selling could not be found")
             return sell_option_result
 
-        last_price = extract_last_median_price(call_option.ticker)
-        if self.last_call_option_price != last_price and not math.isnan(last_price):
-            logger.info(f"The current price level for call options changed from {self.last_call_option_price} to {last_price}")
-            self.last_call_option_price = last_price
+        estimated_sell_price = await self.estimate_sell_price(call_option)
+        if self.last_call_option_price != estimated_sell_price and not math.isnan(estimated_sell_price):
+            logger.info(f"The current price level for call options changed from {self.last_call_option_price} to {estimated_sell_price}")
+            self.last_call_option_price = estimated_sell_price
 
         stop_loss_per_option = await calculate_max_loss('C', should_consider_only_effective=True)
-        if stop_loss_per_option < last_price:
-            logger.warning(f"Failed to sell {get_option_name(call_option)} since the acceptable loss ({stop_loss_per_option}) is smaller than the option price ({last_price})")
+        if stop_loss_per_option < estimated_sell_price:
+            logger.warning(f"Failed to sell {get_option_name(call_option)} since the acceptable loss ({stop_loss_per_option}) is smaller than the option price ({estimated_sell_price})")
             return sell_option_result
 
         logger.info(f"Testing sell 2 options of {get_option_name(call_option)}")
@@ -280,14 +281,14 @@ class OpportunityExplorer:
             logger.error("Put option candidate for selling could not be found")
             return sell_option_result
 
-        last_price = extract_last_median_price(put_option.ticker)
-        if self.last_put_option_price != last_price and not math.isnan(last_price):
-            logger.info(f"The current price level for put options changed from {self.last_put_option_price} to {last_price}")
-            self.last_put_option_price = last_price
+        estimated_sell_price = await self.estimate_sell_price(put_option)
+        if self.last_put_option_price != estimated_sell_price and not math.isnan(estimated_sell_price):
+            logger.info(f"The current price level for put options changed from {self.last_put_option_price} to {estimated_sell_price}")
+            self.last_put_option_price = estimated_sell_price
 
         stop_loss_per_option = await calculate_max_loss('P', should_consider_only_effective=True)
-        if stop_loss_per_option < last_price:
-            logger.warning(f"Failed to sell {get_option_name(put_option)} since the acceptable loss ({stop_loss_per_option}) is smaller than the option price ({last_price})")
+        if stop_loss_per_option < estimated_sell_price:
+            logger.warning(f"Failed to sell {get_option_name(put_option)} since the acceptable loss ({stop_loss_per_option}) is smaller than the option price ({estimated_sell_price})")
             return sell_option_result
 
         logger.info(f"Testing sell 2 options of {get_option_name(put_option)}")
@@ -415,3 +416,8 @@ class OpportunityExplorer:
             self.can_submit_orders = True
         else:
             logger.info(f"Will not buy {get_option_name(available_cheap_put_option)} since the potential sell price is too low ({self.last_put_option_price})")
+
+    async def estimate_sell_price(self, option):
+        if math.isnan(option.ticker.bid) or math.isnan(option.ticker.bid):
+            return option.ticker.last
+        return await self.trading_bot.calculate_limit(option, option.ticker.bid, option.ticker.ask)

@@ -39,10 +39,6 @@ def extract_ask(ticker):
     return ticker.ask
 
 
-def extract_last_median_price(ticker):
-    return np.nanmedian([ticker.bid, ticker.ask, ticker.last])
-
-
 def is_hollow(ticker):
     if ticker is None:
         return True

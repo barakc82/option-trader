@@ -178,7 +178,7 @@ class OpportunityExplorer:
             logger.error("Call option candidate for selling could not be found")
             return sell_option_result
 
-        last_price = extract_last_median_price(call_option.ticker)
+        last_price = estimate_sell_price(call_option.ticker)
         if self.last_call_option_price != last_price and not math.isnan(last_price):
             logger.info(f"The current price level for call options changed from {self.last_call_option_price} to {last_price}")
             self.last_call_option_price = last_price
@@ -255,7 +255,7 @@ class OpportunityExplorer:
             logger.error("Put option candidate for selling could not be found")
             return sell_option_result
 
-        last_price = extract_last_median_price(put_option.ticker)
+        last_price = estimate_sell_price(put_option.ticker)
         if self.last_put_option_price != last_price and not math.isnan(last_price):
             logger.info(f"The current price level for put options changed from {self.last_put_option_price} to {last_price}")
             self.last_put_option_price = last_price
