@@ -16,7 +16,7 @@ from .state_updater import StateUpdater, post_current_state
 
 
 logger = logging.getLogger(__name__)
-OPEN_ORDER_EXPIRATION_TIME = timedelta(hours=1)
+OPEN_ORDER_EXPIRATION_TIME = timedelta(minutes=20)
 
 
 class OptionTrader:

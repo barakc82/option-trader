@@ -59,13 +59,6 @@ class PositionsManager:
                 stop_loss_trades_for_position.append(open_stop_loss_trade)
         return stop_loss_trades_for_position
 
-    def find_all_sell_trades(self, option, open_sell_trades):
-        open_sell_trades_for_position = []
-        for open_sell_trade in open_sell_trades:
-            if option.conId == open_sell_trade.contract.conId:
-                open_sell_trades_for_position.append(open_sell_trade)
-        return open_sell_trades_for_position
-
     def find_limit_buy_trade(self, option, open_buy_trades):
         for open_buy_trade in open_buy_trades:
             if option.conId == open_buy_trade.contract.conId and open_buy_trade.order.action.upper() == 'BUY' and open_buy_trade.order.orderType == 'LMT':
@@ -98,9 +91,6 @@ class PositionsManager:
                 if stop_loss_trade.remaining() != abs(position.position):
                     self.trading_bot.cancel_trade(stop_loss_trade)
                     stop_loss_trades_for_position = []
-            open_sell_trades_for_position = self.find_all_sell_trades(option, open_sell_trades)
-            for open_sell_trade in open_sell_trades_for_position:
-                self.trading_bot.cancel_trade(open_sell_trade)
 
             if not stop_loss_trades_for_position and not self.is_recent_buy_filled(position):
                 stop_loss_per_option = await calculate_max_loss(option.right, should_consider_only_effective=True)
