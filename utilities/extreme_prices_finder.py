@@ -3,6 +3,7 @@ from ib_insync import *
 from datetime import datetime, timedelta
 
 from utilities.database_access import get_worksheet
+from utilities.utils import REGULAR_HOURS_END_TIME
 
 barak_sheet = get_worksheet("ברק")
 quotes_sheet = get_worksheet("$$$$")
@@ -18,8 +19,8 @@ start_date = datetime.strptime(start_date_str, "%d/%m/%y")
 ib = IB()
 ib.connect('127.0.0.1', 7496, clientId=10)
 
-security_names = ['VT', 'AVUV', 'VGT', 'UPRO', 'SCHD', 'SCHY', 'SPHD', 'VIG', 'VIGI', 'INTU', 'MA', 'AXP', 'META', 'ASML', 'OXY']
-row_indices = [177, 178, None, None, 182, 183, 184, 185, 186, 189, 195, 198, 199, 201, 202]
+security_names = ['VT', 'AVUV', 'VGT', 'UPRO', 'SP5Y', 'SCHD', 'SCHY', 'SPHD', 'VIG', 'VIGI', 'ACWD', 'GBTC', 'SPYU', 'INTU', 'MA', 'AXP', 'META', 'ASML', 'OXY']
+row_indices = [177, 178, None, None, None, 182, 183, 184, 185, 186, None, None, None, 189, 195, 198, 199, 201, 202]
 
 start_date = datetime(2026, 5, 11)
 history_days = 36
@@ -33,7 +34,7 @@ print(f"History start date: {history_start_date}")
 days = (datetime.now() - history_start_date).days
 
 etfs_status_starting_row_index = 4
-etfs_status = quotes_sheet.get(range_name=f"A{etfs_status_starting_row_index}:E13")
+etfs_status = quotes_sheet.get(range_name=f"A{etfs_status_starting_row_index}:E17")
 
 
 def update_short_historical_bounds():
@@ -52,10 +53,10 @@ def update_short_historical_bounds():
     barak_sheet.update(values=update_data, range_name=f"T{row_index}:U{row_index}")
 
 
-def update_long_historical_bounds():
+def update_long_historical_bounds(bars):
     global row_index, update_data
     # Filter out the current day's bar if the script is run during market hours
-    historical_bars = [b for b in bars if b.date < datetime.now().date()]
+    historical_bars = [b for b in bars if (b.date < datetime.now().date() or datetime.now().time() > REGULAR_HOURS_END_TIME)]
     if not historical_bars:
         print(f"No completed historical bars found for {security_name}")
         return
@@ -76,6 +77,8 @@ def update_long_historical_bounds():
 
 for security_name, row_index in zip(security_names, row_indices):
     contract = Stock(security_name, 'SMART', 'USD')
+    if security_name in ['SP5Y', 'ACWD']:
+        contract.primaryExchange = 'LSEETF'
 
     bars = ib.reqHistoricalData(
         contract,
@@ -90,6 +93,6 @@ for security_name, row_index in zip(security_names, row_indices):
     if row_index is not None:
         update_short_historical_bounds()
 
-    etf_index, etf_status_cells = next(((i, row) for i, row in enumerate(etfs_status) if row[0] == security_name), (None, None))
+    etf_index, etf_status_cells = next(((i, row) for i, row in enumerate(etfs_status) if row[0].split('.')[0] == security_name), (None, None))
     if etf_status_cells is not None:
-        update_long_historical_bounds()
+        update_long_historical_bounds(bars)
