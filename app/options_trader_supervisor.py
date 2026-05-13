@@ -172,7 +172,7 @@ def get_desired_version():
 def start_option_trader():
     logger.info(f"Restarting process using async version...")
 
-    module = "app_async.main"
+    module = "app.main"
 
     if is_in_docker():
         option_trader_start_command = ["python3", "-m", module]

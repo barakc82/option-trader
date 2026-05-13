@@ -52,7 +52,7 @@ echo "$(date): nginx started" >> "$DOCKER_START_LOG_FILE"
 # --- Start option trader ---
 echo "$(date): Starting option trader supervisor..." >> "$DOCKER_START_LOG_FILE"
 cd /home/option-trader
-python3 -m app_async.options_trader_supervisor
+python3 -m app.options_trader_supervisor
 echo "$(date): Option trader supervisor started"
 
 # Wait for the Gateway process to exit. This keeps the container running.

@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch, MagicMock
 from ib_insync import Ticker, Trade, Option, Order
 
 from utilities.ib_utils import connect
-from app_async.option_safeguard import OptionSafeguard
+from app.option_safeguard import OptionSafeguard
 
 from ib_insync.objects import Position
 

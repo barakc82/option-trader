@@ -1,12 +1,12 @@
 import unittest
 from unittest.mock import MagicMock, AsyncMock, patch
-from app_async.strike_finder import StrikeFinder
+from app.strike_finder import StrikeFinder
 
 class TestStrikeFinder(unittest.IsolatedAsyncioTestCase):
 
     def setUp(self):
         # Patch MarketDataFetcher singleton
-        self.patcher = patch('app_async.strike_finder.MarketDataFetcher')
+        self.patcher = patch('app.strike_finder.MarketDataFetcher')
         self.mock_mkt_class = self.patcher.start()
         self.mock_mkt = self.mock_mkt_class.return_value
         self.mock_mkt.update_ticker_data = AsyncMock()
@@ -132,7 +132,7 @@ class TestStrikeFinder(unittest.IsolatedAsyncioTestCase):
 
     async def test_get_low_delta_put_option_candidate_no_delta_and_too_high(self):
         options = [self.create_mock_option(4000, 'P', delta=-0.04)]
-        with patch('app_async.strike_finder.get_delta') as mock_gd:
+        with patch('app.strike_finder.get_delta') as mock_gd:
             mock_gd.side_effect = [-0.04, -0.04, None]
             result = await self.strike_finder.get_low_delta_put_option(options, 0.05)
             self.assertIsNone(result)
@@ -178,7 +178,7 @@ class TestStrikeFinder(unittest.IsolatedAsyncioTestCase):
         # To avoid AssertionError at end, we need the loop at 170 to find a better one.
         # But we didn't fetch more, so options_block is still options[0:10].
         # If we make one of THEM have a delta < 0.05 in the second loop:
-        with patch('app_async.strike_finder.get_delta') as mock_gd:
+        with patch('app.strike_finder.get_delta') as mock_gd:
             # 10 calls for first loop, then it uses the same options_block.
             # 10 calls for second loop.
             mock_gd.side_effect = [0.1]*10 + [0.04]*10 + [0.04]
@@ -195,7 +195,7 @@ class TestStrikeFinder(unittest.IsolatedAsyncioTestCase):
         options = [self.create_mock_option(4000 + i*5, 'C', delta=0.01) for i in range(200)]
         # mid=100. lower=50. higher=150.
         # To enter 155, highest_delta < 0.05 and lower > 0.
-        with patch('app_async.strike_finder.get_delta') as mock_gd:
+        with patch('app.strike_finder.get_delta') as mock_gd:
             # First loop: 101 calls. Let's say all 0.01.
             # Second loop: 101 calls. Let's say all None.
             # Third loop (after fetch 0-49): 50 calls. Let's say some 0.04.
