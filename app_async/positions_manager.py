@@ -4,7 +4,7 @@ import math
 import logging
 
 from utilities.utils import is_trade_cancelled, write_heartbeat, get_option_name, is_final_hours
-from utilities.ib_utils import req_id_to_comment
+from utilities.ib_utils import req_id_to_comment, MINIMAL_SELL_PRICE
 
 from .max_loss_calculator import calculate_max_loss
 from .opportunity_explorer import OpportunityExplorer
@@ -12,6 +12,8 @@ from .trading_bot import TradingBot
 
 
 logger = logging.getLogger(__name__)
+
+MINIMAL_SELL_PRICE_TO_CLOSE_POSITION = MINIMAL_SELL_PRICE + 0.05
 
 
 class PositionsManager:
@@ -102,7 +104,7 @@ class PositionsManager:
             opportunity_explorer = OpportunityExplorer()
             current_price_level = opportunity_explorer.last_call_option_price if option.right == 'C' else opportunity_explorer.last_put_option_price
 
-            min_sell_price = await opportunity_explorer.calculate_minimal_sell_price_to_close_position(option.right)
+            min_sell_price = MINIMAL_SELL_PRICE_TO_CLOSE_POSITION
             if current_price_level < min_sell_price:
                 options_type = 'Put' if option.right == 'P' else 'Call'
                 logger.info(

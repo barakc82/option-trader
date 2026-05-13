@@ -1,13 +1,11 @@
 import asyncio
-import math
-import random
 from datetime import date
 
 from utilities.utils import *
 from utilities.ib_utils import *
 from .account_data import AccountData
 from .market_data_fetcher import MarketDataFetcher
-from .max_loss_calculator import calculate_max_loss, MaxLossCalculator
+from .max_loss_calculator import calculate_max_loss
 from .option_cache import OptionCache
 from .strike_finder import StrikeFinder
 from .target_delta_calculator import TargetDeltaCalculator
@@ -15,8 +13,7 @@ from .connection_manager import ConnectionManager
 from .trading_bot import TradingBot
 
 TIME_UNTIL_NEXT_SELL_CHECK = 120
-LOWER_MINIMAL_SELL_PRICE_TO_CLOSE_POSITION = MINIMAL_SELL_PRICE + 0.05
-HIGHER_MINIMAL_SELL_PRICE_TO_CLOSE_POSITION = MINIMAL_SELL_PRICE + 0.1
+MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION = MINIMAL_SELL_PRICE + 0.1
 
 logger = logging.getLogger(__name__)
 
@@ -326,27 +323,11 @@ class OpportunityExplorer:
                 logger.info(f"Cancelling stop loss for {get_option_name(option)}")
                 self.trading_bot.cancel_trade(open_buy_trade)
 
-    async def calculate_minimal_sell_price_to_close_position(self, right):
-        minimal_sell_price_to_close_position = HIGHER_MINIMAL_SELL_PRICE_TO_CLOSE_POSITION
-        positions = await self.trading_bot.get_short_options()
-        current_number_of_options = len([position for position in positions if position.contract.right == right])
-        max_loss_calculator = MaxLossCalculator()
-        max_number_of_options = max_loss_calculator.get_max_number_of_options(right)
-        vacant_options_fraction = 1 - current_number_of_options / max_number_of_options
-        elapsed_day_fraction = get_elapsed_day_fraction()
-        lower_minimal_sell_price_probability = vacant_options_fraction * elapsed_day_fraction
-        logger.info(f"Fraction of vacant slots for '{right}' options: {vacant_options_fraction:.2f}, "
-                    f"fraction of day passed: {elapsed_day_fraction:.2f}, "
-                    f"total probability for lower minimal sell price: {lower_minimal_sell_price_probability:.2f}")
-        if random.random() < lower_minimal_sell_price_probability:
-            minimal_sell_price_to_close_position = LOWER_MINIMAL_SELL_PRICE_TO_CLOSE_POSITION
-        return minimal_sell_price_to_close_position
 
     async def try_to_reduce_initial_margin_for_call_options(self, call_option_to_be_sold, required_initial_margin, initial_margin_after_sell, call_options):
-        minimal_sell_price_to_close_position = await self.calculate_minimal_sell_price_to_close_position('C')
-        if self.last_call_option_price <= minimal_sell_price_to_close_position:
+        if self.last_call_option_price <= MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION:
             logger.info(
-                f"Will not try to reduce initial margin for call options since the price level of call options is {self.last_call_option_price} while the minimal sell price to close is {minimal_sell_price_to_close_position}")
+                f"Will not try to reduce initial margin for call options since the price level of call options is {self.last_call_option_price} while the minimal sell price to close is {MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION}")
             return
 
         strike_finder = StrikeFinder()
@@ -381,9 +362,8 @@ class OpportunityExplorer:
             logger.info(f"Will not buy {get_option_name(available_cheap_call_option)} since the potential sell price is too low ({self.last_call_option_price})")
 
     async def try_to_reduce_initial_margin_for_put_options(self, put_option_to_be_sold, required_initial_margin, initial_margin_after_sell, put_options):
-        minimal_sell_price_to_close_position = await self.calculate_minimal_sell_price_to_close_position('P')
-        if self.last_put_option_price <= minimal_sell_price_to_close_position:
-            logger.info(f"Will not try to reduce initial margin for put options since the price level of put options is {self.last_put_option_price} while the minimal sell price to close is {minimal_sell_price_to_close_position}")
+        if self.last_put_option_price <= MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION:
+            logger.info(f"Will not try to reduce initial margin for put options since the price level of put options is {self.last_put_option_price} while the minimal sell price to close is {MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION}")
             return
 
         strike_finder = StrikeFinder()
