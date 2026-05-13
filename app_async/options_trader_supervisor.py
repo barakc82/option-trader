@@ -170,16 +170,15 @@ def get_desired_version():
     return "async"
 
 def start_option_trader():
-    version = get_desired_version()
-    logger.info(f"Restarting process using {version} version...")
-    
-    module = "app_async.main" if version == "async" else "app.main"
-    
+    logger.info(f"Restarting process using async version...")
+
+    module = "app_async.main"
+
     if is_in_docker():
         option_trader_start_command = ["python3", "-m", module]
     else:
         option_trader_start_command = [".\\.venv\\Scripts\\python.exe", "-m", module]
-        
+
     p = subprocess.Popen(option_trader_start_command)
     option_trader_process = psutil.Process(p.pid)
 

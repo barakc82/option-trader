@@ -19,7 +19,6 @@ RUN pip3 install ib_insync colorlog pytz exchange_calendars gspread psutil twili
 
 
 RUN mkdir -p ${APP_DIR}
-COPY app ${APP_DIR}/app
 COPY app_async ${APP_DIR}/app_async
 COPY utilities ${APP_DIR}/utilities
 COPY frontend/dist/option-trader-dashboard ${APP_DIR}/frontend

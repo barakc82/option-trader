@@ -2,7 +2,7 @@
 set VM_NAME=medium-sc
 
 echo Creating archive of python scripts...
-tar --exclude="__pycache__" -czf scripts.tar.gz app app_async utilities
+tar --exclude="__pycache__" -czf scripts.tar.gz app_async utilities
 
 echo Sending archive to VM...
 call gcloud compute scp scripts.tar.gz %VM_NAME%:/home/barakc82/
@@ -14,7 +14,7 @@ if %ERRORLEVEL% neq 0 (
 )
 
 echo Extracting and updating scripts in Docker container...
-gcloud compute ssh %VM_NAME% --command "tar -xzf /home/barakc82/scripts.tar.gz -C /home/barakc82/ && sudo docker cp /home/barakc82/app option-trader:/home/option-trader/ && sudo docker cp /home/barakc82/app_async option-trader:/home/option-trader/ && sudo docker cp /home/barakc82/utilities option-trader:/home/option-trader/ && sudo docker exec option-trader pkill -f 'python3 -m app_async.main' || true"
+gcloud compute ssh %VM_NAME% --command "tar -xzf /home/barakc82/scripts.tar.gz -C /home/barakc82/ && sudo docker cp /home/barakc82/app_async option-trader:/home/option-trader/ && sudo docker cp /home/barakc82/utilities option-trader:/home/option-trader/ && sudo docker exec option-trader pkill -f 'python3 -m app_async.main' || true"
 
 echo Cleaning up...
 if exist scripts.tar.gz del scripts.tar.gz
