@@ -200,6 +200,8 @@ class TradingBot:
         if not is_order_possible:
             logger.info(f"Testing the sell of {get_option_name(option)} failed because the required initial margin ({init_margin_after:,.0f} + {SAFETY_MARGIN:,.0f} safety) "
                         f"exceeds the previous day equity with loan ({previous_day_equity_with_loan:,.0f})")
+            result.required_initial_margin = previous_day_equity_with_loan
+            result.initial_margin_after = safe_init_margin_after
 
         result.success = is_order_possible
         return result
