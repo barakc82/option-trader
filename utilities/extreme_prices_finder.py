@@ -3,7 +3,7 @@ from ib_insync import *
 from datetime import datetime, timedelta
 
 from utilities.database_access import get_worksheet
-from utilities.utils import REGULAR_HOURS_END_TIME
+from utilities.utils import REGULAR_HOURS_END_TIME, new_york_timezone
 
 barak_sheet = get_worksheet("ברק")
 quotes_sheet = get_worksheet("$$$$")
@@ -56,7 +56,7 @@ def update_short_historical_bounds():
 def update_long_historical_bounds(bars):
     global row_index, update_data
     # Filter out the current day's bar if the script is run during market hours
-    historical_bars = [b for b in bars if (b.date < datetime.now().date() or datetime.now().time() > REGULAR_HOURS_END_TIME)]
+    historical_bars = [b for b in bars if (b.date < datetime.now().date() or datetime.now(new_york_timezone).time() > REGULAR_HOURS_END_TIME)]
     if not historical_bars:
         print(f"No completed historical bars found for {security_name}")
         return
