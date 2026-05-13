@@ -193,9 +193,13 @@ class TradingBot:
         minimal_safe_cushion = self.calculate_minimal_safe_cushion(current_cushion)
         if projected_cushion < minimal_safe_cushion:
             result.is_low_projected_cushion = True
-            logger.info(f"Testing the sell of {get_option_name(option)} failed because the projected cushion ({projected_cushion}) "
-                        f"is lower than the minimal safe cushion ({minimal_safe_cushion})")
+            logger.info(f"Testing the sell of {get_option_name(option)} failed because the projected cushion ({projected_cushion:.2f}) "
+                        f"is lower than the minimal safe cushion ({minimal_safe_cushion:.2f})")
             return result
+
+        if not is_order_possible:
+            logger.info(f"Testing the sell of {get_option_name(option)} failed because the required initial margin ({init_margin_after:,.0f} + {SAFETY_MARGIN:,.0f} safety) "
+                        f"exceeds the previous day equity with loan ({previous_day_equity_with_loan:,.0f})")
 
         result.success = is_order_possible
         return result
@@ -236,7 +240,18 @@ class TradingBot:
         order.tif = 'GTC'
 
         trade = self.ib.placeOrder(contract, order)
-        await asyncio.sleep(2)
+        for _ in range(20):
+            if trade.orderStatus.status not in ('PendingSubmit', 'PreSubmitted'):
+                break
+            await asyncio.sleep(0.1)
+
+        if trade.orderStatus.status in ('Cancelled', 'Inactive'):
+            option_name = get_option_name(contract)
+            logger.warning(f"Sell order for {option_name} was rejected with status: {trade.orderStatus.status}")
+            for entry in trade.log:
+                if entry.message:
+                    logger.warning(f"Trade log for {option_name}: {entry.message}")
+
         return trade
 
     async def try_to_sell(self, contract, quantity):
