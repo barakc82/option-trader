@@ -64,7 +64,6 @@ def update_long_historical_bounds(bars):
     last_bar = historical_bars[-1]
     last_close = float(last_bar.close)
     date_val = last_bar.date.strftime('%d.%m.%y')
-    print(f"Last completed close price for {security_name} is {last_close}, date: {date_val}")
     row_index = etfs_status_starting_row_index + etf_index
     update_data = [[last_close, date_val]]
     if last_close < float(etf_status_cells[2]):
