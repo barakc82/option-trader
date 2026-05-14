@@ -79,6 +79,7 @@ class StateUpdater:
         state['last_updated'] = datetime.now(israel_tz).strftime("%d/%m/%y %H:%M")
 
         # 2. Gather logic metrics
+        state['spx_price'] = round(await self.market_data_fetcher.get_spx_price(), 2)
         state['target_delta'] = round(await self.target_delta_calculator.calculate_target_delta(), 4)
         state['target_delta_increase'] = round(self.target_delta_calculator.last_target_delta_increase, 4)
         state['risk_fraction'] = round(mean(self.max_loss_calculator.risk_fraction.values()), 2)

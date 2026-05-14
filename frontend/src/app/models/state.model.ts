@@ -33,6 +33,7 @@ export interface Position {
     status: string;
     time: number;
     last_updated: string;
+    spx_price: number;
     excess_liquidity: string;
     cash: number;
     cushion: number;
