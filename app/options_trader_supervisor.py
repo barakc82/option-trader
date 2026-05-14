@@ -25,7 +25,6 @@ if not os.path.exists(OPTION_TRADER_DIR):
 
 LOGS_DIR = f"{OPTION_TRADER_DIR}/logs"
 CONFIG_PATH = f"{OPTION_TRADER_DIR}/config/supervisor_config.json"
-current_running_version = "async"
 
 # Console handler (prints to stdout)
 console_handler = logging.StreamHandler()
@@ -158,17 +157,6 @@ def test_connection_to_platform():
 
     return False
 
-def get_desired_version():
-    """Reads the desired version (sync/async) from the config file."""
-    try:
-        if os.path.exists(CONFIG_PATH):
-            with open(CONFIG_PATH, "r") as f:
-                config = json.load(f)
-                return config.get("version", "async")
-    except Exception as e:
-        logger.error(f"Error reading supervisor config: {e}")
-    return "async"
-
 def start_option_trader():
     logger.info(f"Restarting process using async version...")
 
@@ -181,9 +169,6 @@ def start_option_trader():
 
     p = subprocess.Popen(option_trader_start_command)
     option_trader_process = psutil.Process(p.pid)
-
-    global current_running_version
-    current_running_version = version
 
     for _ in range(10):
         if option_trader_process.is_running():
@@ -567,20 +552,11 @@ def check_sunday_expiration():
 
 
 def monitor(interval=5):
-    global state, current_running_version
+    global state
     start_time = time.time()
-    current_running_version = get_desired_version()
 
     while True:
         try:
-            # Check for version change (hot-swap)
-            desired_version = get_desired_version()
-            if desired_version != current_running_version:
-                logger.warning(f"VERSION CHANGE DETECTED: {current_running_version} -> {desired_version}")
-                kill_option_trader()
-                start_option_trader() # This will use the new version from config
-                current_running_version = desired_version
-
             if state == MONITOR_STATE:
                 monitor_option_trader()
                 monitor_platform()
