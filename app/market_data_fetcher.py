@@ -3,6 +3,7 @@ import math
 import exchange_calendars as ecals
 import pandas as pd
 from ib_insync import Index
+from pandas._libs.tslibs.offsets import Nano
 
 from utilities.utils import *
 from utilities.ib_utils import get_delta
@@ -47,6 +48,7 @@ class MarketDataFetcher:
             self.registered_con_ids = set()
             self.last_implied_volatility = 0.0
             self.last_implied_volatility_calculation_time = current_time_of_the_day()
+            self.previous_spx_value = math.nan
 
             # Use a lock for market data type switching
 
@@ -67,20 +69,25 @@ class MarketDataFetcher:
     async def get_spx_price(self):
         spx = Index('SPX', 'CBOE', 'USD')
         spx_ticker = self.ib.ticker(spx)
-        
+
         if not spx_ticker:
             spx_ticker = await self.req_mkt_data(spx)
             if not spx_ticker:
                 logger.error("Could not obtain SPX ticker")
-                return math.nan
-            
+                return self.previous_spx_value
+
         if math.isnan(spx_ticker.last):
             if is_regular_hours():
-                return math.nan
+                return self.previous_spx_value
             logger.warning("Market closed; using SPX close price.")
-            return spx_ticker.close
+            price = spx_ticker.close
+        else:
+            price = spx_ticker.last
 
-        return spx_ticker.last
+        if not math.isnan(price):
+            self.previous_spx_value = price
+
+        return price
 
     def get_ticker(self, option):
         ticker = self.ib.ticker(option)
