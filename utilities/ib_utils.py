@@ -49,5 +49,6 @@ def get_delta(ticker):
     if ticker.lastGreeks and ticker.lastGreeks.delta:
         return abs(ticker.lastGreeks.delta)
     if ticker.modelGreeks and ticker.modelGreeks.delta:
+        logger.warning("Using model greeks to calculate delta")
         return abs(ticker.modelGreeks.delta)
     return None

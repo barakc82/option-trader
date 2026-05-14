@@ -1,9 +1,6 @@
 import asyncio
 import math
-import exchange_calendars as ecals
-import pandas as pd
 from ib_insync import Index
-from pandas._libs.tslibs.offsets import Nano
 
 from utilities.utils import *
 from utilities.ib_utils import get_delta
@@ -29,6 +26,7 @@ def get_implied_volatility(ticker):
     if ticker.lastGreeks and ticker.lastGreeks.impliedVol is not None:
         return ticker.lastGreeks.impliedVol
     if ticker.modelGreeks and ticker.modelGreeks.impliedVol is not None:
+        logger.warning("Using model greeks to calculate implied volatility")
         return ticker.modelGreeks.impliedVol
     return math.nan
 
@@ -184,7 +182,7 @@ class MarketDataFetcher:
 
     async def get_spx_implied_volatility(self):
 
-        if self.last_implied_volatility_calculation_time < REGULAR_HOURS_END_TIME and current_time_of_the_day() > REGULAR_HOURS_END_TIME:
+        if self.last_implied_volatility_calculation_time < REGULAR_HOURS_END_TIME < current_time_of_the_day():
             self.last_implied_volatility = 0.0
 
         """Calculate average implied volatility from ATM SPX options."""
@@ -197,6 +195,16 @@ class MarketDataFetcher:
         options = options_cache.load_cached_options()
         if not options:
             logger.error("No options cached in options_cache")
+            return self.last_implied_volatility
+
+        # Pick an option and check if it's expired
+        sample_option = options[0]
+        expiration_date = datetime.strptime(sample_option.lastTradeDateOrContractMonth, "%Y%m%d").date()
+        now_nyc = datetime.now(new_york_timezone)
+
+        if (expiration_date < now_nyc.date() or
+                (expiration_date == now_nyc.date() and now_nyc.time() > REGULAR_HOURS_END_TIME)):
+            logger.warning(f"Options in cache are expired ({expiration_date}). Returning last implied volatility: {self.last_implied_volatility}")
             return self.last_implied_volatility
 
         # Find ATM Call and Put
