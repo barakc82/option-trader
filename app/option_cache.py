@@ -1,3 +1,4 @@
+import math
 import os
 import pickle
 
@@ -20,7 +21,7 @@ class OptionCache:
 
         options = []
         spx = Index('SPX', 'CBOE', 'USD')
-        spx_ticker = await self.market_data_fetcher.req_mkt_data(spx)
+        spx_price = await self.market_data_fetcher.get_spx_price()
 
         options_obtained = False
         if os.path.exists(file_path):
@@ -39,12 +40,12 @@ class OptionCache:
                     maximal_put_strike = max(put_options)
                     minimal_call_strike = min(call_options)
                     previous_spx_index_value = (maximal_put_strike + minimal_call_strike) / 2
-                    if spx_ticker is None:
+                    if math.isnan(spx_price):
                         logger.warning(f"The ticker of SPX index is missing")
                     else:
-                        change_from_previous_spx_index_value = abs(spx_ticker.last - previous_spx_index_value)
+                        change_from_previous_spx_index_value = abs(spx_price - previous_spx_index_value)
                         if change_from_previous_spx_index_value / previous_spx_index_value > 0.015:
-                            logger.info(f"Fetching option tickers as SPX index made a big change from {previous_spx_index_value} to {spx_ticker.last}")
+                            logger.info(f"Fetching option tickers as SPX index made a big change from {previous_spx_index_value} to {spx_price}")
                             options = []  # Let's get a new strike list based on an updated spx index value
                             options_obtained = False
                 else:
@@ -52,13 +53,13 @@ class OptionCache:
                                  f"number of puts is {len(put_options)}, number of calls is {len(call_options)}")
 
         if not options_obtained:
-            print(f"SPX Last Price: {spx_ticker.last}")
+            print(f"SPX Last Price: {spx_price}")
             chains = await self.market_data_fetcher.get_chains(spx)
             chain = next(c for c in chains if c.exchange == 'CBOE' and c.tradingClass == 'SPXW')
             put_options = []
             call_options = []
             for strike in chain.strikes:
-                if strike < spx_ticker.last:
+                if strike < spx_price:
                     option = Option(symbol='SPX', lastTradeDateOrContractMonth=date, strike=strike, right='P',
                                     exchange='CBOE', currency='USD', tradingClass='SPXW')
                     put_options.append(option)
