@@ -345,8 +345,8 @@ class OpportunityExplorer:
         missing_sum = required_initial_margin - initial_margin_after_sell
         required_number_of_units = math.ceil(missing_sum / initial_margin_change)
 
-        logger.info(f"try_to_reduce_initial_margin_for_call_options, required initial margin: {required_initial_margin}, initial margin after sell: {initial_margin_after_sell}, "
-                    f"initial margin change due to buy: {initial_margin_change:.2f}, option to be sold: {get_option_name(call_option_to_be_sold)}, option to buy: {get_option_name(available_cheap_call_option)}, missing_sum: {missing_sum:.0f}, required number of units = {required_number_of_units}, last call price: {self.last_call_option_price}")
+        logger.info(f"try_to_reduce_initial_margin_for_call_options, required initial margin: {required_initial_margin}, initial margin after sell: {initial_margin_after_sell:.0f}, "
+                    f"initial margin change due to buy: {initial_margin_change:.0f}, option to be sold: {get_option_name(call_option_to_be_sold)}, option to buy: {get_option_name(available_cheap_call_option)}, missing sum: {missing_sum:.0f}, required number of units = {required_number_of_units}, last call price: {self.last_call_option_price}")
 
         if required_number_of_units < 0:
             logger.error(f"The required number of units is {required_number_of_units}")
@@ -381,8 +381,8 @@ class OpportunityExplorer:
         missing_sum = required_initial_margin - initial_margin_after_sell
         required_number_of_units = math.ceil(missing_sum / initial_margin_change)
 
-        logger.info(f"try_to_reduce_initial_margin_for_put_options, required initial margin: {required_initial_margin}, initial margin after sell: {initial_margin_after_sell}, "
-                    f"initial margin change due to buy: {initial_margin_change}, option to be sold: {get_option_name(put_option_to_be_sold)}, option to buy: {get_option_name(available_cheap_put_option)}, missing_sum: {missing_sum:.0f}, required number of units = {required_number_of_units}, last put price: {self.last_put_option_price}")
+        logger.info(f"try_to_reduce_initial_margin_for_put_options, required initial margin: {required_initial_margin:.0f}, initial margin after sell: {initial_margin_after_sell:.0f}, "
+                    f"initial margin change due to buy: {initial_margin_change:.0f}, option to be sold: {get_option_name(put_option_to_be_sold)}, option to buy: {get_option_name(available_cheap_put_option)}, missing sum: {missing_sum:.0f}, required number of units = {required_number_of_units}, last put price: {self.last_put_option_price}")
 
         if required_number_of_units < 0:
             logger.error(f"The required number of units is {required_number_of_units}")
