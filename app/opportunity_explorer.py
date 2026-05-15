@@ -238,6 +238,14 @@ class OpportunityExplorer:
 
             if sell_option_result.required_initial_margin and not is_switched_to_overnight_trading():
                 await self.try_to_reduce_initial_margin_for_call_options(call_option, sell_option_result.required_initial_margin, sell_option_result.initial_margin_after, call_options)
+            else:
+                available_cheap_call_option = strike_finder.find_first_cheap_option('C')
+                if available_cheap_call_option:
+                    self.call_margin_reduction = {
+                        'option': get_option_name(available_cheap_call_option),
+                        'margin_change': 0,
+                        'required_units': 0
+                    }
 
         self.no_call_options_above_minimal_sell_price = sell_option_result.no_option_above_minimal_sell_price
         return sell_option_result
@@ -316,6 +324,14 @@ class OpportunityExplorer:
 
             if sell_option_result.required_initial_margin and not is_switched_to_overnight_trading():
                 await self.try_to_reduce_initial_margin_for_put_options(put_option, sell_option_result.required_initial_margin, sell_option_result.initial_margin_after, put_options)
+            else:
+                available_cheap_put_option = strike_finder.find_first_cheap_option('P')
+                if available_cheap_put_option:
+                    self.put_margin_reduction = {
+                        'option': get_option_name(available_cheap_put_option),
+                        'margin_change': 0,
+                        'required_units': 0
+                    }
 
         self.no_put_options_above_minimal_sell_price = sell_option_result.no_option_above_minimal_sell_price
         return sell_option_result

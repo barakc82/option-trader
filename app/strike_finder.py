@@ -13,6 +13,8 @@ OPTIONS_BLOCK_HIGHER_PART_SIZE = OPTIONS_BLOCK_SIZE - OPTIONS_BLOCK_LOWER_PART_S
 class StrikeFinder:
     def __init__(self):
         self.market_data_fetcher = MarketDataFetcher()
+        self.middle_fetched_block = {'C': [], 'P': []}
+        self.edge_fetched_block = {'C': [], 'P': []}
 
     async def get_low_delta_put_option(self, put_options, target_delta):
         return await self._get_low_delta_option(put_options, target_delta, 'P')
@@ -22,6 +24,9 @@ class StrikeFinder:
 
     async def _get_low_delta_option(self, options, target_delta, right):
         assert options
+        self.middle_fetched_block[right] = []
+        self.edge_fetched_block[right] = []
+
         strike_to_option = {option.strike: option for option in options}
         strikes = sorted(strike_to_option.keys(), reverse=(right == 'C'))
         
@@ -32,6 +37,7 @@ class StrikeFinder:
 
         logger.info(f"Fetching {right} option block: {strikes[lower_idx]} -> {strikes[higher_idx]}")
         options_block = await self.fetch_options_block(lower_idx, higher_idx, strike_to_option, strikes)
+        self.middle_fetched_block[right] = options_block
 
         lowest_delta, highest_delta = 1.0, 0.0
         highest_delta_option = None
@@ -58,6 +64,7 @@ class StrikeFinder:
             else:
                 if higher_idx + 1 < number_of_strikes:
                     options_block = await self.fetch_options_block(higher_idx + 1, number_of_strikes - 1, strike_to_option, strikes)
+            self.edge_fetched_block[right] = options_block
         
         elif highest_delta < target_delta:
             current_candidate = highest_delta_option
@@ -67,6 +74,7 @@ class StrikeFinder:
             else:
                 if lower_idx > 0:
                     options_block = await self.fetch_options_block(0, lower_idx - 1, strike_to_option, strikes)
+            self.edge_fetched_block[right] = options_block
 
         highest_delta_under_target = 0
         for option in options_block:
@@ -91,13 +99,43 @@ class StrikeFinder:
         if final_delta is None:
             logger.error(f"No delta data available for the candidate {right} option")
             return None
-            
-        if final_delta > target_delta:
-            logger.error(f"Selected {right} option {get_option_name(current_candidate)} delta {final_delta:.3f} > target {target_delta:.3f}")
+
+        if current_candidate == options_block[0] and final_delta < 0.0001:
             return None
 
-        logger.info(f"Selected {right} option: {get_option_name(current_candidate)}, delta: {final_delta:.3f}, target: {target_delta:.3f}")
+        if final_delta > target_delta:
+            logger.error(f"The selected option ({get_option_name(current_candidate)}) has a delta of {final_delta:.3f}, which is higher than the target delta ({target_delta:.3f}), thus no option selected")
+            return None
+
+        logger.info(f"Selected option: {get_option_name(current_candidate)}, delta: {final_delta:.3f}, target: {target_delta:.3f}")
         return current_candidate
+
+    def find_first_cheap_option(self, right):
+        """
+        Traverses middle and then edge fetched blocks to find the first option with ask 0.05.
+        Calls: Traverses lower strikes to higher.
+        Puts: Traverses higher strikes to lower.
+        """
+        blocks_to_check = [
+            self.middle_fetched_block.get(right, []),
+            self.edge_fetched_block.get(right, [])
+        ]
+
+        for block in blocks_to_check:
+            if not block:
+                continue
+
+            # In _get_low_delta_option:
+            # Calls are sorted Higher -> Lower
+            # Puts are sorted Lower -> Higher
+            # Traversal requested:
+            # Calls: Lower -> Higher (needs reverse)
+            # Puts: Higher -> Lower (needs reverse)
+            for option in reversed(block):
+                if extract_ask(option.ticker) == 0.05:
+                    return option
+
+        return None
 
     async def fetch_options_block(self, lower_idx, higher_idx, strike_to_option, strikes):
         if lower_idx > higher_idx: return []

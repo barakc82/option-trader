@@ -16,8 +16,6 @@ from .connection_manager import ConnectionManager
 
 
 logger = logging.getLogger(__name__)
-MAIN_MINIMAL_SAFE_CUSHION = 0
-LATE_MINIMAL_SAFE_CUSHION = 0
 SAFETY_MARGIN = 1000
 CANCELLED_TRADE_MESSAGE_PATTERN = r"INITIAL MARGIN\s+\[(?P<init_margin>[\d,.]+).*?VALUATION UNCERTAINTY\s+\[(?P<uncertainty>[\d,.]+)"
 INSUFFICIENT_FUNDS_MESSAGE_PATTERN = r"Loan Value\s+\[(?P<loan_value>[\d,.]+).*?Initial Margin of\s+\[(?P<init_margin>[\d,.]+)"
@@ -180,37 +178,29 @@ class TradingBot:
             return result
 
         init_margin_after = float(order_state.initMarginAfter)
-        previous_day_equity_with_loan = await self.account_data.get_previous_day_equity_with_loan()
         safe_init_margin_after = init_margin_after + SAFETY_MARGIN
-        is_order_possible = safe_init_margin_after < previous_day_equity_with_loan
 
-        maintenance_margin_after = float(order_state.maintMarginAfter)
-        net_liquidation_value = await self.account_data.get_net_liquidation_value()
-        margin_maintenance_requirement = await self.account_data.get_margin_maintenance_requirement()
-        
-        current_cushion = (net_liquidation_value - margin_maintenance_requirement) / net_liquidation_value
-        projected_cushion = (net_liquidation_value - maintenance_margin_after) / net_liquidation_value
-        
-        minimal_safe_cushion = self.calculate_minimal_safe_cushion(current_cushion)
-        if projected_cushion < minimal_safe_cushion:
-            result.is_low_projected_cushion = True
-            logger.info(f"Testing the sell of {get_option_name(option)} failed because the projected cushion ({projected_cushion:.2f}) "
-                        f"is lower than the minimal safe cushion ({minimal_safe_cushion:.2f})")
-            return result
-
-        if not is_order_possible:
+        previous_day_equity_with_loan = await self.account_data.get_previous_day_equity_with_loan()
+        is_previous_day_equity_with_loan_check_passed = safe_init_margin_after < previous_day_equity_with_loan
+        if not is_previous_day_equity_with_loan_check_passed:
             logger.info(f"Testing the sell of {get_option_name(option)} failed because the required initial margin ({init_margin_after:,.0f} + {SAFETY_MARGIN:,.0f} safety) "
                         f"exceeds the previous day equity with loan ({previous_day_equity_with_loan:,.0f})")
             result.required_initial_margin = previous_day_equity_with_loan
             result.initial_margin_after = safe_init_margin_after
+            return result
 
-        result.success = is_order_possible
+        equity_with_loan = await self.account_data.get_equity_with_loan()
+        is_equity_with_loan_check_passed = safe_init_margin_after < equity_with_loan
+        if not is_equity_with_loan_check_passed:
+            logger.info(
+                f"Testing the sell of {get_option_name(option)} failed because the required initial margin ({init_margin_after:,.0f} + {SAFETY_MARGIN:,.0f} safety) "
+                f"exceeds the equity with loan ({equity_with_loan:,.0f})")
+            result.required_initial_margin = equity_with_loan
+            result.initial_margin_after = safe_init_margin_after
+            return result
+
+        result.success = True
         return result
-
-    def calculate_minimal_safe_cushion(self, current_cushion):
-        if is_reduced_safe_cushion_time():
-            return LATE_MINIMAL_SAFE_CUSHION
-        return MAIN_MINIMAL_SAFE_CUSHION
 
     async def modify_stop_loss(self, stop_loss_trade, new_stop_loss):
         stop_loss_price  = await self.adjust_limit_to_market_rules(stop_loss_trade.contract, new_stop_loss)

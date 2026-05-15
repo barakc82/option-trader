@@ -66,6 +66,7 @@ class AccountData:
 
     async def get_cushion(self): return await self.get_account_summary_item('Cushion')
     async def get_previous_day_equity_with_loan(self): return await self.get_account_summary_item('PreviousDayEquityWithLoanValue')
+    async def get_equity_with_loan(self): return await self.get_account_summary_item('EquityWithLoanValue')
     async def get_excess_liquidity(self): return await self.get_account_summary_item('ExcessLiquidity')
     async def get_net_liquidation_value(self): return await self.get_account_summary_item('NetLiquidation')
     async def get_margin_maintenance_requirement(self): return await self.get_account_summary_item('MaintMarginReq')
