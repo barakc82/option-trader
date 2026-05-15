@@ -118,6 +118,7 @@ class TradingBot:
         open_trades = await self.get_open_trades()
         for t in open_trades:
             if option.conId == t.contract.conId and t.order.action.upper() == 'BUY':
+                logger.info(f"Cancelling the buy of {get_option_name(t.contract)} in order to place a new order that will close the positon")
                 self.cancel_trade(t)
 
         if is_regular_hours() and limit is None:

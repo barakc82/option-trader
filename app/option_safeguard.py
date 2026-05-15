@@ -8,7 +8,7 @@ from .positions_manager import PositionsManager
 from .market_data_fetcher import MarketDataFetcher
 from .connection_manager import ConnectionManager
 
-from utilities.ib_utils import is_hollow
+from utilities.ib_utils import is_hollow, req_id_to_comment
 
 logger = logging.getLogger(__name__)
 
@@ -167,4 +167,5 @@ class OptionSafeguard:
             if self.should_guard_positions:
                 logger.warning(f"Closing risky position {get_option_name(option)}")
                 pending_buy_trade = await self.trading_bot.close_short_option_position(position)
+                req_id_to_comment[pending_buy_trade.order.orderId] = "Risk reduction"
                 pending_buy_trade.submission_time = time.time()

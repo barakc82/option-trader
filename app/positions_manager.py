@@ -130,7 +130,8 @@ class PositionsManager:
 
             logger.info(
                 f"Submitting a buy trade for position of {get_option_name(position.contract)}, quantity: {position.position}, bid is {bid}")
-            await self.trading_bot.close_short_option(option, abs(position.position), limit=0.05)
+            close_position_trade = await self.trading_bot.close_short_option(option, abs(position.position), limit=0.05)
+            req_id_to_comment[close_position_trade.order.orderId] = "Position buyback"
 
     def can_buy_options(self):
         return not is_final_hours()
