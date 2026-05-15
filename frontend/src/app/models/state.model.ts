@@ -47,6 +47,7 @@ export interface Position {
     margin_lock: string;
     last_put_option_price: number;
     last_call_option_price: number;
+    margin_deficiency: number;
     put_options_above_minimal_sell_price: boolean;
     call_options_above_minimal_sell_price: boolean;
     positions: Position[];

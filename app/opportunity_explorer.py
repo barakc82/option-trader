@@ -132,6 +132,7 @@ class OpportunityExplorer:
             self.can_submit_orders = True
             self.last_put_option_price = 0
             self.last_call_option_price = 0
+            self.margin_deficiency = 0
             
             # Dynamic config fields
             self.should_write_options_overnight = True
@@ -343,6 +344,7 @@ class OpportunityExplorer:
             return
 
         missing_sum = required_initial_margin - initial_margin_after_sell
+        self.margin_deficiency = round(abs(missing_sum))
         required_number_of_units = math.ceil(missing_sum / initial_margin_change)
 
         logger.info(f"try_to_reduce_initial_margin_for_call_options, required initial margin: {required_initial_margin}, initial margin after sell: {initial_margin_after_sell:.0f}, "
@@ -355,7 +357,7 @@ class OpportunityExplorer:
         if self.last_call_option_price * 0.4 > 0.07 * required_number_of_units + 0.02:
             logger.info(f"Buying {required_number_of_units} units of {get_option_name(available_cheap_call_option)} would relax the required initial margin")
             trade = self.trading_bot.buy_low_cost(available_cheap_call_option, required_number_of_units)
-            comment = f"Margin Reduction of {abs(missing_sum)}"
+            comment = f"Margin Reduction of {round(abs(initial_margin_change))}"
             req_id_to_comment[trade.order.orderId] = comment
             self.can_submit_orders = True
         else:
@@ -379,6 +381,7 @@ class OpportunityExplorer:
             return
 
         missing_sum = required_initial_margin - initial_margin_after_sell
+        self.margin_deficiency = round(abs(missing_sum))
         required_number_of_units = math.ceil(missing_sum / initial_margin_change)
 
         logger.info(f"try_to_reduce_initial_margin_for_put_options, required initial margin: {required_initial_margin:.0f}, initial margin after sell: {initial_margin_after_sell:.0f}, "
@@ -391,7 +394,7 @@ class OpportunityExplorer:
         if self.last_put_option_price * 0.4 > 0.07 * required_number_of_units + 0.02:
             logger.info(f"Buying {required_number_of_units} units of {get_option_name(available_cheap_put_option)} would relax the required initial margin")
             trade = self.trading_bot.buy_low_cost(available_cheap_put_option, required_number_of_units)
-            comment = f"Margin Reduction of {abs(missing_sum)}"
+            comment = f"Margin Reduction of {round(abs(initial_margin_change))}"
             req_id_to_comment[trade.order.orderId] = comment
             self.can_submit_orders = True
         else:

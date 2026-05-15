@@ -27,6 +27,9 @@
         <strong>Put Options Last Price:</strong> {{ state.last_put_option_price }}
       </p>
       <p><strong>S&P 500:</strong> {{ state.spx_price !== null ? state.spx_price : 'N/A' }}</p>
+      <p *ngIf="state.margin_deficiency > 0">
+        <strong>Margin Deficiency:</strong> {{ state.margin_deficiency }}
+      </p>
 
       <h3>Positions</h3>
       <table class="table">
