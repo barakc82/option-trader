@@ -20,7 +20,7 @@ MAIN_MINIMAL_SAFE_CUSHION = 0
 LATE_MINIMAL_SAFE_CUSHION = 0
 SAFETY_MARGIN = 1000
 CANCELLED_TRADE_MESSAGE_PATTERN = r"INITIAL MARGIN\s+\[(?P<init_margin>[\d,.]+).*?VALUATION UNCERTAINTY\s+\[(?P<uncertainty>[\d,.]+)"
-
+INSUFFICIENT_FUNDS_MESSAGE_PATTERN = r"Loan Value\s+\[(?P<loan_value>[\d,.]+).*?Initial Margin of\s+\[(?P<init_margin>[\d,.]+)"
 
 class TradingBot:
     _instance = None
@@ -291,6 +291,14 @@ class TradingBot:
                     logger.info(f"Initial margin: {init_margin_after}, valuation uncertainty: {valuation_uncertainty}")
                     result.required_initial_margin = await self.account_data.get_previous_day_equity_with_loan()
                     result.initial_margin_after = init_margin_after + valuation_uncertainty
+                    break
+                if "Your Available Funds are in sufficient" in trade_log_entry.message:
+                    match = re.search(INSUFFICIENT_FUNDS_MESSAGE_PATTERN, trade_log_entry.message)
+                    loan_value = float(match.group('loan_value').replace(',', ''))
+                    init_margin_after = float(match.group('init_margin').replace(',', ''))
+                    logger.info(f"Loan value: {loan_value}, New total initial margin: {init_margin_after}")
+                    result.required_initial_margin = loan_value
+                    result.initial_margin_after = init_margin_after
                     break
 
         if not is_cancelled:
