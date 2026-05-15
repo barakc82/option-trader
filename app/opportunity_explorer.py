@@ -391,7 +391,7 @@ class OpportunityExplorer:
         if self.last_put_option_price * 0.4 > 0.07 * required_number_of_units + 0.02:
             logger.info(f"Buying {required_number_of_units} units of {get_option_name(available_cheap_put_option)} would relax the required initial margin")
             trade = self.trading_bot.buy_low_cost(available_cheap_put_option, required_number_of_units)
-            comment = f"Margin relax"
+            comment = f"Margin Reduction of {abs(missing_sum)}"
             req_id_to_comment[trade.order.orderId] = comment
             self.can_submit_orders = True
         else:

@@ -6,9 +6,9 @@ from utilities.utils import *
 
 from .max_loss_calculator import calculate_max_loss
 from .opportunity_explorer import OpportunityExplorer, calculate_max_options_for_market_drop, \
-    calculate_max_options_for_market_rise
+    calculate_max_options_for_market_rise, MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION
+from .positions_manager import PositionsManager, MINIMAL_SELL_PRICE_TO_CLOSE_POSITION
 from .trading_bot import TradingBot
-from .positions_manager import PositionsManager
 from .connection_manager import ConnectionManager
 from .market_data_fetcher import MarketDataFetcher
 from .target_delta_calculator import TargetDeltaCalculator
@@ -16,7 +16,8 @@ from .state_updater import StateUpdater, post_current_state
 
 
 logger = logging.getLogger(__name__)
-OPEN_ORDER_EXPIRATION_TIME = timedelta(minutes=20)
+OPEN_SELL_ORDER_EXPIRATION_TIME = timedelta(minutes=20)
+OPEN_GENERAL_MARGIN_REDUCTION_BUY_ORDER_EXPIRATION_TIME = timedelta(minutes=5)
 
 
 class OptionTrader:
@@ -113,9 +114,9 @@ class OptionTrader:
             if open_sell_trade.log and open_sell_trade.log[0].status == 'Submitted':
                 submission_entry = open_sell_trade.log[0]
                 timezone = submission_entry.time.tzinfo
-                if datetime.now(timezone) - submission_entry.time > OPEN_ORDER_EXPIRATION_TIME:
+                if datetime.now(timezone) - submission_entry.time > OPEN_SELL_ORDER_EXPIRATION_TIME:
                     logger.info(
-                        f"Cancelling sell of {get_option_name(open_sell_trade.contract)} since it has not been filled for the past hour")
+                        f"Cancelling sell of {get_option_name(open_sell_trade.contract)} since it has not been filled for the 20 minutes")
                     self.trading_bot.cancel_trade(open_sell_trade)
                     continue
 
@@ -154,13 +155,35 @@ class OptionTrader:
         buy_limit_trades = [trade for trade in open_trades if
                             trade.order.orderType == 'LMT' and trade.order.action.upper() == 'BUY']
         for buy_limit_trade in buy_limit_trades:
-            corresponding_position_found = any(
-                buy_limit_trade.contract.conId == position.contract.conId for position in positions)
-            option_ask_value = self.market_data_fetcher.get_ask(buy_limit_trade.contract)
-            if (not corresponding_position_found and option_ask_value > 0.05):
-                logger.info(f"Cancelling {get_option_name(buy_limit_trade.contract)} because it has no corresponding "
+            option = buy_limit_trade.contract
+            corresponding_position_found = any(option.conId == position.contract.conId for position in positions)
+            option_ask_value = self.market_data_fetcher.get_ask(option)
+            price_level = self.opportunity_explorer.last_call_option_price if option.right == 'C' else self.opportunity_explorer.last_put_option_price
+
+            if corresponding_position_found and option_ask_value == 0.05:
+                if price_level < MINIMAL_SELL_PRICE_TO_CLOSE_POSITION:
+                    logger.info(f"Cancelling {get_option_name(option)} because it has the current price level for "
+                                f"'{option.right}' is too low ({price_level}) for position buyback")
+                    self.trading_bot.cancel_trade(buy_limit_trade)
+
+            if not corresponding_position_found and option_ask_value > 0.05:
+                logger.info(f"Cancelling {get_option_name(option)} because it has no corresponding "
                             f"position and it has an ask value of {option_ask_value}, so no reason to keep it")
                 self.trading_bot.cancel_trade(buy_limit_trade)
+
+            if not corresponding_position_found and option_ask_value == 0.05:
+                if price_level < MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION:
+                    logger.info(f"Cancelling {get_option_name(option)} because it has the current price level for "
+                                f"'{option.right}' is too low ({price_level}) for general margin reduction")
+                    self.trading_bot.cancel_trade(buy_limit_trade)
+                else:
+                    submission_entry = buy_limit_trade.log[0]
+                    timezone = submission_entry.time.tzinfo
+                    if datetime.now(timezone) - submission_entry.time > OPEN_GENERAL_MARGIN_REDUCTION_BUY_ORDER_EXPIRATION_TIME:
+                        logger.info(
+                            f"Cancelling buy of {get_option_name(option)} since it has not been filled for the 5 minutes")
+                        self.trading_bot.cancel_trade(buy_limit_trade)
+
 
         logger.info("Checking for invalid stop loss trades")
         open_stop_loss_trades = [trade for trade in open_trades if trade.order.orderType == 'STP']
