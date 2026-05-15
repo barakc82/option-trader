@@ -133,6 +133,8 @@ class OpportunityExplorer:
             self.last_put_option_price = 0
             self.last_call_option_price = 0
             self.margin_deficiency = 0
+            self.call_margin_reduction = None
+            self.put_margin_reduction = None
             
             # Dynamic config fields
             self.should_write_options_overnight = True
@@ -156,6 +158,9 @@ class OpportunityExplorer:
     async def explore_opportunities(self):
         # 1. Refresh dynamic config at the start of each iteration
         self.load_config()
+        self.margin_deficiency = 0
+        self.call_margin_reduction = None
+        self.put_margin_reduction = None
 
         logger.info("Exploring new opportunities")
         date = get_current_trading_day()
@@ -346,6 +351,11 @@ class OpportunityExplorer:
         missing_sum = required_initial_margin - initial_margin_after_sell
         self.margin_deficiency = round(abs(missing_sum))
         required_number_of_units = math.ceil(missing_sum / initial_margin_change)
+        self.call_margin_reduction = {
+            'option': get_option_name(available_cheap_call_option),
+            'margin_change': round(abs(initial_margin_change)),
+            'required_units': required_number_of_units
+        }
 
         logger.info(f"try_to_reduce_initial_margin_for_call_options, required initial margin: {required_initial_margin}, initial margin after sell: {initial_margin_after_sell:.0f}, "
                     f"initial margin change due to buy: {initial_margin_change:.0f}, option to be sold: {get_option_name(call_option_to_be_sold)}, option to buy: {get_option_name(available_cheap_call_option)}, missing sum: {missing_sum:.0f}, required number of units = {required_number_of_units}, last call price: {self.last_call_option_price}")
@@ -383,6 +393,11 @@ class OpportunityExplorer:
         missing_sum = required_initial_margin - initial_margin_after_sell
         self.margin_deficiency = round(abs(missing_sum))
         required_number_of_units = math.ceil(missing_sum / initial_margin_change)
+        self.put_margin_reduction = {
+            'option': get_option_name(available_cheap_put_option),
+            'margin_change': round(abs(initial_margin_change)),
+            'required_units': required_number_of_units
+        }
 
         logger.info(f"try_to_reduce_initial_margin_for_put_options, required initial margin: {required_initial_margin:.0f}, initial margin after sell: {initial_margin_after_sell:.0f}, "
                     f"initial margin change due to buy: {initial_margin_change:.0f}, option to be sold: {get_option_name(put_option_to_be_sold)}, option to buy: {get_option_name(available_cheap_put_option)}, missing sum: {missing_sum:.0f}, required number of units = {required_number_of_units}, last put price: {self.last_put_option_price}")
@@ -404,3 +419,4 @@ class OpportunityExplorer:
         if math.isnan(option.ticker.bid) or math.isnan(option.ticker.bid):
             return option.ticker.last
         return await self.trading_bot.calculate_limit(option, option.ticker.bid, option.ticker.ask)
+

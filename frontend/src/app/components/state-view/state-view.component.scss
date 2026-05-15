@@ -45,6 +45,23 @@
   .buy-at-limit-row {
     background-color: rgb(3, 182, 3);
   }
+
+  .margin-reduction-info {
+    border: 1px solid #ccc;
+    padding: 10px;
+    margin: 10px 0;
+    background-color: #f9f9f9;
+    border-radius: 4px;
+
+    h4 {
+      margin-top: 0;
+      color: #333;
+    }
+
+    p {
+      margin: 5px 0;
+    }
+  }
   
   /*.high-delta {
     font-weight: bold;

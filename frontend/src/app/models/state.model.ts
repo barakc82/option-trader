@@ -29,6 +29,12 @@ export interface Position {
     comment: string;
   }
 
+  export interface MarginReductionDetails {
+    option: string;
+    margin_change: number;
+    required_units: number;
+  }
+
   export interface State {
     status: string;
     time: number;
@@ -48,6 +54,8 @@ export interface Position {
     last_put_option_price: number;
     last_call_option_price: number;
     margin_deficiency: number;
+    call_margin_reduction: MarginReductionDetails | null;
+    put_margin_reduction: MarginReductionDetails | null;
     put_options_above_minimal_sell_price: boolean;
     call_options_above_minimal_sell_price: boolean;
     positions: Position[];
