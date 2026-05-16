@@ -1,4 +1,3 @@
-import re
 import math
 import time
 
@@ -7,109 +6,17 @@ from selenium.webdriver.common.by import By
 from utilities.meitav.get_status import extract_status
 from utilities.meitav.meitav_common import *
 from utilities.meitav.start import start
-
-CELL_REF_REGEX = re.compile(
-    r'(\$?[A-Z]+)(\d+)'  # column (with optional $) + row number
-)
-
-BOTTOM = 695
-TOP = 8752
+from utilities.meitav.falling_knife_logic import FallingKnifeCalculator
 
 # =======================
 
 person = Barak
-program_type = Gemel
-
+program_type = Hishtalmut
 
 # =======================
 
 def calculate_next_buy2(driver, status):
-
-    def calculate_buy_result_given_leveraged_price(leveraged_price):
-        new_leveraged_sum = leveraged_price * leveraged_quantity / 100
-        real_decrease_ratio = math.pow(current_leveraged_price / leveraged_price, 1/3)
-        new_base_sum = sum(base_quantity * base_price/real_decrease_ratio for base_quantity, base_price in base_etfs_data) / 100
-        initial_total = new_leveraged_sum + new_base_sum + cash
-        total_fees = initial_total * 0.0025 * 3
-        cash_for_investment = max(cash - total_fees, 0)
-        new_total = new_leveraged_sum + new_base_sum + cash_for_investment
-        new_leveraged_share = new_leveraged_sum / new_total
-        base_share = new_base_sum / new_total
-        new_status = (leveraged_price - BOTTOM) / (TOP - BOTTOM)
-        required_leveraged_share = min_leveraged_share + (max_leveraged_share - min_leveraged_share) * (
-                1 - new_status)
-        required_transfer = (required_leveraged_share - new_leveraged_share) * new_total
-
-        buy_result = {
-            "new_leveraged_sum": new_leveraged_sum,
-            "new_base_sum": new_base_sum,
-            "new_total": new_total,
-            "new_leveraged_share": new_leveraged_share,
-            "base_share": base_share,
-            "cash_for_investment": cash_for_investment,
-            "new_status": new_status,
-            "required_leveraged_share": required_leveraged_share,
-            "required_transfer": required_transfer
-        }
-        return buy_result
-
-
-    def leveraged_price_for_transfer_by_incrementing_price(max_leveraged_share, min_leveraged_share):
-        global lower_leveraged_price, new_leveraged_sum, new_base_sum, new_total, new_leveraged_share, base_share, new_status, required_leveraged_share, required_transfer, leveraged_price_for_transfer
-        previous_iteration = {}
-        for lower_leveraged_price in range(current_leveraged_price, current_leveraged_price * 2):
-            buy_result = calculate_buy_result_given_leveraged_price(lower_leveraged_price)
-            print(
-                f"For the price of {lower_leveraged_price} the required transfer is {buy_result['required_transfer']}, using total: {buy_result['new_total']}")
-            if required_transfer < 1000 and 'new_leveraged_sum' in previous_iteration:
-                new_leveraged_sum = previous_iteration["new_leveraged_sum"]
-                new_base_sum = previous_iteration["new_base_sum"]
-                cash_for_investment = previous_iteration['cash_for_investment']
-                new_total = previous_iteration["new_total"]
-                new_leveraged_share = previous_iteration["new_leveraged_share"]
-                base_share = previous_iteration["base_share"]
-                new_status = previous_iteration["new_status"]
-                required_leveraged_share = previous_iteration["required_leveraged_share"]
-                required_transfer = previous_iteration["required_transfer"]
-
-                leveraged_price_for_transfer = lower_leveraged_price - 1
-                print(f"At leveraged price of {lower_leveraged_price}, new status:\t{new_status}\n"
-                      f"new leveraged sum:\t{new_leveraged_sum}\n"
-                      f"new base sum:\t{new_base_sum}\n"
-                      f"cash for investment:\t{cash_for_investment}\n"
-                      f"new total:\t{new_total}\n"
-                      f"required leveraged share:\t{required_leveraged_share:.2f}\n"
-                      f"new leveraged share:\t{new_leveraged_share:.2f}")
-                break
-
-            previous_iteration = buy_result
-        return leveraged_price_for_transfer
-
-    def leveraged_price_for_transfer_by_decreasing_price(max_leveraged_share, min_leveraged_share):
-        leveraged_price_for_transfer = 0
-
-        for lower_leveraged_price in range(current_leveraged_price, 0, -1):
-            buy_result = calculate_buy_result_given_leveraged_price(lower_leveraged_price)
-            required_transfer = buy_result['required_transfer']
-            print(f"{lower_leveraged_price} ----> {required_transfer}")
-
-            if required_transfer > 1000:
-                leveraged_price_for_transfer = lower_leveraged_price
-                new_leveraged_sum = buy_result["new_leveraged_sum"]
-                new_base_sum = buy_result["new_base_sum"]
-                new_total = buy_result["new_total"]
-                new_leveraged_share = buy_result["new_leveraged_share"]
-                new_status = buy_result["new_status"]
-                required_leveraged_share = buy_result["required_leveraged_share"]
-                print(f"At leveraged price of {lower_leveraged_price}, new status:\t{new_status}\n"
-                      f"new leveraged sum:\t{new_leveraged_sum}\n"
-                      f"new base sum:\t{new_base_sum}\n"
-                      f"new total:\t{new_total}\n"
-                      f"required leveraged share:\t{required_leveraged_share:.2f}\n"
-                      f"new leveraged share:\t{new_leveraged_share:.2f}")
-                break
-        return leveraged_price_for_transfer
-
+    # Select leveraged ETF to ensure UI state
     element = driver.find_element(By.XPATH, f"//*[text()='1144708']")
     element.click()
     time.sleep(1)
@@ -123,29 +30,23 @@ def calculate_next_buy2(driver, status):
     for etf_id, holding in holdings.items():
         if etf_id == 1144708:
             continue
-        base_quantity = holding['quantity']
-        base_price = holding['last_price']
-        base_etfs_data.append((base_quantity, base_price))
+        base_etfs_data.append((holding['quantity'], holding['last_price']))
 
     cash = status['cash']
-    leveraged_price_for_transfer = 0
-
     person_data = users_data[person]
-    max_leveraged_share = person_data['max_leveraged_share']
-    min_leveraged_share = person_data['min_leveraged_share']
-    buy_result = calculate_buy_result_given_leveraged_price(current_leveraged_price)
-    should_buy_now = buy_result['required_transfer'] > 1000
-
-    if should_buy_now:
-        leveraged_price_for_transfer = leveraged_price_for_transfer_by_incrementing_price(max_leveraged_share,
-                                                                                          min_leveraged_share)
-    else:
-        leveraged_price_for_transfer = leveraged_price_for_transfer_by_decreasing_price(max_leveraged_share,
-                                                                                        min_leveraged_share)
-
-    units = math.ceil(100000 / leveraged_price_for_transfer)
-    print(f"Next transfer is at {leveraged_price_for_transfer}, units: {units}")
-    return leveraged_price_for_transfer, units
+    
+    calculator = FallingKnifeCalculator(
+        leveraged_quantity, 
+        current_leveraged_price, 
+        base_etfs_data, 
+        cash, 
+        person_data
+    )
+    
+    target_price, result = calculator.find_next_transfer_price()
+    units = calculator.print_summary(target_price, result)
+    
+    return target_price, units
 
 
 if __name__ == '__main__':
