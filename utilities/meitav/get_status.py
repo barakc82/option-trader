@@ -137,7 +137,7 @@ def extract_status(driver):
         # This usually involves finding a 'row' element
 
         holdings = extract_holdings(driver)
-        holdings.pop(1150242)
+        holdings.pop(1150242, None)
         status["holdings"] = holdings
         print("--- Current Status ---")
         print(status)
