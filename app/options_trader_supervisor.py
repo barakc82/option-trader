@@ -253,11 +253,22 @@ def is_session_expired():
     return False
 
 
-def soft_restart():
+def soft_restart(timeout: int = 30):
     logger.info("Running 'restart.sh'")
     try:
-        subprocess.run(['/home/ibgateway/ibc/restart.sh'], check=True)
+        result = subprocess.run(
+            ['/home/ibgateway/ibc/restart.sh'],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout
+        )
+        logger.info(f"Soft restart script executed successfully: {result.stdout}")
         time.sleep(5)
+    except subprocess.TimeoutExpired:
+        logger.error(f"Soft restart timed out after {timeout} seconds")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Soft restart failed with exit code {e.returncode}: {e.stderr}")
     except Exception as e:
         logger.error(f"Soft restart failed: {e}")
 
@@ -421,22 +432,41 @@ def wait_for_user_to_be_ready_to_login():
     logger.info(f"Leaving wait_for_user_to_be_ready_to_login")
 
 
-def restart_ibgateway():
+def restart_ibgateway(timeout: int = 30):
+    logger.info("Restarting IB Gateway...")
     wait_for_user_to_be_ready_to_login()
 
-    stop_ibgateway_command = ['/home/ibgateway/ibc/stop.sh', '']
+    logger.info("Running stop.sh...")
     try:
-        subprocess.run(stop_ibgateway_command)
+        subprocess.run(
+            ['/home/ibgateway/ibc/stop.sh'],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=True
+        )
+        logger.info("IB Gateway stopped successfully")
+    except subprocess.TimeoutExpired:
+        logger.error(f"stop.sh timed out after {timeout} seconds")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Failed to stop IB Gateway (exit code {e.returncode}): {e.stderr}")
     except Exception as e:
         logger.error(f"Failed to stop IB Gateway: {e}")
 
-    run_ibgateway_command = ['/home/ibgateway/scripts/run.sh', '']
+    logger.info("Running run.sh...")
     try:
-        subprocess.Popen(run_ibgateway_command)
+        subprocess.Popen(
+            ['/home/ibgateway/scripts/run.sh'],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        logger.info("IB Gateway start initiated successfully")
     except Exception as e:
         logger.error(f"Failed to start IB Gateway: {e}")
-    time.sleep(5)
 
+    time.sleep(5)
 
 def restart_platform():
     if is_in_docker():
