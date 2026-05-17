@@ -100,7 +100,7 @@ class StateUpdater:
             # Find stop loss if it exists
             stop_loss = 0
             for t in open_trades:
-                if t.contract.conId == opt.conId and t.order.orderType == 'STP':
+                if t.contract.conId == opt.conId and t.order.orderType == 'STP LMT':
                     stop_loss = t.order.auxPrice
 
             state_positions.append({
@@ -118,7 +118,10 @@ class StateUpdater:
         for t in open_trades:
             opt = t.contract
             delta = self.market_data_fetcher.get_delta(opt) or contract_id_to_delta.get(opt.conId, '')
-            limit = t.order.lmtPrice if t.order.orderType == 'LMT' else (t.order.auxPrice if t.order.orderType == 'STP' else '')
+            if t.order.orderType == 'STP LMT':
+                 limit = f"{t.order.auxPrice} / {t.order.lmtPrice}"
+            else:
+                 limit = t.order.lmtPrice if t.order.orderType == 'LMT' else ''
 
             state_trades.append({
                 'action': t.order.action, 'right': opt.right, 'strike': opt.strike,

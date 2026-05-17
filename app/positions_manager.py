@@ -57,7 +57,7 @@ class PositionsManager:
     def find_all_stop_loss_trades(self, option, open_stop_loss_trades):
         stop_loss_trades_for_position = []
         for open_stop_loss_trade in open_stop_loss_trades:
-            if option.conId == open_stop_loss_trade.contract.conId and open_stop_loss_trade.order.orderType == 'STP':
+            if option.conId == open_stop_loss_trade.contract.conId and open_stop_loss_trade.order.orderType == 'STP LMT':
                 stop_loss_trades_for_position.append(open_stop_loss_trade)
         return stop_loss_trades_for_position
 
@@ -78,7 +78,7 @@ class PositionsManager:
         open_sell_trades = [trade for trade in open_trades if trade.order.action.upper() == 'SELL' and
                             not is_trade_cancelled(trade)]
         open_stop_loss_trades = [trade for trade in open_trades if trade.order.action.upper() == 'BUY' and
-                                 not is_trade_cancelled(trade) and trade.order.orderType == 'STP']
+                                 not is_trade_cancelled(trade) and trade.order.orderType == 'STP LMT']
 
         for position in positions:
             write_heartbeat()

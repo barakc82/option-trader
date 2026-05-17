@@ -30,7 +30,7 @@ class TestOptionSafeguard(unittest.TestCase):
         option.ticker.last = 1
         position = Position(contract=option, position=-1, avgCost=0.15, account="my account")
 
-        stop_loss_order = Order(orderType='STP', totalQuantity=1, auxPrice=2)
+        stop_loss_order = Order(orderType='STP LMT', totalQuantity=1, auxPrice=2, lmtPrice=2.05)
         stop_loss_trade = Trade(order=stop_loss_order)
 
         ib.positions.return_value = [position]
@@ -57,7 +57,7 @@ class TestOptionSafeguard(unittest.TestCase):
         option.ticker.last = 2
         position = Position(contract=option, position=-1, avgCost=0.15, account="my account")
 
-        stop_loss_order = Order(orderType='STP', totalQuantity=1, auxPrice=2)
+        stop_loss_order = Order(orderType='STP LMT', totalQuantity=1, auxPrice=2, lmtPrice=2.05)
         stop_loss_trade = Trade(order=stop_loss_order)
 
         buy_order = Order(orderType='LMT', action='BUY', totalQuantity=1, lmtPrice=2)
@@ -109,7 +109,7 @@ class TestOptionSafeguard(unittest.TestCase):
         option.ticker.last = 2
         position = Position(contract=option, position=-1, avgCost=0.15, account="my account")
 
-        stop_loss_order = Order(orderType='STP', totalQuantity=1, auxPrice=2)
+        stop_loss_order = Order(orderType='STP LMT', totalQuantity=1, auxPrice=2, lmtPrice=2.05)
         stop_loss_trade = Trade(order=stop_loss_order)
 
         buy_order = Order(orderType='LMT', action='BUY', totalQuantity=1, lmtPrice=2)

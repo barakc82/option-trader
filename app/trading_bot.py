@@ -5,7 +5,7 @@ import sys
 import time
 from datetime import date, datetime
 
-from ib_insync import IB, LimitOrder, MarketOrder, StopOrder
+from ib_insync import IB, LimitOrder, MarketOrder, StopOrder, StopLimitOrder
 
 from utilities.ib_utils import SellOptionResult, MINIMAL_SELL_PRICE
 from utilities.utils import *
@@ -151,12 +151,13 @@ class TradingBot:
     async def add_stop_loss(self, position, stop_loss_per_option):
         raw_stop = position.avgCost / 100 + stop_loss_per_option
         stop_price = await self.adjust_limit_to_market_rules(position.contract, raw_stop)
+        limit_price = await self.adjust_limit_to_market_rules(position.contract, stop_price + 0.05)
         
-        order = StopOrder('BUY', abs(position.position), stop_price, account=MY_ACCOUNT)
+        order = StopLimitOrder('BUY', abs(position.position), stop_price, limit_price, account=MY_ACCOUNT)
         order.usePriceMgmtAlgo = False
         order.tif = 'GTC'
 
-        logger.info(f"Adding stop loss for {get_option_name(position.contract)} at {stop_price}")
+        logger.info(f"Adding stop loss for {get_option_name(position.contract)} at {stop_price}, limit at {limit_price}")
         return self.ib.placeOrder(position.contract, order)
 
     async def test_order(self, option, number_of_options, limit):
@@ -204,7 +205,10 @@ class TradingBot:
 
     async def modify_stop_loss(self, stop_loss_trade, new_stop_loss):
         stop_loss_price  = await self.adjust_limit_to_market_rules(stop_loss_trade.contract, new_stop_loss)
+        limit_price = await self.adjust_limit_to_market_rules(stop_loss_trade.contract, stop_loss_price + 0.05)
+        
         stop_loss_trade.order.auxPrice = stop_loss_price
+        stop_loss_trade.order.lmtPrice = limit_price
         stop_loss_trade.order.usePriceMgmtAlgo = False
         stop_loss_trade.order.outsideRth = True
         stop_loss_trade.order.tif = 'GTC'

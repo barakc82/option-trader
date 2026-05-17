@@ -186,7 +186,7 @@ class OptionTrader:
 
 
         logger.info("Checking for invalid stop loss trades")
-        open_stop_loss_trades = [trade for trade in open_trades if trade.order.orderType == 'STP']
+        open_stop_loss_trades = [trade for trade in open_trades if trade.order.orderType == 'STP LMT']
         for open_stop_loss_trade in open_stop_loss_trades:
             matching_position = next(
                 (position for position in positions
@@ -228,5 +228,5 @@ class OptionTrader:
     async def verify_no_open_trades(self):
         open_trades = await self.trading_bot.get_open_trades()
         for open_trade in open_trades:
-            if open_trade.order.orderType != 'STP':
+            if open_trade.order.orderType != 'STP LMT':
                 self.trading_bot.cancel_trade(open_trade)
