@@ -29,30 +29,9 @@ class PositionsManager:
         if not self._initialized:
             # Accessing the TradingBot singleton internally
             self.trading_bot = TradingBot()
-            self.filled_trades = []
             logger.info("PositionsManager singleton initialized.")
             self._initialized = True
 
-
-    def get_recent_trades(self):
-        return [filled_trade for filled_trade in self.filled_trades if time.time() - filled_trade.fill_time < 300]
-
-    def is_recent_order_filled(self, position, action):
-        for filled_trade in self.filled_trades:
-            if filled_trade.action == action and filled_trade.conId == position.contract.conId and time.time() - filled_trade.fill_time < 60:
-                logger.info(
-                    f"Found a matching recent filled trade: {filled_trade.option_name}, contract id {filled_trade.conId}, action: {filled_trade.action}")
-                return True
-        return False
-
-    def is_recent_buy_filled(self, position):
-        return self.is_recent_order_filled(position, 'BUY')
-
-    def on_fill(self, trade):
-        logger.info(f"Trade filled: {get_option_name(trade.contract)} {trade.order.action}")
-        self.filled_trades.append(trade)
-        now = time.time()
-        self.filled_trades = [t for t in self.filled_trades if now - getattr(t, 'fill_time', now) < 3600]
 
     def find_all_stop_loss_trades(self, option, open_stop_loss_trades):
         stop_loss_trades_for_position = []
@@ -81,6 +60,9 @@ class PositionsManager:
                                  not is_trade_cancelled(trade) and trade.order.orderType == 'STP']
 
         for position in positions:
+            if getattr(position, 'is_done', False):
+                continue
+
             write_heartbeat()
             option = position.contract
             stop_loss_trades_for_position = self.find_all_stop_loss_trades(position.contract, open_stop_loss_trades)
@@ -94,11 +76,12 @@ class PositionsManager:
                     self.trading_bot.cancel_trade(stop_loss_trade)
                     stop_loss_trades_for_position = []
 
-            if not stop_loss_trades_for_position and not self.is_recent_buy_filled(position):
+            if not stop_loss_trades_for_position:
                 stop_loss_per_option = await calculate_max_loss(option.right, should_consider_only_effective=True)
                 logger.info(f"Adding stop loss for {get_option_name(option)}, potential loss per option: {stop_loss_per_option}")
                 stop_loss_trade = await self.trading_bot.add_stop_loss(position, stop_loss_per_option)
                 req_id_to_comment[stop_loss_trade.order.orderId] = "Stop loss activated"
+                position.is_done = True
 
             limit_buy_trade = self.find_limit_buy_trade(option, open_buy_trades)
             opportunity_explorer = OpportunityExplorer()
@@ -132,6 +115,7 @@ class PositionsManager:
                 f"Submitting a buy trade for position of {get_option_name(position.contract)}, quantity: {position.position}, bid is {bid}")
             close_position_trade = await self.trading_bot.close_short_option(option, abs(position.position), limit=0.05)
             req_id_to_comment[close_position_trade.order.orderId] = "Position buyback"
+            position.is_done = True
 
     def can_buy_options(self):
         return not is_final_hours()

@@ -79,10 +79,6 @@ class OptionSafeguard:
             logger.error(f"Error reading safeguard config: {e}")
 
     async def guard_current_positions(self):
-        recent_trades = self.positions_manager.get_recent_trades()
-        for recent_trade in recent_trades:
-            logger.info(f"Recent filled trade: {recent_trade.option_name}, contract id {recent_trade.conId}, order type: {recent_trade.action}")
-
         logger.debug("Checking current positions")
         positions, open_trades = await asyncio.gather(
             self.trading_bot.get_short_options(),
@@ -109,6 +105,9 @@ class OptionSafeguard:
         return None
 
     async def handle_current_risk(self, position, open_trades):
+        if getattr(position, 'is_done', False):
+            return
+
         option = position.contract
         if not hasattr(option, 'ticker') or option.ticker is None:
             ticker = self.market_data_fetcher.get_ticker(option)
@@ -142,10 +141,7 @@ class OptionSafeguard:
 
         if last_price >= stop_loss:
             logger.warning(f"The current price of {get_option_name(option)} ({last_price}) is higher than the stop loss: {stop_loss:}")
-            if self.positions_manager.is_recent_buy_filled(position):
-                logger.info(f"Recent buy already filled, so not closing {get_option_name(option)}")
-                return
-
+            
             pending_buy_trade = self.get_pending_buy(position, open_trades)
             if pending_buy_trade and hasattr(pending_buy_trade, 'submission_time'):
                 if time.time() - pending_buy_trade.submission_time < 10:
@@ -166,6 +162,7 @@ class OptionSafeguard:
             
             if self.should_guard_positions:
                 logger.warning(f"Closing risky position {get_option_name(option)}")
+                position.is_done = True
                 pending_buy_trade = await self.trading_bot.close_short_option_position(position)
                 req_id_to_comment[pending_buy_trade.order.orderId] = "Risk reduction"
                 pending_buy_trade.submission_time = time.time()
