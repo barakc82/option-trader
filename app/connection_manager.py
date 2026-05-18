@@ -32,7 +32,7 @@ class ConnectionManager:
             self._initialized = True
 
     def on_order_status(self, trade):
-        if trade.status == 'Filled' and trade.contract.secType == 'OPT':
+        if trade.orderStatus.status == 'Filled' and trade.contract.secType == 'OPT':
             from .positions_manager import PositionsManager
             PositionsManager().on_fill(trade)
 
