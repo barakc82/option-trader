@@ -20,6 +20,7 @@ class OptionSafeguard:
         self.trading_bot = TradingBot()
         self.market_data_fetcher = MarketDataFetcher()
         self.positions_manager = PositionsManager()
+        self.done_con_ids = set()
         
         self.connection_failure_start_time = None
         self.last_alive_log_time = 0
@@ -86,6 +87,8 @@ class OptionSafeguard:
         )
         
         if positions:
+            current_con_ids = {p.contract.conId for p in positions}
+            self.done_con_ids &= current_con_ids
             await asyncio.gather(*(self.handle_current_risk(position, open_trades) for position in positions))
 
     def find_stop_loss_trade(self, position, open_trades):
@@ -105,7 +108,7 @@ class OptionSafeguard:
         return None
 
     async def handle_current_risk(self, position, open_trades):
-        if getattr(position, 'is_done', False):
+        if position.contract.conId in self.done_con_ids:
             return
 
         option = position.contract
@@ -162,7 +165,7 @@ class OptionSafeguard:
             
             if self.should_guard_positions:
                 logger.warning(f"Closing risky position {get_option_name(option)}")
-                position.is_done = True
+                self.done_con_ids.add(option.conId)
                 pending_buy_trade = await self.trading_bot.close_short_option_position(position)
                 req_id_to_comment[pending_buy_trade.order.orderId] = "Risk reduction"
                 pending_buy_trade.submission_time = time.time()

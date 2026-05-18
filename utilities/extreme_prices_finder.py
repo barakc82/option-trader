@@ -5,6 +5,9 @@ from datetime import datetime, timedelta
 from utilities.database_access import get_worksheet
 from utilities.utils import REGULAR_HOURS_END_TIME, new_york_timezone
 
+start_date = datetime(2026, 5, 19)
+history_days = 38
+
 barak_sheet = get_worksheet("ברק")
 quotes_sheet = get_worksheet("$$$$")
 
@@ -14,16 +17,13 @@ start_date_str = date_arr[0][0]
 history_days = int(history_days_arr[0][0])
 print(f"Start date: {start_date_str}")
 print(f"History days: {history_days}")
-start_date = datetime.strptime(start_date_str, "%d/%m/%y")
+#start_date = datetime.strptime(start_date_str, "%d/%m/%y")
 
 ib = IB()
 ib.connect('127.0.0.1', 7496, clientId=10)
 
 security_names = ['VT', 'AVUV', 'VGT', 'UPRO', 'SP5Y', 'SCHD', 'SCHY', 'SPHD', 'VIG', 'VIGI', 'ACWD', 'GBTC', 'SPYU', 'INTU', 'MA', 'AXP', 'META', 'ASML', 'OXY']
 row_indices = [177, 178, None, None, None, 182, 183, 184, 185, 186, None, None, None, 189, 195, 198, 199, 201, 202]
-
-start_date = datetime(2026, 5, 11)
-history_days = 36
 
 history_end_date = start_date - timedelta(days=1)
 print(f"History end date: {history_end_date}")

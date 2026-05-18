@@ -27,8 +27,14 @@ class ConnectionManager:
             # Hook events
             self.ib.disconnectedEvent += self.on_disconnected
             self.ib.errorEvent += self.on_error
+            self.ib.orderStatusEvent += self.on_order_status
             
             self._initialized = True
+
+    def on_order_status(self, trade):
+        if trade.status == 'Filled' and trade.contract.secType == 'OPT':
+            from .positions_manager import PositionsManager
+            PositionsManager().on_fill(trade)
 
     async def connect(self, client_id=1):
         """Handle the initial connection and keep-alive loop."""
@@ -78,7 +84,6 @@ class ConnectionManager:
                 logger.debug("Cannot request account updates: Not connected or no accounts available.")
         except Exception as e:
             logger.error(f"Error requesting account updates: {e}")
-            
 
     async def _check_health(self):
         """Check if the connection is actually responsive."""

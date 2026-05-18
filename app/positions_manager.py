@@ -29,6 +29,7 @@ class PositionsManager:
         if not self._initialized:
             # Accessing the TradingBot singleton internally
             self.trading_bot = TradingBot()
+            self.done_con_ids = set()
             logger.info("PositionsManager singleton initialized.")
             self._initialized = True
 
@@ -59,10 +60,10 @@ class PositionsManager:
         open_stop_loss_trades = [trade for trade in open_trades if trade.order.action.upper() == 'BUY' and
                                  not is_trade_cancelled(trade) and trade.order.orderType == 'STP']
 
-        for position in positions:
-            if getattr(position, 'is_done', False):
-                continue
+        current_con_ids = {p.contract.conId for p in positions}
+        self.done_con_ids &= current_con_ids
 
+        for position in positions:
             write_heartbeat()
             option = position.contract
             stop_loss_trades_for_position = self.find_all_stop_loss_trades(position.contract, open_stop_loss_trades)
@@ -81,7 +82,6 @@ class PositionsManager:
                 logger.info(f"Adding stop loss for {get_option_name(option)}, potential loss per option: {stop_loss_per_option}")
                 stop_loss_trade = await self.trading_bot.add_stop_loss(position, stop_loss_per_option)
                 req_id_to_comment[stop_loss_trade.order.orderId] = "Stop loss activated"
-                position.is_done = True
 
             limit_buy_trade = self.find_limit_buy_trade(option, open_buy_trades)
             opportunity_explorer = OpportunityExplorer()
@@ -115,7 +115,11 @@ class PositionsManager:
                 f"Submitting a buy trade for position of {get_option_name(position.contract)}, quantity: {position.position}, bid is {bid}")
             close_position_trade = await self.trading_bot.close_short_option(option, abs(position.position), limit=0.05)
             req_id_to_comment[close_position_trade.order.orderId] = "Position buyback"
-            position.is_done = True
+
 
     def can_buy_options(self):
         return not is_final_hours()
+
+    def on_fill(self, trade):
+        logger.info(f"Trade filled: {get_option_name(trade.contract)} {trade.order.action}")
+        self.done_con_ids.add(trade.contract.conId)
