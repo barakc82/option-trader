@@ -132,7 +132,8 @@ class OpportunityExplorer:
             self.can_submit_orders = True
             self.last_put_option_price = 0
             self.last_call_option_price = 0
-            self.margin_deficiency = 0
+            self.call_margin_deficiency = 0
+            self.put_margin_deficiency = 0
             self.call_margin_reduction = None
             self.put_margin_reduction = None
             
@@ -158,7 +159,8 @@ class OpportunityExplorer:
     async def explore_opportunities(self):
         # 1. Refresh dynamic config at the start of each iteration
         self.load_config()
-        self.margin_deficiency = 0
+        self.call_margin_deficiency = 0
+        self.put_margin_deficiency = 0
         self.call_margin_reduction = None
         self.put_margin_reduction = None
 
@@ -365,7 +367,7 @@ class OpportunityExplorer:
             return
 
         missing_sum = required_initial_margin - initial_margin_after_sell
-        self.margin_deficiency = round(abs(missing_sum))
+        self.call_margin_deficiency = round(abs(missing_sum))
         required_number_of_units = math.ceil(missing_sum / initial_margin_change)
         self.call_margin_reduction = {
             'option': get_option_name(available_cheap_call_option),
@@ -411,7 +413,7 @@ class OpportunityExplorer:
             return
 
         missing_sum = required_initial_margin - initial_margin_after_sell
-        self.margin_deficiency = round(abs(missing_sum))
+        self.put_margin_deficiency = round(abs(missing_sum))
         required_number_of_units = math.ceil(missing_sum / initial_margin_change)
         self.put_margin_reduction = {
             'option': get_option_name(available_cheap_put_option),
