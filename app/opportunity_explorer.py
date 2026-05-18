@@ -159,8 +159,6 @@ class OpportunityExplorer:
     async def explore_opportunities(self):
         # 1. Refresh dynamic config at the start of each iteration
         self.load_config()
-        self.call_margin_deficiency = 0
-        self.put_margin_deficiency = 0
         self.call_margin_reduction = None
         self.put_margin_reduction = None
 
@@ -367,10 +365,10 @@ class OpportunityExplorer:
             return
 
         missing_sum = required_initial_margin - initial_margin_after_sell
-        self.call_margin_deficiency = round(abs(missing_sum))
         required_number_of_units = math.ceil(missing_sum / initial_margin_change)
         self.call_margin_reduction = {
             'option': get_option_name(available_cheap_call_option),
+            'margin_deficiency': round(abs(missing_sum)),
             'margin_change': round(abs(initial_margin_change)),
             'required_level': self.calculate_required_level(required_number_of_units)
         }
@@ -413,10 +411,10 @@ class OpportunityExplorer:
             return
 
         missing_sum = required_initial_margin - initial_margin_after_sell
-        self.put_margin_deficiency = round(abs(missing_sum))
         required_number_of_units = math.ceil(missing_sum / initial_margin_change)
         self.put_margin_reduction = {
             'option': get_option_name(available_cheap_put_option),
+            'margin_deficiency': round(abs(missing_sum)),
             'margin_change': round(abs(initial_margin_change)),
             'required_level': self.calculate_required_level(required_number_of_units)
         }

@@ -27,16 +27,13 @@
         <strong>Put Options Last Price:</strong> {{ state.last_put_option_price }}
       </p>
       <p><strong>S&P 500:</strong> {{ state.spx_price !== null ? state.spx_price : 'N/A' }}</p>
-      <p *ngIf="state.call_margin_deficiency > 0">
-        <strong>Call Margin Deficiency:</strong> {{ state.call_margin_deficiency }}
-      </p>
-      <p *ngIf="state.put_margin_deficiency > 0">
-        <strong>Put Margin Deficiency:</strong> {{ state.put_margin_deficiency }}
-      </p>
 
       <div *ngIf="state.call_margin_reduction" class="margin-reduction-info">
         <h4>Call Margin Reduction</h4>
         <p><strong>Option:</strong> {{ state.call_margin_reduction.option }}</p>
+        <p *ngIf="state.call_margin_reduction.margin_deficiency > 0">
+            <strong>Margin Deficiency:</strong> {{ state.call_margin_reduction.margin_deficiency }}
+        </p>
         <p><strong>Margin Change:</strong> {{ state.call_margin_reduction.margin_change }}</p>
         <p><strong>Required Level:</strong> {{ state.call_margin_reduction.required_level }}</p>
       </div>
@@ -44,6 +41,9 @@
       <div *ngIf="state.put_margin_reduction" class="margin-reduction-info">
         <h4>Put Margin Reduction</h4>
         <p><strong>Option:</strong> {{ state.put_margin_reduction.option }}</p>
+        <p *ngIf="state.put_margin_reduction.margin_deficiency > 0">
+            <strong>Margin Deficiency:</strong> {{ state.put_margin_reduction.margin_deficiency }}
+        </p>
         <p><strong>Margin Change:</strong> {{ state.put_margin_reduction.margin_change }}</p>
         <p><strong>Required Level:</strong> {{ state.put_margin_reduction.required_level }}</p>
       </div>

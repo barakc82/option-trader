@@ -31,6 +31,7 @@ export interface Position {
 
   export interface MarginReductionDetails {
     option: string;
+    margin_deficiency: number;
     margin_change: number;
     required_level: number;
   }
@@ -53,8 +54,6 @@ export interface Position {
     margin_lock: string;
     last_put_option_price: number;
     last_call_option_price: number;
-    call_margin_deficiency: number;
-    put_margin_deficiency: number;
     call_margin_reduction: MarginReductionDetails | null;
     put_margin_reduction: MarginReductionDetails | null;
     put_options_above_minimal_sell_price: boolean;
