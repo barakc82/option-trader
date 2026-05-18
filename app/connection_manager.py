@@ -51,12 +51,34 @@ class ConnectionManager:
             await self.ib.connectAsync(self.host, self.port, clientId=self.client_id)
             logger.info("Successfully connected to IB.")
             self.reconnect_delay = 1 # Reset delay on success
+            await self.request_account_updates()
         except Exception as e:
             logger.error(f"Connection failed: {e}. Retrying soon...")
             # We don't call reconnect() here directly to avoid nested loops; 
             # the while True in connect() will trigger it.
         finally:
             self.is_connecting = False
+
+    async def request_account_updates(self):
+        """Request account updates for the primary account."""
+        try:
+            await asyncio.sleep(2)  # let connection stabilize before re-subscribing
+
+            # Wait briefly for accounts to be populated if necessary
+            for _ in range(10):
+                if self.ib.wrapper.accounts:
+                    break
+                await asyncio.sleep(0.1)
+
+            if self.ib.isConnected() and self.ib.wrapper.accounts:
+                account = self.ib.wrapper.accounts[0]
+                logger.info(f"Requesting account updates for {account}")
+                self.ib.reqAccountUpdates(True, account)
+            else:
+                logger.debug("Cannot request account updates: Not connected or no accounts available.")
+        except Exception as e:
+            logger.error(f"Error requesting account updates: {e}")
+            
 
     async def _check_health(self):
         """Check if the connection is actually responsive."""
@@ -79,6 +101,9 @@ class ConnectionManager:
         # 2110: Connectivity between Trader Workstation and server is broken.
         if errorCode in [1100, 1101, 1102, 2110]: 
             logger.warning(f"IB Connectivity Error {errorCode}: {errorString}")
+            if errorCode in [1101, 1102]:
+                logger.info(f"Connectivity restored (error {errorCode}). Requesting account updates...")
+                asyncio.create_task(self.request_account_updates())
 
     async def reconnect(self):
         if self.ib.isConnected() or self.is_connecting:
