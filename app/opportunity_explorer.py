@@ -244,7 +244,7 @@ class OpportunityExplorer:
                     self.call_margin_reduction = {
                         'option': get_option_name(available_cheap_call_option),
                         'margin_change': 0,
-                        'required_units': 0
+                        'required_level': 0
                     }
 
         self.no_call_options_above_minimal_sell_price = sell_option_result.no_option_above_minimal_sell_price
@@ -330,7 +330,7 @@ class OpportunityExplorer:
                     self.put_margin_reduction = {
                         'option': get_option_name(available_cheap_put_option),
                         'margin_change': 0,
-                        'required_units': 0
+                        'required_level': 0
                     }
 
         self.no_put_options_above_minimal_sell_price = sell_option_result.no_option_above_minimal_sell_price
@@ -370,7 +370,7 @@ class OpportunityExplorer:
         self.call_margin_reduction = {
             'option': get_option_name(available_cheap_call_option),
             'margin_change': round(abs(initial_margin_change)),
-            'required_units': required_number_of_units
+            'required_level': self.calculate_required_level(required_number_of_units)
         }
 
         logger.info(f"try_to_reduce_initial_margin_for_call_options, required initial margin: {required_initial_margin}, initial margin after sell: {initial_margin_after_sell:.0f}, "
@@ -388,6 +388,10 @@ class OpportunityExplorer:
             self.can_submit_orders = True
         else:
             logger.info(f"Will not buy {get_option_name(available_cheap_call_option)} since the potential sell price is too low ({self.last_call_option_price})")
+
+    def calculate_required_level(self, required_number_of_units):
+        """Calculates the required level based on the number of units."""
+        return math.ceil((0.07 * required_number_of_units + 0.02) / 0.02) * 0.05
 
     async def try_to_reduce_initial_margin_for_put_options(self, put_option_to_be_sold, required_initial_margin, initial_margin_after_sell, put_options):
         if self.last_put_option_price <= MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION:
@@ -412,8 +416,7 @@ class OpportunityExplorer:
         self.put_margin_reduction = {
             'option': get_option_name(available_cheap_put_option),
             'margin_change': round(abs(initial_margin_change)),
-            'required_units': required_number_of_units,
-            'required_level': math.ceil((0.07 * required_number_of_units + 0.02) / 0.02) * 0.05
+            'required_level': self.calculate_required_level(required_number_of_units)
         }
 
         logger.info(f"try_to_reduce_initial_margin_for_put_options, required initial margin: {required_initial_margin:.0f}, initial margin after sell: {initial_margin_after_sell:.0f}, "

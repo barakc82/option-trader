@@ -35,14 +35,14 @@
         <h4>Call Margin Reduction</h4>
         <p><strong>Option:</strong> {{ state.call_margin_reduction.option }}</p>
         <p><strong>Margin Change:</strong> {{ state.call_margin_reduction.margin_change }}</p>
-        <p><strong>Required Units:</strong> {{ state.call_margin_reduction.required_units }}</p>
+        <p><strong>Required Level:</strong> {{ state.call_margin_reduction.required_level }}</p>
       </div>
 
       <div *ngIf="state.put_margin_reduction" class="margin-reduction-info">
         <h4>Put Margin Reduction</h4>
         <p><strong>Option:</strong> {{ state.put_margin_reduction.option }}</p>
         <p><strong>Margin Change:</strong> {{ state.put_margin_reduction.margin_change }}</p>
-        <p><strong>Required Units:</strong> {{ state.put_margin_reduction.required_units }}</p>
+        <p><strong>Required Level:</strong> {{ state.put_margin_reduction.required_level }}</p>
       </div>
 
       <h3>Positions</h3>

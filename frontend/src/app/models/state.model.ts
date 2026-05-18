@@ -32,7 +32,7 @@ export interface Position {
   export interface MarginReductionDetails {
     option: string;
     margin_change: number;
-    required_units: number;
+    required_level: number;
   }
 
   export interface State {
