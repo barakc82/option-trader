@@ -132,8 +132,6 @@ class OpportunityExplorer:
             self.can_submit_orders = True
             self.last_put_option_price = 0
             self.last_call_option_price = 0
-            self.call_margin_deficiency = 0
-            self.put_margin_deficiency = 0
             self.call_margin_reduction = None
             self.put_margin_reduction = None
             
