@@ -19,7 +19,6 @@ class SellOptionResult:
     success: bool = False
     trade = None
     no_option_above_minimal_sell_price: bool = False
-    is_low_projected_cushion: bool = False
     required_initial_margin: float = 0
     initial_margin_after: float = 0
 
