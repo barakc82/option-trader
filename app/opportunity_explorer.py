@@ -126,7 +126,6 @@ class OpportunityExplorer:
             self.market_data_fetcher = MarketDataFetcher()
             self.trading_bot = TradingBot()
             self.last_submit_order_attempt_time = 0
-            self.should_cancel_all_sell_orders = False
             self.no_put_options_above_minimal_sell_price = False
             self.no_call_options_above_minimal_sell_price = False
             self.can_submit_orders = True
@@ -183,7 +182,6 @@ class OpportunityExplorer:
 
             if sell_call_option_result.success or sell_put_option_result.success:
                 self.last_submit_order_attempt_time = time.time()
-            self.should_cancel_all_sell_orders = sell_call_option_result.is_low_projected_cushion or sell_put_option_result.is_low_projected_cushion
             logger.info("Done exploring possible opportunities")
         else:
             next_sell_check_time = self.last_submit_order_attempt_time + TIME_UNTIL_NEXT_SELL_CHECK
@@ -368,7 +366,7 @@ class OpportunityExplorer:
             'option': get_option_name(available_cheap_call_option),
             'margin_deficiency': round(abs(missing_sum)),
             'margin_change': round(abs(initial_margin_change)),
-            'required_level': self.calculate_required_level(required_number_of_units)
+            'required_level': round(self.calculate_required_level(required_number_of_units), 2)
         }
 
         logger.info(f"try_to_reduce_initial_margin_for_call_options, required initial margin: {required_initial_margin}, initial margin after sell: {initial_margin_after_sell:.0f}, "
@@ -414,7 +412,7 @@ class OpportunityExplorer:
             'option': get_option_name(available_cheap_put_option),
             'margin_deficiency': round(abs(missing_sum)),
             'margin_change': round(abs(initial_margin_change)),
-            'required_level': self.calculate_required_level(required_number_of_units)
+            'required_level': round(self.calculate_required_level(required_number_of_units), 2)
         }
 
         logger.info(f"try_to_reduce_initial_margin_for_put_options, required initial margin: {required_initial_margin:.0f}, initial margin after sell: {initial_margin_after_sell:.0f}, "

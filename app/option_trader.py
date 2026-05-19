@@ -129,13 +129,7 @@ class OptionTrader:
                 continue
 
             remaining = open_sell_trade.remaining()
-            if remaining and (self.opportunity_explorer.should_cancel_all_sell_orders or is_after_hours()):
-                result = await self.trading_bot.test_order(open_sell_trade.contract, remaining, open_sell_trade.order.lmtPrice)
-                if result.is_low_projected_cushion:
-                    logger.info(
-                        f"Cancelling sell of {get_option_name(open_sell_trade.contract)} since the projected cushion is too low")
-                    self.trading_bot.cancel_trade(open_sell_trade)
-                    continue
+            if remaining and is_after_hours():
                 if open_sell_trade.contract.right == 'P':
                     max_options_for_market_drop = await calculate_max_options_for_market_drop(open_sell_trade.contract)
                     if max_options_for_market_drop < remaining:
