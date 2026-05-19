@@ -5,7 +5,7 @@ import sys
 import time
 from datetime import date, datetime
 
-from ib_insync import IB, LimitOrder, MarketOrder, StopOrder
+from ib_insync import IB, LimitOrder, MarketOrder, StopOrder, StopLimitOrder
 
 from utilities.ib_utils import SellOptionResult, MINIMAL_SELL_PRICE
 from utilities.utils import *
@@ -17,6 +17,7 @@ from .connection_manager import ConnectionManager
 
 logger = logging.getLogger(__name__)
 SAFETY_MARGIN = 1000
+STOP_LIMIT_OFFSET = 0.15
 CANCELLED_TRADE_MESSAGE_PATTERN = r"INITIAL MARGIN\s+\[(?P<init_margin>[\d,.]+).*?VALUATION UNCERTAINTY\s+\[(?P<uncertainty>[\d,.]+)"
 INSUFFICIENT_FUNDS_MESSAGE_PATTERN = r"Loan Value\s+\[(?P<loan_value>[\d,.]+).*?Initial Margin of\s+\[(?P<init_margin>[\d,.]+)"
 
@@ -113,6 +114,8 @@ class TradingBot:
         return self.cancel_order(trade.order)
 
     async def close_short_option(self, option, quantity, limit=None):
+        if limit is not None:
+            limit = await self.adjust_limit_to_market_rules(option, limit)
         open_trades = await self.get_open_trades()
         for t in open_trades:
             if option.conId == t.contract.conId and t.order.action.upper() == 'BUY':
@@ -130,8 +133,8 @@ class TradingBot:
             order.tif = 'GTC'
         return self.place_order(option, order)
 
-    async def close_short_option_position(self, position):
-        return await self.close_short_option(position.contract, -position.position)
+    async def close_short_option_position(self, position, limit=None):
+        return await self.close_short_option(position.contract, -position.position, limit)
 
     async def verify_price_increments_exist(self, contract):
         if not self.price_increments:
@@ -151,12 +154,13 @@ class TradingBot:
     async def add_stop_loss(self, position, stop_loss_per_option):
         raw_stop = position.avgCost / 100 + stop_loss_per_option
         stop_price = await self.adjust_limit_to_market_rules(position.contract, raw_stop)
+        limit_price = await self.adjust_limit_to_market_rules(position.contract, stop_price + STOP_LIMIT_OFFSET)
         
-        order = StopOrder('BUY', abs(position.position), stop_price, account=MY_ACCOUNT)
+        order = StopLimitOrder('BUY', abs(position.position), limit_price, stop_price, account=MY_ACCOUNT)
         order.usePriceMgmtAlgo = False
         order.tif = 'GTC'
 
-        logger.info(f"Adding stop loss for {get_option_name(position.contract)} at {stop_price}")
+        logger.info(f"Adding stop loss for {get_option_name(position.contract)} at {stop_price} (limit {limit_price})")
         return self.ib.placeOrder(position.contract, order)
 
     async def test_order(self, option, number_of_options, limit):
@@ -204,7 +208,10 @@ class TradingBot:
 
     async def modify_stop_loss(self, stop_loss_trade, new_stop_loss):
         stop_loss_price  = await self.adjust_limit_to_market_rules(stop_loss_trade.contract, new_stop_loss)
+        limit_price = await self.adjust_limit_to_market_rules(stop_loss_trade.contract, stop_loss_price + STOP_LIMIT_OFFSET)
+        
         stop_loss_trade.order.auxPrice = stop_loss_price
+        stop_loss_trade.order.lmtPrice = limit_price
         stop_loss_trade.order.usePriceMgmtAlgo = False
         stop_loss_trade.order.outsideRth = True
         stop_loss_trade.order.tif = 'GTC'

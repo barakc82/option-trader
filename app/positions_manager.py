@@ -37,13 +37,21 @@ class PositionsManager:
     def find_all_stop_loss_trades(self, option, open_stop_loss_trades):
         stop_loss_trades_for_position = []
         for open_stop_loss_trade in open_stop_loss_trades:
-            if option.conId == open_stop_loss_trade.contract.conId and open_stop_loss_trade.order.orderType == 'STP':
+            if option.conId == open_stop_loss_trade.contract.conId and open_stop_loss_trade.order.orderType == 'STP LMT':
                 stop_loss_trades_for_position.append(open_stop_loss_trade)
         return stop_loss_trades_for_position
 
-    def find_limit_buy_trade(self, option, open_buy_trades):
+    def find_high_limit_buy_trade(self, option, open_buy_trades):
         for open_buy_trade in open_buy_trades:
-            if option.conId == open_buy_trade.contract.conId and open_buy_trade.order.action.upper() == 'BUY' and open_buy_trade.order.orderType == 'LMT':
+            if (option.conId == open_buy_trade.contract.conId and open_buy_trade.order.action.upper() == 'BUY' and
+                    open_buy_trade.order.orderType == 'LMT' and open_buy_trade.order.lmtPrice > 0.05):
+                return open_buy_trade
+        return None
+
+    def find_low_limit_buy_trade(self, option, open_buy_trades):
+        for open_buy_trade in open_buy_trades:
+            if (option.conId == open_buy_trade.contract.conId and open_buy_trade.order.action.upper() == 'BUY' and
+                open_buy_trade.order.orderType == 'LMT' and open_buy_trade.order.lmtPrice == 0.05):
                 return open_buy_trade
         return None
 
@@ -55,10 +63,8 @@ class PositionsManager:
         )
         open_buy_trades = [trade for trade in open_trades if trade.order.action.upper() == 'BUY' and
                            not is_trade_cancelled(trade) and trade.order.orderType == 'LMT']
-        open_sell_trades = [trade for trade in open_trades if trade.order.action.upper() == 'SELL' and
-                            not is_trade_cancelled(trade)]
         open_stop_loss_trades = [trade for trade in open_trades if trade.order.action.upper() == 'BUY' and
-                                 not is_trade_cancelled(trade) and trade.order.orderType == 'STP']
+                                 not is_trade_cancelled(trade) and trade.order.orderType == 'STP LMT']
 
         current_con_ids = {p.contract.conId for p in positions}
         self.done_con_ids &= current_con_ids
@@ -77,18 +83,18 @@ class PositionsManager:
                     self.trading_bot.cancel_trade(stop_loss_trade)
                     stop_loss_trades_for_position = []
 
-            if not stop_loss_trades_for_position:
+            high_limit_buy_trade = self.find_low_limit_buy_trade(option, open_buy_trades)
+            if not stop_loss_trades_for_position and not high_limit_buy_trade:
                 stop_loss_per_option = await calculate_max_loss(option.right, should_consider_only_effective=True)
                 logger.info(f"Adding stop loss for {get_option_name(option)}, potential loss per option: {stop_loss_per_option}")
                 stop_loss_trade = await self.trading_bot.add_stop_loss(position, stop_loss_per_option)
                 req_id_to_comment[stop_loss_trade.order.orderId] = "Stop loss activated"
 
-            limit_buy_trade = self.find_limit_buy_trade(option, open_buy_trades)
+            limit_buy_trade = self.find_low_limit_buy_trade(option, open_buy_trades)
             opportunity_explorer = OpportunityExplorer()
             current_price_level = opportunity_explorer.last_call_option_price if option.right == 'C' else opportunity_explorer.last_put_option_price
 
-            min_sell_price = MINIMAL_SELL_PRICE_TO_CLOSE_POSITION
-            if current_price_level < min_sell_price:
+            if current_price_level < MINIMAL_SELL_PRICE_TO_CLOSE_POSITION:
                 options_type = 'Put' if option.right == 'P' else 'Call'
                 logger.info(
                     f"The current price level for {options_type} options is {current_price_level}, thus no point in buying back position {get_option_name(option)}")

@@ -90,7 +90,7 @@
         </thead>
         <tbody>
           <tr *ngFor="let trade of state.trades" [ngClass]="{
-            'stp-row': trade.order_type === 'STP',
+            'stp-row': trade.order_type === 'STP LMT',
             'sell-row': trade.action === 'SELL',
             'buy-at-limit-row': trade.action === 'BUY' && trade.order_type === 'LMT'
           }">
