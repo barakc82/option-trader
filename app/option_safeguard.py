@@ -20,7 +20,7 @@ class OptionSafeguard:
         self.trading_bot = TradingBot()
         self.market_data_fetcher = MarketDataFetcher()
         self.positions_manager = PositionsManager()
-        self.done_con_ids = set()
+        self.done_contract_ids = set()
         
         self.connection_failure_start_time = None
         self.last_alive_log_time = 0
@@ -87,7 +87,7 @@ class OptionSafeguard:
         
         if positions:
             current_con_ids = {p.contract.conId for p in positions}
-            self.done_con_ids &= current_con_ids
+            self.done_contract_ids &= current_con_ids
             await asyncio.gather(*(self.handle_current_risk(position, open_trades) for position in positions))
 
     def find_stop_loss_trade(self, position, open_trades):
@@ -107,7 +107,7 @@ class OptionSafeguard:
         return None
 
     async def handle_current_risk(self, position, open_trades):
-        if position.contract.conId in self.done_con_ids:
+        if position.contract.conId in self.done_contract_ids:
             return
 
         option = position.contract
@@ -159,7 +159,7 @@ class OptionSafeguard:
                                 f"- no need to send a limit order")
                     return
 
-                self.done_con_ids.add(option.conId)
+                self.done_contract_ids.add(option.conId)
                 limit = stop_loss * 2
                 if option.strike % 100 in [5, 15, 35, 45, 55, 65, 85, 95]:
                     limit = stop_loss * 1.5
