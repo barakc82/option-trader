@@ -1,14 +1,16 @@
 import asyncio
 import math
+from datetime import timedelta
 
 from utilities.utils import *
+from .max_loss_calculator import calculate_max_loss
 
 from .trading_bot import TradingBot
 from .positions_manager import PositionsManager
 from .market_data_fetcher import MarketDataFetcher
 from .connection_manager import ConnectionManager
 
-from utilities.ib_utils import is_hollow, req_id_to_comment
+from utilities.ib_utils import is_hollow, req_id_to_comment, find_high_limit_buy_trade, get_time_passed_since_submission
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,10 @@ class OptionSafeguard:
         while True:
             try:
                 self.load_config()
+
+                if not self.should_guard_positions:
+                    await asyncio.sleep(1)
+                    continue
 
                 if not self.ib.isConnected():
                     logger.warning("OptionSafeguard: Task is waiting for IB connection...")
@@ -98,14 +104,6 @@ class OptionSafeguard:
                 return open_trade
         return None
 
-    def get_pending_buy(self, position, open_trades):
-        open_buy_trades = [trade for trade in open_trades if trade.order.action.upper() == 'BUY' and
-                           not is_trade_cancelled(trade) and trade.order.orderType == 'LMT']
-        for open_buy_trade in open_buy_trades:
-            if open_buy_trade.contract.conId == position.contract.conId:
-                return open_buy_trade
-        return None
-
     async def handle_current_risk(self, position, open_trades):
         if position.contract.conId in self.done_contract_ids:
             return
@@ -130,41 +128,72 @@ class OptionSafeguard:
         last_price = option.ticker.last
         
         stop_loss_trade = self.find_stop_loss_trade(position, open_trades)
-        if not stop_loss_trade:
-            logger.warning(f"No stop loss is set for position of {get_option_name(option)}")
+        high_limit_buy_trade = find_high_limit_buy_trade(option, open_trades)
+        if not stop_loss_trade and not high_limit_buy_trade:
+            logger.error(f"No stop loss nor buy trade is set for position of {get_option_name(option)}")
+            stop_loss_per_option = await calculate_max_loss(option.right, should_consider_only_effective=True)
+            limit = position.avgCost / 100 + stop_loss_per_option
+            if limit < last_price:
+                logger.info(f"Creating missing limit order for {get_option_name(option)}, limit: {limit}")
+                await self.trading_bot.create_limit_order(position, limit)
             return
 
-        stop_loss = stop_loss_trade.order.auxPrice
-        stop_loss_limit = stop_loss_trade.order.lmtPrice
-        sell_price = position.avgCost / 100
-        logger.debug(f"{get_option_name(option)}, Last price: {last_price:.2f}, Sell price: {sell_price:.2f}, Stop loss for option: {stop_loss:.2f}")
-
-        if last_price * 0.5 <= stop_loss < stop_loss_limit:
-            logger.info(f"Watching the current price of {get_option_name(option)}: {last_price:.2f}, stop loss is at {stop_loss:.2f}")
-
-        if last_price >= stop_loss_limit:
-            logger.warning(f"The current price of {get_option_name(option)} ({last_price}) is higher than the stop loss limit: {stop_loss_limit:.2f}")
-            
-            pending_buy_trade = self.get_pending_buy(position, open_trades)
-            if pending_buy_trade and pending_buy_trade.order.lmtPrice > 0.05:
+        if stop_loss_trade:
+            stop_loss = stop_loss_trade.order.auxPrice
+            if last_price * 0.5 <= stop_loss:
+                logger.info(f"Watching the current price of {get_option_name(option)}: {last_price:.2f}, stop loss is at {stop_loss:.2f}")
                 return
 
-            logger.warning(f"Risky position detected: {get_option_name(option)}, current price is {last_price} and the stop loss is {stop_loss_limit}")
-            
-            if self.should_guard_positions:
-                logger.warning(f"Cancelling the current stop-limit order to replace it with a limit order")
-                stop_loss_trade = self.trading_bot.cancel_trade(stop_loss_trade)
-                if is_trade_cancelled(stop_loss_trade) or stop_loss_trade.orderStatus.status == 'Filled':
-                    logger.info(f"Status of Stop loss trade for {get_option_name(option)}: {stop_loss_trade.orderStatus.status} "
-                                f"- no need to send a limit order")
-                    return
+        assert high_limit_buy_trade
+        current_limit_price = high_limit_buy_trade.order.lmtPrice
+        logger.warning(
+            f"Risky position detected: {get_option_name(option)}, current price is {last_price}, trying to close it using limit of {current_limit_price}")
 
-                self.done_contract_ids.add(option.conId)
-                limit = stop_loss * 2
-                if option.strike % 100 in [5, 15, 35, 45, 55, 65, 85, 95]:
-                    limit = stop_loss * 1.5
-                if option.strike % 100 in [10, 20, 30, 40, 60, 70, 80, 90]:
-                    limit = stop_loss * 1.75
-                logger.warning(f"Closing risky position {get_option_name(option)} at limit of {limit:.2f}")
-                pending_buy_trade = await self.trading_bot.close_short_option_position(position, limit)
-                req_id_to_comment[pending_buy_trade.order.orderId] = "Risk reduction"
+        time_passed_since_submission = get_time_passed_since_submission(high_limit_buy_trade)
+        #TODO: store submission time stop loss
+        stop_loss_per_option = await calculate_max_loss(option.right, should_consider_only_effective=True)
+        initial_stop_loss_price = position.avgCost / 100 + stop_loss_per_option
+
+        total_increment_period = await self.calculate_total_increment_period(option, last_price)
+        required_limit_price = initial_stop_loss_price + stop_loss_per_option * time_passed_since_submission / total_increment_period
+        logger.info(f"The required limit price for {get_option_name(option)} is {required_limit_price:.2f}, "
+                    f"total increment period is {total_increment_period}, time passed since submission is {time_passed_since_submission}, "
+                    f"initial stop loss is {initial_stop_loss_price:.2f}, maximal additional increment is {stop_loss_per_option:.2f}")
+
+        if abs(required_limit_price - current_limit_price) < 0.025:
+            logger.info(f"The required limit price ({required_limit_price}) is close to the current limit price ({current_limit_price}), leaving it as is")
+            return
+
+        logger.warning(f"Trying to close risky position {get_option_name(option)} at limit of {required_limit_price:.2f}, replacing current limit of {current_limit_price}")
+        req_id_to_comment[high_limit_buy_trade.order.orderId] = f"Limit order: {current_limit_price}"
+
+        await self.trading_bot.modify_limit_order(high_limit_buy_trade, required_limit_price)
+
+    async def calculate_total_increment_period(self, option, option_price) -> timedelta:
+        strike_suffix = option.strike % 100
+        if strike_suffix in [0, 25, 50, 75]:
+            return timedelta(minutes=10)
+
+        open_trades = self.trading_bot.get_cache_open_trades()
+        higher_strike_trades = [trade for trade in open_trades if trade.contract.strike > option.strike]
+        lower_strike_trades = [trade for trade in open_trades if trade.contract.strike < option.strike]
+        riskier_trades = lower_strike_trades if option.right == 'C' else higher_strike_trades
+
+        if option.strike % 100 in [10, 20, 30, 40, 60, 70, 80, 90]:
+            for riskier_trade in riskier_trades:
+                riskier_option = riskier_trade.contract
+                if riskier_option.strike in [5, 15, 35, 45, 55, 65, 85, 95]:
+                    continue
+                ticker = self.ib.ticker(riskier_option)
+                if ticker is not None and ticker.last < option_price:
+                    return timedelta(minutes=20)
+
+            return timedelta(minutes=15)
+
+        for riskier_trade in riskier_trades:
+            riskier_option = riskier_trade.contract
+            ticker = self.ib.ticker(riskier_option)
+            if ticker is not None and ticker.last < option_price:
+                return timedelta(minutes=25)
+
+        return timedelta(minutes=20)

@@ -73,6 +73,10 @@ class TradingBot:
             await self.market_data_fetcher.update_ticker_data(options)
         return option_positions
 
+    def get_cache_open_trades(self):
+        open_trades = [t for t in self.ib.openTrades() if not is_trade_cancelled(t) and t.contract.secType == 'OPT']
+        return open_trades
+
     async def get_open_trades(self):
         should_use_cache = time.time() - self.last_request_all_open_trades_time < 300
         if not should_use_cache:
@@ -157,6 +161,7 @@ class TradingBot:
         limit_price = await self.adjust_limit_to_market_rules(position.contract, stop_price + STOP_LIMIT_OFFSET)
         
         order = StopLimitOrder('BUY', abs(position.position), limit_price, stop_price, account=MY_ACCOUNT)
+        order.outsideRth = True
         order.usePriceMgmtAlgo = False
         order.tif = 'GTC'
 
@@ -328,3 +333,24 @@ class TradingBot:
             return 0
 
         return float(order_state.initMarginChange)
+
+    async def create_limit_order(self, position, raw_limit):
+        limit_price = await self.adjust_limit_to_market_rules(position.contract, raw_limit)
+
+        order = LimitOrder('BUY', abs(position.position), limit_price, account=MY_ACCOUNT)
+        order.usePriceMgmtAlgo = False
+        order.outsideRth = True
+        order.tif = 'GTC'
+
+        logger.info(f"Creating a limit order for {get_option_name(position.contract)} (limit {limit_price})")
+        return self.ib.placeOrder(position.contract, order)
+
+    async def modify_limit_order(self, limit_buy_trade, raw_limit):
+        limit_price = await self.adjust_limit_to_market_rules(limit_buy_trade.contract, raw_limit)
+        limit_buy_trade.order.lmtPrice = limit_price
+        limit_buy_trade.order.usePriceMgmtAlgo = False
+        limit_buy_trade.order.outsideRth = True
+        limit_buy_trade.order.tif = 'GTC'
+        limit_buy_trade.order.transmit = True
+        trade = self.ib.placeOrder(limit_buy_trade.contract, limit_buy_trade.order)
+        return trade

@@ -4,7 +4,7 @@ import math
 import logging
 
 from utilities.utils import is_trade_cancelled, write_heartbeat, get_option_name, is_final_hours
-from utilities.ib_utils import req_id_to_comment, MINIMAL_SELL_PRICE
+from utilities.ib_utils import req_id_to_comment, MINIMAL_SELL_PRICE, find_high_limit_buy_trade
 
 from .max_loss_calculator import calculate_max_loss
 from .opportunity_explorer import OpportunityExplorer
@@ -41,12 +41,6 @@ class PositionsManager:
                 stop_loss_trades_for_position.append(open_stop_loss_trade)
         return stop_loss_trades_for_position
 
-    def find_high_limit_buy_trade(self, option, open_buy_trades):
-        for open_buy_trade in open_buy_trades:
-            if (option.conId == open_buy_trade.contract.conId and open_buy_trade.order.action.upper() == 'BUY' and
-                    open_buy_trade.order.orderType == 'LMT' and open_buy_trade.order.lmtPrice > 0.05):
-                return open_buy_trade
-        return None
 
     def find_low_limit_buy_trade(self, option, open_buy_trades):
         for open_buy_trade in open_buy_trades:
@@ -83,7 +77,7 @@ class PositionsManager:
                     self.trading_bot.cancel_trade(stop_loss_trade)
                     stop_loss_trades_for_position = []
 
-            high_limit_buy_trade = self.find_low_limit_buy_trade(option, open_buy_trades)
+            high_limit_buy_trade = find_high_limit_buy_trade(option, open_buy_trades)
             if not stop_loss_trades_for_position and not high_limit_buy_trade:
                 stop_loss_per_option = await calculate_max_loss(option.right, should_consider_only_effective=True)
                 logger.info(f"Adding stop loss for {get_option_name(option)}, potential loss per option: {stop_loss_per_option}")
