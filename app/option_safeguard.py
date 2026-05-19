@@ -52,8 +52,7 @@ class OptionSafeguard:
                     logger.info("OptionSafeguard: Connection error resolved.")
                     self.connection_failure_start_time = None
 
-                sleep_time = 180 if is_regular_hours_with_after_hours() or not is_market_open() else 0
-                await asyncio.sleep(sleep_time)
+                await asyncio.sleep(0)
 
             except Exception:
                 if self.connection_failure_start_time is None:
@@ -94,7 +93,7 @@ class OptionSafeguard:
     def find_stop_loss_trade(self, position, open_trades):
         option = position.contract
         for open_trade in open_trades:
-            if (option.conId == open_trade.contract.conId and open_trade.order.orderType == 'STP'
+            if (option.conId == open_trade.contract.conId and open_trade.order.orderType == 'STP LMT'
                     and open_trade.remaining() == abs(position.position)):
                 return open_trade
         return None
@@ -136,36 +135,36 @@ class OptionSafeguard:
             return
 
         stop_loss = stop_loss_trade.order.auxPrice
+        stop_loss_limit = stop_loss_trade.order.lmtPrice
         sell_price = position.avgCost / 100
         logger.debug(f"{get_option_name(option)}, Last price: {last_price:.2f}, Sell price: {sell_price:.2f}, Stop loss for option: {stop_loss:.2f}")
 
-        if last_price >= 0.5 * stop_loss:
+        if last_price * 0.5 <= stop_loss < stop_loss_limit:
             logger.info(f"Watching the current price of {get_option_name(option)}: {last_price:.2f}, stop loss is at {stop_loss:.2f}")
 
-        if last_price >= stop_loss:
-            logger.warning(f"The current price of {get_option_name(option)} ({last_price}) is higher than the stop loss: {stop_loss:}")
+        if last_price >= stop_loss_limit:
+            logger.warning(f"The current price of {get_option_name(option)} ({last_price}) is higher than the stop loss limit: {stop_loss_limit:.2f}")
             
             pending_buy_trade = self.get_pending_buy(position, open_trades)
-            if pending_buy_trade and hasattr(pending_buy_trade, 'submission_time'):
-                if time.time() - pending_buy_trade.submission_time < 10:
-                    logger.info(f"Recent buy already pending, so not trying to close {get_option_name(option)} yet")
-                    return
-
-                logger.info(f"Cancelling the buy of {get_option_name(option)} since it has been pending for too long")
-                self.trading_bot.cancel_trade(pending_buy_trade)
+            if pending_buy_trade and pending_buy_trade.order.lmtPrice > 0.05:
                 return
 
-            if is_regular_hours():
-                is_stop_loss_exists = self.find_stop_loss_trade(position, open_trades)
-                if is_stop_loss_exists:
-                    logger.info(f"Stop loss exists for {get_option_name(option)}, so not closing")
-                    return
-
-            logger.warning(f"Risky position {get_option_name(option)}, current price is {last_price} and the stop loss is {stop_loss}")
+            logger.warning(f"Risky position detected: {get_option_name(option)}, current price is {last_price} and the stop loss is {stop_loss_limit}")
             
             if self.should_guard_positions:
-                logger.warning(f"Closing risky position {get_option_name(option)}")
+                logger.warning(f"Cancelling the current stop-limit order to replace it with a limit order")
+                stop_loss_trade = self.trading_bot.cancel_trade(stop_loss_trade)
+                if is_trade_cancelled(stop_loss_trade) or stop_loss_trade.orderStatus.status == 'Filled':
+                    logger.info(f"Status of Stop loss trade for {get_option_name(option)}: {stop_loss_trade.orderStatus.status} "
+                                f"- no need to send a limit order")
+                    return
+
                 self.done_con_ids.add(option.conId)
-                pending_buy_trade = await self.trading_bot.close_short_option_position(position)
+                limit = stop_loss * 2
+                if option.strike % 100 in [5, 15, 35, 45, 55, 65, 85, 95]:
+                    limit = stop_loss * 1.5
+                if option.strike % 100 in [10, 20, 30, 40, 60, 70, 80, 90]:
+                    limit = stop_loss * 1.75
+                logger.warning(f"Closing risky position {get_option_name(option)} at limit of {limit:.2f}")
+                pending_buy_trade = await self.trading_bot.close_short_option_position(position, limit)
                 req_id_to_comment[pending_buy_trade.order.orderId] = "Risk reduction"
-                pending_buy_trade.submission_time = time.time()
