@@ -220,10 +220,10 @@ class OptionTrader:
                 logger.info(f"Cancelling the stop loss for {get_option_name(open_stop_loss_trade.contract)} because it has no matching position")
                 self.trading_bot.cancel_trade(open_stop_loss_trade)
 
-    def get_time_passed_since_submission(self, open_sell_trade: Trade) -> timedelta | Any:
+    def get_time_passed_since_submission(self, trade: Trade) -> timedelta | Any:
         if not trade.log:
             return 0
-        submission_time = open_sell_trade.log[0].time
+        submission_time = trade.log[0].time
         timezone = submission_time.tzinfo
         time_passed_since_submission = datetime.now(timezone) - submission_time
         return time_passed_since_submission

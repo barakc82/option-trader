@@ -23,7 +23,7 @@ ib = IB()
 ib.connect('127.0.0.1', 7496, clientId=10)
 
 security_names = ['VT', 'AVUV', 'VGT', 'UPRO', 'SP5Y', 'SCHD', 'SCHY', 'SPHD', 'VIG', 'VIGI', 'ACWD', 'GBTC', 'SPYU', 'INTU', 'MA', 'AXP', 'META', 'ASML', 'OXY']
-row_indices = [177, 178, None, None, None, 182, 183, 184, 185, 186, None, None, None, 189, 195, 198, 199, 201, 202]
+row_indices = [177, 178, None, None, None, 182, 183, 184, 185, 186, None, None, None, 189, 195, 198, 199, 202, 203]
 
 history_end_date = start_date - timedelta(days=1)
 print(f"History end date: {history_end_date}")
