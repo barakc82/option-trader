@@ -44,9 +44,12 @@ export interface Position {
     excess_liquidity: string;
     cash: number;
     cushion: number;
-    target_delta: number;
-    target_delta_increase: number;
-    implied_volatility: number;
+    call_target_delta: number;
+    put_target_delta: number;
+    call_target_delta_increase: number;
+    put_target_delta_increase: number;
+    call_implied_volatility: number;
+    put_implied_volatility: number;
     risk_fraction: number;
     start_time: string;
     liquidation_alert_time: number;

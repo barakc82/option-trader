@@ -9,13 +9,16 @@
         {{ supervisor_state ? (supervisor_state.time * 1000 | date:'dd/MM/yy HH:mm') : 'Inactive'}}
       </p>
       <p>
-        <strong>Target delta:</strong> {{ state.target_delta }}
+        <strong>Call Target Delta:</strong> {{ state.call_target_delta }} (Increase: {{ state.call_target_delta_increase }})
       </p>
       <p>
-        <strong>Target delta increase:</strong> {{ state.target_delta_increase }}
+        <strong>Put Target Delta:</strong> {{ state.put_target_delta }} (Increase: {{ state.put_target_delta_increase }})
       </p>
       <p>
-        <strong>Implied volatility:</strong> {{ state.implied_volatility }}
+        <strong>Call Implied Volatility:</strong> {{ state.call_implied_volatility }}
+      </p>
+      <p>
+        <strong>Put Implied Volatility:</strong> {{ state.put_implied_volatility }}
       </p>
       <p>
         <strong>Risk fraction:</strong> {{ state.risk_fraction }}

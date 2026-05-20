@@ -81,10 +81,18 @@ class StateUpdater:
         # 2. Gather logic metrics
         spx_price = await self.market_data_fetcher.get_spx_price()
         state['spx_price'] = round(spx_price, 2) if not math.isnan(spx_price) else None
-        state['target_delta'] = round(await self.target_delta_calculator.calculate_target_delta(), 4)
-        state['target_delta_increase'] = round(self.target_delta_calculator.last_target_delta_increase, 4)
+        
+        call_target_delta = await self.target_delta_calculator.calculate_target_delta('C')
+        put_target_delta = await self.target_delta_calculator.calculate_target_delta('P')
+        
+        state['call_target_delta'] = round(call_target_delta, 4)
+        state['put_target_delta'] = round(put_target_delta, 4)
+        state['call_target_delta_increase'] = round(self.target_delta_calculator.last_target_delta_increase['C'], 4)
+        state['put_target_delta_increase'] = round(self.target_delta_calculator.last_target_delta_increase['P'], 4)
+        
         state['risk_fraction'] = round(mean(self.max_loss_calculator.risk_fraction.values()), 2)
-        state['implied_volatility'] = round(await self.market_data_fetcher.get_spx_implied_volatility(), 2)
+        state['call_implied_volatility'] = round(await self.market_data_fetcher.get_spx_implied_volatility('C'), 2)
+        state['put_implied_volatility'] = round(await self.market_data_fetcher.get_spx_implied_volatility('P'), 2)
 
         # 3. Gather positions and trades
         positions = await self.trading_bot.get_short_options()
