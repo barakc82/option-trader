@@ -1,9 +1,13 @@
 from dataclasses import dataclass
-import numpy as np
 import logging
 import math
+from datetime import datetime, timedelta
+from typing import Any
+
+from ib_insync import Trade
 
 from utilities.tws_connection import TwsConnection
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -51,3 +55,20 @@ def get_delta(ticker):
         logger.warning("Using model greeks to calculate delta")
         return abs(ticker.modelGreeks.delta)
     return None
+
+
+def find_high_limit_buy_trade(option, open_buy_trades):
+    for open_buy_trade in open_buy_trades:
+        if (option.conId == open_buy_trade.contract.conId and open_buy_trade.order.action.upper() == 'BUY' and
+                open_buy_trade.order.orderType == 'LMT' and open_buy_trade.order.lmtPrice > 0.05):
+            return open_buy_trade
+    return None
+
+
+def get_time_passed_since_submission(trade: Trade) -> timedelta | Any:
+    if not trade.log:
+        return 0
+    submission_time = trade.log[0].time
+    timezone = submission_time.tzinfo
+    time_passed_since_submission = datetime.now(timezone) - submission_time
+    return time_passed_since_submission
