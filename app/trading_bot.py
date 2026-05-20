@@ -17,7 +17,7 @@ from .connection_manager import ConnectionManager
 
 logger = logging.getLogger(__name__)
 SAFETY_MARGIN = 1000
-STOP_LIMIT_OFFSET = 0.15
+STOP_LIMIT_FACTOR = 1.1
 CANCELLED_TRADE_MESSAGE_PATTERN = r"INITIAL MARGIN\s+\[(?P<init_margin>[\d,.]+).*?VALUATION UNCERTAINTY\s+\[(?P<uncertainty>[\d,.]+)"
 INSUFFICIENT_FUNDS_MESSAGE_PATTERN = r"Loan Value\s+\[(?P<loan_value>[\d,.]+).*?Initial Margin of\s+\[(?P<init_margin>[\d,.]+)"
 
@@ -158,7 +158,7 @@ class TradingBot:
     async def add_stop_loss(self, position, stop_loss_per_option):
         raw_stop = position.avgCost / 100 + stop_loss_per_option
         stop_price = await self.adjust_limit_to_market_rules(position.contract, raw_stop)
-        limit_price = await self.adjust_limit_to_market_rules(position.contract, stop_price + STOP_LIMIT_OFFSET)
+        limit_price = await self.adjust_limit_to_market_rules(position.contract, stop_price * STOP_LIMIT_FACTOR)
         
         order = StopLimitOrder('BUY', abs(position.position), limit_price, stop_price, account=MY_ACCOUNT)
         order.outsideRth = True
@@ -213,7 +213,7 @@ class TradingBot:
 
     async def modify_stop_loss(self, stop_loss_trade, new_stop_loss):
         stop_loss_price  = await self.adjust_limit_to_market_rules(stop_loss_trade.contract, new_stop_loss)
-        limit_price = await self.adjust_limit_to_market_rules(stop_loss_trade.contract, stop_loss_price + STOP_LIMIT_OFFSET)
+        limit_price = await self.adjust_limit_to_market_rules(stop_loss_trade.contract, stop_loss_price * STOP_LIMIT_FACTOR)
         
         stop_loss_trade.order.auxPrice = stop_loss_price
         stop_loss_trade.order.lmtPrice = limit_price

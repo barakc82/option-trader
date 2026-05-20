@@ -58,7 +58,7 @@ class OptionSafeguard:
                     logger.info("OptionSafeguard: Connection error resolved.")
                     self.connection_failure_start_time = None
 
-                await asyncio.sleep(0)
+                await asyncio.sleep(0 if is_market_open() else 0.1)
 
             except Exception:
                 if self.connection_failure_start_time is None:
