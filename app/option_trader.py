@@ -109,8 +109,13 @@ class OptionTrader:
         )
         open_sell_trades = [trade for trade in open_trades if trade.order.action.upper() == 'SELL']
         logger.info(f"Number of open sell trades: {len(open_sell_trades)}")
-        target_delta = await self.target_delta_calculator.calculate_target_delta()
-        logger.info(f"Target delta: {target_delta:.3f}")
+
+        target_deltas = {
+            'C': await self.target_delta_calculator.calculate_target_delta('C'),
+            'P': await self.target_delta_calculator.calculate_target_delta('P')
+        }
+        logger.info(f"Target deltas: C={target_deltas['C']:.3f}, P={target_deltas['P']:.3f}")
+
         for open_sell_trade in open_sell_trades:
             logger.info(f"Working on open sell trade of option {get_option_name(open_sell_trade.contract)}")
             time_passed_since_submission = get_time_passed_since_submission(open_sell_trade)
@@ -122,9 +127,11 @@ class OptionTrader:
 
             option = open_sell_trade.contract
             delta = get_delta(option.ticker)
+            target_delta = target_deltas[option.right]
             if delta > target_delta:
                 logger.info(
                     f"Cancelling sell of {get_option_name(open_sell_trade.contract)} since the delta ({delta:.2f}) is higher than the target delta ({target_delta:.3f})")
+
                 self.trading_bot.cancel_trade(open_sell_trade)
                 continue
 

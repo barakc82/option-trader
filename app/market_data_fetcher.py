@@ -44,8 +44,11 @@ class MarketDataFetcher:
             self.ib = ConnectionManager().ib
             self.market_data_state = LIVE_DATA
             self.registered_con_ids = set()
-            self.last_implied_volatility = 0.0
-            self.last_implied_volatility_calculation_time = current_time_of_the_day()
+            self.last_implied_volatility = {'C': 0.0, 'P': 0.0}
+            self.last_implied_volatility_calculation_time = {
+                'C': current_time_of_the_day(),
+                'P': current_time_of_the_day()
+            }
             self.previous_spx_value = math.nan
 
             # Use a lock for market data type switching
@@ -180,22 +183,21 @@ class MarketDataFetcher:
             return sys.float_info.max
         return ticker.ask
 
-    async def get_spx_implied_volatility(self):
+    async def get_spx_implied_volatility(self, right):
+        if self.last_implied_volatility_calculation_time[right] < REGULAR_HOURS_END_TIME < current_time_of_the_day():
+            self.last_implied_volatility[right] = 0.0
 
-        if self.last_implied_volatility_calculation_time < REGULAR_HOURS_END_TIME < current_time_of_the_day():
-            self.last_implied_volatility = 0.0
-
-        """Calculate average implied volatility from ATM SPX options."""
+        """Calculate implied volatility for the requested side from ATM SPX options."""
         spx_price = await self.get_spx_price()
         if math.isnan(spx_price):
             logger.error("The SPX price is NaN")
-            return self.last_implied_volatility
+            return self.last_implied_volatility[right]
 
         options_cache = OptionCache(self)
         options = options_cache.load_cached_options()
         if not options:
             logger.error("No options cached in options_cache")
-            return self.last_implied_volatility
+            return self.last_implied_volatility[right]
 
         # Pick an option and check if it's expired
         sample_option = options[0]
@@ -204,44 +206,40 @@ class MarketDataFetcher:
 
         if (expiration_date < now_nyc.date() or
                 (expiration_date == now_nyc.date() and now_nyc.time() > REGULAR_HOURS_END_TIME)):
-            logger.warning(f"Options in cache are expired ({expiration_date}). Returning last implied volatility: {self.last_implied_volatility}")
-            return self.last_implied_volatility
+            logger.warning(f"Options in cache are expired ({expiration_date}). Returning last implied volatility for {right}: {self.last_implied_volatility[right]}")
+            return self.last_implied_volatility[right]
 
-        # Find ATM Call and Put
-        atm_call = min((o for o in options if o.right == 'C'), key=lambda o: abs(o.strike - spx_price), default=None)
-        atm_put = min((o for o in options if o.right == 'P'), key=lambda o: abs(o.strike - spx_price), default=None)
+        # Find ATM option for the requested side
+        atm_option = min((o for o in options if o.right == right), key=lambda o: abs(o.strike - spx_price), default=None)
 
-        if not atm_call or not atm_put:
-            logger.error(f"At the money levels could not be found: {atm_call} and {atm_put}")
-            return self.last_implied_volatility
+        if not atm_option:
+            logger.error(f"At the money level could not be found for {right}")
+            return self.last_implied_volatility[right]
 
         write_heartbeat()
-        await self.update_ticker_data([atm_call, atm_put])
+        await self.update_ticker_data([atm_option])
         write_heartbeat()
         
-        iv_call = get_implied_volatility(atm_call.ticker)
-        iv_put = get_implied_volatility(atm_put.ticker)
+        implied_volatility = get_implied_volatility(atm_option.ticker)
 
-        if math.isnan(iv_call) or math.isnan(iv_put):
-            logger.warning(f"Implied volatility missing for ATM options. SPX: {spx_price}. Using last known: {self.last_implied_volatility}")
-            return self.last_implied_volatility
-
-        implied_volatility = (iv_call + iv_put) / 2
+        if math.isnan(implied_volatility):
+            logger.warning(f"Implied volatility missing for ATM {right} option. SPX: {spx_price}. Using last known: {self.last_implied_volatility[right]}")
+            return self.last_implied_volatility[right]
 
         # Sanity checks
         if implied_volatility > 1.9:
-            logger.error(f"Implied volatility {implied_volatility:.3f} is too high (> 1.9), discarding. Fallback: {self.last_implied_volatility}")
-            return self.last_implied_volatility
+            logger.error(f"Implied volatility ({right}) {implied_volatility:.3f} is too high (> 1.9), discarding. Fallback: {self.last_implied_volatility[right]}")
+            return self.last_implied_volatility[right]
 
-        if self.last_implied_volatility > 0 and abs(implied_volatility - self.last_implied_volatility) > 1.0:
-            logger.error(f"IV jump too large ({self.last_implied_volatility:.3f} -> {implied_volatility:.3f}), discarding.")
-            return self.last_implied_volatility
+        if self.last_implied_volatility[right] > 0 and abs(implied_volatility - self.last_implied_volatility[right]) > 1.0:
+            logger.error(f"IV jump too large for {right} ({self.last_implied_volatility[right]:.3f} -> {implied_volatility:.3f}), discarding.")
+            return self.last_implied_volatility[right]
 
         if implied_volatility > 0.6:
-            logger.info(f"High IV detected: {implied_volatility:.3f} (Call: {iv_call:.3f}, Put: {iv_put:.3f}) at SPX: {spx_price}")
+            logger.info(f"High IV detected for {right}: {implied_volatility:.3f} at SPX: {spx_price}")
 
-        self.last_implied_volatility = implied_volatility
-        self.last_implied_volatility_calculation_time = current_time_of_the_day()
+        self.last_implied_volatility[right] = implied_volatility
+        self.last_implied_volatility_calculation_time[right] = current_time_of_the_day()
         return implied_volatility
 
     async def get_chains(self, underlying):
