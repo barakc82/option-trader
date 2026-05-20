@@ -142,7 +142,7 @@ class OptionSafeguard:
             stop_loss = stop_loss_trade.order.auxPrice
             if last_price >= stop_loss * 0.5:
                 logger.info(f"Watching the current price of {get_option_name(option)}: {last_price:.2f}, stop loss is at {stop_loss:.2f}")
-                return
+            return
 
         assert high_limit_buy_trade
         current_limit_price = high_limit_buy_trade.order.lmtPrice
