@@ -29,7 +29,7 @@ class PositionsManager:
         if not self._initialized:
             # Accessing the TradingBot singleton internally
             self.trading_bot = TradingBot()
-            self.done_con_ids = set()
+            self.done_contract_ids = set()
             logger.info("PositionsManager singleton initialized.")
             self._initialized = True
 
@@ -61,7 +61,7 @@ class PositionsManager:
                                  not is_trade_cancelled(trade) and trade.order.orderType == 'STP LMT']
 
         current_con_ids = {p.contract.conId for p in positions}
-        self.done_con_ids &= current_con_ids
+        self.done_contract_ids &= current_con_ids
 
         for position in positions:
             write_heartbeat()
@@ -122,4 +122,4 @@ class PositionsManager:
 
     def on_fill(self, trade):
         logger.info(f"Trade filled: {get_option_name(trade.contract)} {trade.order.action}")
-        self.done_con_ids.add(trade.contract.conId)
+        self.done_contract_ids.add(trade.contract.conId)

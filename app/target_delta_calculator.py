@@ -15,8 +15,8 @@ from .max_loss_calculator import DEFAULT_MAX_LOSS, calculate_max_loss
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-MIN_TARGET_DELTA = {'C': 0.002, 'P': 0.004}
-MAX_TARGET_DELTA = {'C': 0.012, 'P': 0.014}
+MIN_TARGET_DELTA = {'C': 0.003, 'P': 0.004}
+MAX_TARGET_DELTA = {'C': 0.011, 'P': 0.014}
 AVERAGE_TARGET_DELTA = {
     'C': (MAX_TARGET_DELTA['C'] + MIN_TARGET_DELTA['C']) / 2,
     'P': (MAX_TARGET_DELTA['P'] + MIN_TARGET_DELTA['P']) / 2

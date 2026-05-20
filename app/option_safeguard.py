@@ -22,8 +22,7 @@ class OptionSafeguard:
         self.trading_bot = TradingBot()
         self.market_data_fetcher = MarketDataFetcher()
         self.positions_manager = PositionsManager()
-        self.done_contract_ids = set()
-        
+
         self.connection_failure_start_time = None
         self.last_alive_log_time = 0
         self.config = {}
@@ -92,8 +91,6 @@ class OptionSafeguard:
         )
         
         if positions:
-            current_con_ids = {p.contract.conId for p in positions}
-            self.done_contract_ids &= current_con_ids
             await asyncio.gather(*(self.handle_current_risk(position, open_trades) for position in positions))
 
     def find_stop_loss_trade(self, position, open_trades):
@@ -105,7 +102,7 @@ class OptionSafeguard:
         return None
 
     async def handle_current_risk(self, position, open_trades):
-        if position.contract.conId in self.done_contract_ids:
+        if position.contract.conId in self.positions_manager.done_contract_ids:
             return
 
         option = position.contract
