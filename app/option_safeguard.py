@@ -140,7 +140,7 @@ class OptionSafeguard:
 
         if stop_loss_trade:
             stop_loss = stop_loss_trade.order.auxPrice
-            if last_price * 0.5 <= stop_loss:
+            if last_price >= stop_loss * 0.5:
                 logger.info(f"Watching the current price of {get_option_name(option)}: {last_price:.2f}, stop loss is at {stop_loss:.2f}")
                 return
 
@@ -150,7 +150,6 @@ class OptionSafeguard:
             f"Risky position detected: {get_option_name(option)}, current price is {last_price}, trying to close it using limit of {current_limit_price}")
 
         time_passed_since_submission = get_time_passed_since_submission(high_limit_buy_trade)
-        #TODO: store submission time stop loss
         stop_loss_per_option = await calculate_max_loss(option.right, should_consider_only_effective=True)
         initial_stop_loss_price = position.avgCost / 100 + stop_loss_per_option
 
