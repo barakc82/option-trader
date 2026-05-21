@@ -347,6 +347,10 @@ class TradingBot:
 
     async def modify_limit_order(self, limit_buy_trade, raw_limit):
         limit_price = await self.adjust_limit_to_market_rules(limit_buy_trade.contract, raw_limit)
+        if limit_price == limit_buy_trade.order.lmtPrice:
+            logger.info(f"Skipping modification for {get_option_name(limit_buy_trade.contract)} as limit price {limit_price} is unchanged")
+            return limit_buy_trade
+
         limit_buy_trade.order.lmtPrice = limit_price
         limit_buy_trade.order.usePriceMgmtAlgo = False
         limit_buy_trade.order.outsideRth = True
