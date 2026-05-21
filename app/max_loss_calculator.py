@@ -85,15 +85,16 @@ class MaxLossCalculator:
             total_cash_value = self.account_data.get_cash_balance_value()
             extra_cash_per_contract = (total_cash_value - 1000) / max_number_of_options
             extra_cash_per_contract = max(extra_cash_per_contract, 0)
-            fraction_of_time_left_to_expiration = await self.calculate_fraction_of_time_left_to_expiration()
-            extra_cash_per_option = extra_cash_per_contract * math.sqrt(fraction_of_time_left_to_expiration) / 100
+
+            extra_cash_per_option = extra_cash_per_contract / 100
             raw_risk_fraction = 1
             if extra_cash_per_option > 0:
                 raw_risk_fraction = 1 / math.sqrt(extra_cash_per_option)
             risk_fraction = min(raw_risk_fraction, 1)
             logger.info(f"Risk fraction for {right} is {risk_fraction:.2f}, extra cash per option: {extra_cash_per_option:.2f}, "
                         f"total cash: {total_cash_value:.2f}, max number of options: {max_number_of_options}")
-            max_loss = max(extra_cash_per_option * risk_fraction, DEFAULT_MAX_LOSS)
+            fraction_of_time_left_to_expiration = await self.calculate_fraction_of_time_left_to_expiration()
+            max_loss = max(extra_cash_per_option * risk_fraction * math.sqrt(fraction_of_time_left_to_expiration), DEFAULT_MAX_LOSS)
             self.risk_fraction[right] = risk_fraction
 
         self.last_save_time[right] = time.time()
