@@ -85,7 +85,8 @@ class MaxLossCalculator:
             total_cash_value = self.account_data.get_cash_balance_value()
             extra_cash_per_contract = (total_cash_value - 1000) / max_number_of_options
             extra_cash_per_contract = max(extra_cash_per_contract, 0)
-            extra_cash_per_option = extra_cash_per_contract / 100
+            fraction_of_time_left_to_expiration = await self.calculate_fraction_of_time_left_to_expiration()
+            extra_cash_per_option = extra_cash_per_contract * math.sqrt(fraction_of_time_left_to_expiration) / 100
             raw_risk_fraction = 1
             if extra_cash_per_option > 0:
                 raw_risk_fraction = 1 / math.sqrt(extra_cash_per_option)
@@ -121,16 +122,7 @@ class MaxLossCalculator:
         max_number_of_options = self.get_max_number_of_options(right)
         effective_number_of_options = 0
         positions_for_right = [position for position in positions if position.contract.right == right]
-        now_in_nyc = datetime.now(new_york_timezone)
-        premarket_start_days_delta = 0 if now_in_nyc.time() > PREMARKET_START_TIME else -1
-        premarket_start_day = now_in_nyc.date() + timedelta(days=premarket_start_days_delta)
-        end_of_trade_day = premarket_start_day + timedelta(days=1)
-        start_dt = datetime.combine(premarket_start_day, PREMARKET_START_TIME, tzinfo=new_york_timezone)
-        end_dt = datetime.combine(end_of_trade_day, REGULAR_HOURS_END_TIME, tzinfo=new_york_timezone)
-        if is_after_hours():
-            fraction_of_time_left_to_expiration = 1
-        else:
-            fraction_of_time_left_to_expiration = (end_dt - now_in_nyc) / (end_dt - start_dt)
+        fraction_of_time_left_to_expiration = await self.calculate_fraction_of_time_left_to_expiration()
         for position in positions_for_right:
             delta = get_delta(position.contract.ticker)
             if delta is None or math.isnan(delta) or is_night_break() or is_after_hours():
@@ -164,6 +156,19 @@ class MaxLossCalculator:
         self.last_effective_max_loss[right] = max_loss
 
         return self.last_effective_max_loss[right]
+
+    async def calculate_fraction_of_time_left_to_expiration(self) -> float:
+        now_in_nyc = datetime.now(new_york_timezone)
+        premarket_start_days_delta = 0 if now_in_nyc.time() > PREMARKET_START_TIME else -1
+        premarket_start_day = now_in_nyc.date() + timedelta(days=premarket_start_days_delta)
+        end_of_trade_day = premarket_start_day + timedelta(days=1)
+        start_dt = datetime.combine(premarket_start_day, PREMARKET_START_TIME, tzinfo=new_york_timezone)
+        end_dt = datetime.combine(end_of_trade_day, REGULAR_HOURS_END_TIME, tzinfo=new_york_timezone)
+        if is_after_hours():
+            fraction_of_time_left_to_expiration = 1
+        else:
+            fraction_of_time_left_to_expiration = (end_dt - now_in_nyc) / (end_dt - start_dt)
+        return fraction_of_time_left_to_expiration
 
     def get_max_number_of_options(self, right):
         if not self.quantity[right]:
