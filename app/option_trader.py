@@ -118,7 +118,7 @@ class OptionTrader:
 
         for open_sell_trade in open_sell_trades:
             logger.info(f"Working on open sell trade of option {get_option_name(open_sell_trade.contract)}")
-            time_passed_since_submission = get_time_passed_since_submission(open_sell_trade)
+            time_passed_since_submission = self.get_time_passed_since_submission(open_sell_trade)
             if time_passed_since_submission > OPEN_SELL_ORDER_EXPIRATION_TIME:
                 logger.info(
                     f"Cancelling sell of {get_option_name(open_sell_trade.contract)} since it has not been filled for the 20 minutes")
