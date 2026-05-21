@@ -2,6 +2,9 @@ from dataclasses import dataclass
 import numpy as np
 import logging
 import math
+from datetime import datetime, timedelta
+from typing import Any
+from ib_insync import Trade
 
 from utilities.tws_connection import TwsConnection
 
@@ -11,8 +14,13 @@ logger.setLevel(logging.DEBUG)
 PORTFOLIO_MARGIN = "portfolio_margin"
 MINIMAL_SELL_PRICE = 0.15
 
+OPEN_SELL_ORDER_EXPIRATION_TIME = timedelta(minutes=20)
+POSITION_BUYBACK_ORDERR_EXPIRATION_TIME = timedelta(minutes=10)
+OPEN_GENERAL_MARGIN_REDUCTION_BUY_ORDER_EXPIRATION_TIME = timedelta(minutes=5)
+
 req_id_to_comment = {}
 req_id_to_target_delta = {}
+
 
 @dataclass
 class SellOptionResult:
@@ -21,6 +29,15 @@ class SellOptionResult:
     no_option_above_minimal_sell_price: bool = False
     required_initial_margin: float = 0
     initial_margin_after: float = 0
+
+
+def get_time_passed_since_submission(trade: Trade) -> timedelta | Any:
+    if not trade.log:
+        return timedelta(0)
+    submission_time = trade.log[0].time
+    timezone = submission_time.tzinfo
+    time_passed_since_submission = datetime.now(timezone) - submission_time
+    return time_passed_since_submission
 
 
 def connect(client_id):
