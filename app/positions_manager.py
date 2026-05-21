@@ -2,9 +2,14 @@ import asyncio
 import time
 import math
 import logging
+from datetime import timedelta
+from typing import Any
+
+from ib_insync import Trade
 
 from utilities.utils import is_trade_cancelled, write_heartbeat, get_option_name, is_final_hours
-from utilities.ib_utils import req_id_to_comment, MINIMAL_SELL_PRICE, find_high_limit_buy_trade
+from utilities.ib_utils import req_id_to_comment, MINIMAL_SELL_PRICE, find_high_limit_buy_trade, \
+    POSITION_BUYBACK_ORDERR_EXPIRATION_TIME, get_time_passed_since_submission
 
 from .max_loss_calculator import calculate_max_loss
 from .opportunity_explorer import OpportunityExplorer
@@ -90,12 +95,18 @@ class PositionsManager:
 
             if current_price_level < MINIMAL_SELL_PRICE_TO_CLOSE_POSITION:
                 options_type = 'Put' if option.right == 'P' else 'Call'
-                logger.info(
-                    f"The current price level for {options_type} options is {current_price_level}, thus no point in buying back position {get_option_name(option)}")
                 if limit_buy_trade:
+                    time_passed_since_submission = get_time_passed_since_submission(limit_buy_trade)
+                    if time_passed_since_submission > POSITION_BUYBACK_ORDERR_EXPIRATION_TIME:
+                        logger.info(
+                            f"Cancelling a buy trade for position of {get_option_name(option)} since sell price for {options_type} options is too low ({current_price_level})")
+                        self.trading_bot.cancel_trade(limit_buy_trade)
+                    else:
+                        logger.info(
+                            f"The current price level for {options_type} options is {current_price_level}, but keeping buy trade for position {get_option_name(option)} as it was recently submitted")
+                else:
                     logger.info(
-                        f"Cancelling a buy trade for position of {get_option_name(option)} since sell price for {options_type} options is too low ({current_price_level})")
-                    self.trading_bot.cancel_trade(limit_buy_trade)
+                        f"The current price level for {options_type} options is {current_price_level}, thus no point in buying back position {get_option_name(option)}")
                 continue
 
             if limit_buy_trade:
