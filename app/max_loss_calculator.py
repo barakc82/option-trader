@@ -91,9 +91,10 @@ class MaxLossCalculator:
             if extra_cash_per_option > 0:
                 raw_risk_fraction = 1 / math.sqrt(extra_cash_per_option)
             risk_fraction = min(raw_risk_fraction, 1)
-            logger.info(f"Risk fraction for {right} is {risk_fraction:.2f}, extra cash per option: {extra_cash_per_option:.2f}, "
-                        f"total cash: {total_cash_value:.2f}, max number of options: {max_number_of_options}")
             fraction_of_time_left_to_expiration = await self.calculate_fraction_of_time_left_to_expiration()
+            logger.info(f"Risk fraction for {right} is {risk_fraction:.2f}, extra cash per option: {extra_cash_per_option:.2f}, "
+                        f"total cash: {total_cash_value:.2f}, max number of options: {max_number_of_options}, "
+                        f"fraction of time left to expiration: {fraction_of_time_left_to_expiration}")
             max_loss = max(extra_cash_per_option * risk_fraction * math.sqrt(fraction_of_time_left_to_expiration), DEFAULT_MAX_LOSS)
             self.risk_fraction[right] = risk_fraction
 
