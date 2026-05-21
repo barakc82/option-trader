@@ -50,7 +50,8 @@ export interface Position {
     put_target_delta_increase: number;
     call_implied_volatility: number;
     put_implied_volatility: number;
-    risk_fraction: number;
+    call_risk_fraction: number;
+    put_risk_fraction: number;
     start_time: string;
     liquidation_alert_time: number;
     liquidation_time: number;

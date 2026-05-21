@@ -8,27 +8,38 @@
         <strong>Supervisor Time:</strong> 
         {{ supervisor_state ? (supervisor_state.time * 1000 | date:'dd/MM/yy HH:mm') : 'Inactive'}}
       </p>
-      <p>
-        <strong>Call Target Delta:</strong> {{ state.call_target_delta }} (Increase: {{ state.call_target_delta_increase }})
-      </p>
-      <p>
-        <strong>Put Target Delta:</strong> {{ state.put_target_delta }} (Increase: {{ state.put_target_delta_increase }})
-      </p>
-      <p>
-        <strong>Call Implied Volatility:</strong> {{ state.call_implied_volatility }}
-      </p>
-      <p>
-        <strong>Put Implied Volatility:</strong> {{ state.put_implied_volatility }}
-      </p>
-      <p>
-        <strong>Risk fraction:</strong> {{ state.risk_fraction }}
-      </p>
-      <p>
-        <strong>Call Option Last Price:</strong> {{ state.last_call_option_price }}
-      </p>
-      <p>
-        <strong>Put Options Last Price:</strong> {{ state.last_put_option_price }}
-      </p>
+      <table class="table metrics-table">
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Call</th>
+            <th>Put</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Target Delta</strong></td>
+            <td>{{ state.call_target_delta }} (Increase: {{ state.call_target_delta_increase }})</td>
+            <td>{{ state.put_target_delta }} (Increase: {{ state.put_target_delta_increase }})</td>
+          </tr>
+          <tr>
+            <td><strong>Implied Volatility</strong></td>
+            <td>{{ state.call_implied_volatility }}</td>
+            <td>{{ state.put_implied_volatility }}</td>
+          </tr>
+          <tr>
+            <td><strong>Risk Fraction</strong></td>
+            <td>{{ state.call_risk_fraction }}</td>
+            <td>{{ state.put_risk_fraction }}</td>
+          </tr>
+          <tr>
+            <td><strong>Option Last Price</strong></td>
+            <td>{{ state.last_call_option_price }}</td>
+            <td>{{ state.last_put_option_price }}</td>
+          </tr>
+        </tbody>
+      </table>
+
       <p><strong>S&P 500:</strong> {{ state.spx_price !== null ? state.spx_price : 'N/A' }}</p>
 
       <div *ngIf="state.call_margin_reduction" class="margin-reduction-info">
