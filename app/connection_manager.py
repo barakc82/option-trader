@@ -79,7 +79,7 @@ class ConnectionManager:
             if self.ib.isConnected() and self.ib.wrapper.accounts:
                 account = self.ib.wrapper.accounts[0]
                 logger.info(f"Requesting account updates for {account}")
-                self.ib.reqAccountUpdates(True, account)
+                await self.ib.reqAccountUpdatesAsync(account)
             else:
                 logger.debug("Cannot request account updates: Not connected or no accounts available.")
         except Exception as e:
