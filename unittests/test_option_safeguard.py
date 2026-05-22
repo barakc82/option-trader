@@ -1,6 +1,5 @@
 import time
 import unittest
-import asyncio
 from datetime import timedelta, datetime
 from unittest.mock import Mock, patch, MagicMock, AsyncMock
 from ib_insync import Ticker, Trade, Option, Order, Position, TradeLogEntry
