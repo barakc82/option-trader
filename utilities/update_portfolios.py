@@ -151,7 +151,7 @@ def enrich_holdings(aggregated: list[dict], cusip_to_ticker: dict[str, str]):
     total = sum(h["value"] for h in aggregated)
     for h in aggregated:
         h["ticker"] = cusip_to_ticker.get(h.get("cusip"), "N/A")
-        h["weight"] = h["value"] / total * 100 if total > 0 else 0
+        h["weight"] = h["value"] / total if total > 0 else 0
 
 
 def get_holdings_for_cik(cik: str) -> list[dict]:
@@ -170,7 +170,7 @@ def get_holdings_for_cik(cik: str) -> list[dict]:
     return aggregated
 
 
-def sync_holdings_to_sheet(aggregated: list[dict], sheet_name: str, ticker_range: str, weight_range: str):
+def sync_holdings_to_sheet(aggregated: list[dict], sheet_name: str, ticker_range: str, weight_range: str, total):
     """Sync weights from aggregated holdings to a specific Google Sheet range."""
     print(f"\nSyncing weights with Google Sheet '{sheet_name}'...")
     try:
@@ -184,10 +184,10 @@ def sync_holdings_to_sheet(aggregated: list[dict], sheet_name: str, ticker_range
         weight_map = {h["ticker"]: h["weight"] for h in aggregated if h["ticker"]}
 
         # Prepare weights for column H
-        weights_to_write = []
+        weights_to_write = [[total]]
         for ticker in sheet_tickers:
             if ticker in weight_map:
-                weights_to_write.append([f"{weight_map[ticker]:.2f}%"])
+                weights_to_write.append([weight_map[ticker]])
             else:
                 weights_to_write.append([""])  # clear if not found or empty ticker
 
@@ -214,8 +214,8 @@ def update_portfolio_for_cik(cik: str, column_letter: str):
 
     # Sync with Google Sheet 'Carlson' using fixed ranges
     ticker_range = "C16:C46"
-    weight_range = f"{column_letter}16:{column_letter}46"
-    sync_holdings_to_sheet(aggregated, "Carlson", ticker_range, weight_range)
+    weight_range = f"{column_letter}15:{column_letter}46"
+    sync_holdings_to_sheet(aggregated, "Carlson", ticker_range, weight_range, round(total/1_000_000_000))
 
 
 def main():
@@ -224,6 +224,14 @@ def main():
     update_portfolio_for_cik(cik="0001647251", column_letter="J") # hohn
     update_portfolio_for_cik(cik="0001112520", column_letter="K")  # akre
     update_portfolio_for_cik(cik="0001697868", column_letter="L")  # akre
+
+    sheet = get_worksheet('Carlson')
+    sheet.format("H16:L46", {
+        "numberFormat": {
+            "type": "PERCENT",
+            "pattern": "0.00%"
+        }
+    })
 
 if __name__ == "__main__":
     main()
