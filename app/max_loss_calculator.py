@@ -166,10 +166,10 @@ class MaxLossCalculator:
         end_of_trade_day = premarket_start_day + timedelta(days=1)
         start_dt = datetime.combine(premarket_start_day, PREMARKET_START_TIME, tzinfo=new_york_timezone)
         end_dt = datetime.combine(end_of_trade_day, REGULAR_HOURS_END_TIME, tzinfo=new_york_timezone)
-        if is_after_hours():
-            fraction_of_time_left_to_expiration = 1
-        else:
+        if is_market_open():
             fraction_of_time_left_to_expiration = (end_dt - now_in_nyc) / (end_dt - start_dt)
+        else:
+            fraction_of_time_left_to_expiration = 1
         return fraction_of_time_left_to_expiration
 
     def get_max_number_of_options(self, right):

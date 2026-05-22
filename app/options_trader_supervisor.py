@@ -600,8 +600,6 @@ def monitor(interval=5):
                 restart_platform()
             elif state == CANNOT_RESTART_OPTION_TRADER_STATE:
                 handle_cannot_restart_option_trader_state()
-                logger.error("Exiting since cannot restart option trader")
-                return
             elif state == CANNOT_RESTART_TWS_STATE:
                 handle_cannot_restart_tws_state()
                 return
