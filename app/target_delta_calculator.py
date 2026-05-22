@@ -148,8 +148,8 @@ class TargetDeltaCalculator:
         max_loss = await calculate_max_loss(right)
         logger.info(f"Max loss ({right}): {max_loss:.2f}")
         target_delta_increase = (max_loss - DEFAULT_MAX_LOSS) / 1000
-        logger.info(f"Target delta increase ({right}): {target_delta_increase:.4f}")
         target_delta += target_delta_increase
+        logger.info(f"Target delta ({right}): {target_delta:.4f}, increase: {target_delta_increase:.4f}")
         
         self.last_target_delta_calculation_time[right] = time.time()
         self.last_target_delta[right] = target_delta

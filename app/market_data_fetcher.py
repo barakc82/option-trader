@@ -26,7 +26,6 @@ def get_implied_volatility(ticker):
     if ticker.lastGreeks and ticker.lastGreeks.impliedVol is not None:
         return ticker.lastGreeks.impliedVol
     if ticker.modelGreeks and ticker.modelGreeks.impliedVol is not None:
-        logger.warning("Using model greeks to calculate implied volatility")
         return ticker.modelGreeks.impliedVol
     return math.nan
 
