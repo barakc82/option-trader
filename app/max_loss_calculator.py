@@ -60,6 +60,12 @@ class MaxLossCalculator:
             self._initialized = True
 
     async def calculate_max_loss(self, right):
+        regular_hours_end_time_today = datetime.combine(datetime.today(), REGULAR_HOURS_END_TIME)
+        end_time_timestamp = regular_hours_end_time_today.timestamp()
+        current_time = time.time()
+        if current_time > end_time_timestamp and self.last_save_time[right] <= end_time_timestamp:
+            self.last_save_time[right] = 0
+
         if time.time() - self.last_save_time[right] < 3600:
             return self.last_max_loss[right]
 
@@ -166,7 +172,7 @@ class MaxLossCalculator:
         end_of_trade_day = premarket_start_day + timedelta(days=1)
         start_dt = datetime.combine(premarket_start_day, PREMARKET_START_TIME, tzinfo=new_york_timezone)
         end_dt = datetime.combine(end_of_trade_day, REGULAR_HOURS_END_TIME, tzinfo=new_york_timezone)
-        if is_market_open():
+        if is_market_open() and not is_after_hours():
             fraction_of_time_left_to_expiration = (end_dt - now_in_nyc) / (end_dt - start_dt)
         else:
             fraction_of_time_left_to_expiration = 1
