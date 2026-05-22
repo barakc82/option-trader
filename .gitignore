@@ -12,3 +12,7 @@ frontend/dist
 frontend/node_modules
 scripts.tar.gz
 frontend.tar.gz
+.coverage
+htmlcov/
+.pytest_cache/
+.coverage.*

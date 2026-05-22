@@ -19,8 +19,8 @@
         <tbody>
           <tr>
             <td><strong>Target Delta</strong></td>
-            <td>{{ state.call_target_delta }} (Increase: {{ state.call_target_delta_increase }})</td>
-            <td>{{ state.put_target_delta }} (Increase: {{ state.put_target_delta_increase }})</td>
+            <td>{{ state.call_target_delta | number:'1.4-4' }} (Increase: {{ state.call_target_delta_increase | number:'1.4-4' }})</td>
+            <td>{{ state.put_target_delta | number:'1.4-4' }} (Increase: {{ state.put_target_delta_increase | number:'1.4-4' }})</td>
           </tr>
           <tr>
             <td><strong>Implied Volatility</strong></td>

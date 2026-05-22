@@ -105,8 +105,8 @@ class TargetDeltaCalculator:
         regular_hours_end_time_today = datetime.combine(datetime.today(), REGULAR_HOURS_END_TIME)
         end_time_timestamp = regular_hours_end_time_today.timestamp()
         current_time = time.time()
-        if current_time > end_time_timestamp and self.last_target_delta[right] <= end_time_timestamp:
-            self.last_target_delta[right] = 0
+        if current_time > end_time_timestamp and self.last_target_delta_calculation_time[right] <= end_time_timestamp:
+            self.last_target_delta_calculation_time[right] = 0
 
         if time.time() - self.last_target_delta_calculation_time[right] < 60:
             return self.last_target_delta[right]
