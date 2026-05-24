@@ -1,16 +1,12 @@
 import statistics
 import math
-import os
-import json
-import time
-import logging
 from collections import deque
 import traceback
 
 from utilities.utils import *
 
 from .market_data_fetcher import MarketDataFetcher
-from .max_loss_calculator import DEFAULT_MAX_LOSS, calculate_max_loss
+from .max_loss_calculator import DEFAULT_MAX_LOSS, MaxLossCalculator
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -44,6 +40,7 @@ class TargetDeltaCalculator:
     def __init__(self):
         if not self._initialized:
             self.market_data_fetcher = MarketDataFetcher()
+            self.max_loss_calculator = MaxLossCalculator()
             self.last_target_delta = {'C': AVERAGE_TARGET_DELTA['C'], 'P': AVERAGE_TARGET_DELTA['P']}
             self.last_target_delta_calculation_time = {'C': 0, 'P': 0}
             self.last_target_delta_increase = {'C': 0, 'P': 0}
@@ -145,7 +142,7 @@ class TargetDeltaCalculator:
 
         target_delta = max(target_delta, MIN_TARGET_DELTA[right])
         
-        max_loss = await calculate_max_loss(right)
+        max_loss = await self.max_loss_calculator.calculate_max_loss(right)
         logger.info(f"Max loss ({right}): {max_loss:.2f}")
         target_delta_increase = (max_loss - DEFAULT_MAX_LOSS) / 1000
         target_delta += target_delta_increase

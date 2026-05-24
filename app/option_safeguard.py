@@ -1,18 +1,21 @@
-import asyncio
 import math
-from datetime import timedelta
+import asyncio
+from datetime import date
 
 from utilities.utils import *
-from .max_loss_calculator import calculate_max_loss
+from .max_loss_calculator import MaxLossCalculator
 
 from .trading_bot import TradingBot
 from .positions_manager import PositionsManager
 from .market_data_fetcher import MarketDataFetcher
 from .connection_manager import ConnectionManager
+from .spy_subscription_manager import SpySubscriptionManager
 
-from utilities.ib_utils import is_hollow, req_id_to_comment, find_high_limit_buy_trade, get_time_passed_since_submission
+from utilities.ib_utils import is_hollow, req_id_to_comment, find_high_limit_buy_trade, get_spy_option_name
 
 logger = logging.getLogger(__name__)
+
+MAX_DEVIATION = 0.05
 
 class OptionSafeguard:
     def __init__(self):
@@ -20,13 +23,16 @@ class OptionSafeguard:
         self.connection_manager = ConnectionManager()
         self.ib = self.connection_manager.ib
         self.trading_bot = TradingBot()
+        self.max_loss_calculator = MaxLossCalculator()
         self.market_data_fetcher = MarketDataFetcher()
         self.positions_manager = PositionsManager()
+        self.spy_subscription_manager = SpySubscriptionManager()
 
         self.connection_failure_start_time = None
         self.last_alive_log_time = 0
         self.config = {}
         self.should_guard_positions = True
+        self.last_modification_times = {}
 
     async def run(self):
         logger.info("OptionSafeguard: Starting safeguard loop...")
@@ -83,6 +89,31 @@ class OptionSafeguard:
         except Exception as e:
             logger.error(f"Error reading safeguard config: {e}")
 
+    def is_fair_ask_value(self, option, spy_option):
+        ticker = option.ticker
+        spx_ask = ticker.ask
+
+        spy_ticker = self.ib.ticker(spy_option)
+        spy_name = get_spy_option_name(spy_option)
+
+        if not spy_ticker:
+            logger.info(f"Matching ticker for {get_option_name(option)} ({spy_name}) not found in tickers cache")
+            return False
+
+        if math.isnan(spy_ticker.ask) or spy_ticker.ask <= 0:
+            logger.info(f"Matching ticker for {get_option_name(option)} ({spy_name}) has an invalid ask value: {spy_ticker.ask}")
+            return False
+
+        adjusted_spy_ask = spy_ticker.ask * 10.0
+        deviation = (spx_ask - adjusted_spy_ask) / adjusted_spy_ask
+
+        if deviation > MAX_DEVIATION:
+            logger.warning(
+                f"Unfair ask for {get_option_name(option)} against {spy_name}: SPX Ask={spx_ask}, SPY Ask={spy_ticker.ask} (Adjusted={adjusted_spy_ask})")
+            return False
+
+        return True
+
     async def guard_current_positions(self):
         logger.debug("Checking current positions")
         positions, open_trades = await asyncio.gather(
@@ -93,14 +124,6 @@ class OptionSafeguard:
         if positions:
             await asyncio.gather(*(self.handle_current_risk(position, open_trades) for position in positions))
 
-    def find_stop_loss_trade(self, position, open_trades):
-        option = position.contract
-        for open_trade in open_trades:
-            if (option.conId == open_trade.contract.conId and open_trade.order.orderType == 'STP LMT'
-                    and open_trade.remaining() == abs(position.position)):
-                return open_trade
-        return None
-
     async def handle_current_risk(self, position, open_trades):
         if position.contract.conId in self.positions_manager.done_contract_ids:
             return
@@ -110,7 +133,7 @@ class OptionSafeguard:
             ticker = self.market_data_fetcher.get_ticker(option)
             if ticker is None:
                 logger.error(f"The ticker of {get_option_name(option)} is missing")
-                ticker = await self.market_data_fetcher.req_mkt_data(option, is_snapshot=False)
+                ticker = await self.market_data_fetcher.request_ticker(option, is_snapshot=False)
                 option.ticker = ticker
             else:
                 logger.debug(f"The ticker of {get_option_name(option)} was found in search, attaching it to the contract")
@@ -119,77 +142,66 @@ class OptionSafeguard:
 
         if is_hollow(option.ticker):
             logger.debug(f"The ticker of {get_option_name(option)} is hollow (no data), updating it")
-            ticker = await self.market_data_fetcher.req_mkt_data(option, is_snapshot=False)
+            ticker = await self.market_data_fetcher.request_ticker(option, is_snapshot=False)
             option.ticker = ticker
 
-        last_price = option.ticker.last
-        
-        stop_loss_trade = self.find_stop_loss_trade(position, open_trades)
-        high_limit_buy_trade = find_high_limit_buy_trade(option, open_trades)
-        if not stop_loss_trade and not high_limit_buy_trade:
-            logger.error(f"No stop loss nor buy trade is set for position of {get_option_name(option)}")
-            stop_loss_per_option = await calculate_max_loss(option.right, should_consider_only_effective=True)
-            limit = position.avgCost / 100 + stop_loss_per_option
-            if limit < last_price:
-                logger.info(f"Creating missing limit order for {get_option_name(option)}, limit: {limit}")
-                await self.trading_bot.create_limit_order(position, limit)
+
+        # Check if ask is present and positive
+        if math.isnan(option.ticker.ask) or option.ticker.ask <= 0:
+            logger.error(
+                f"Bad value of ask for option {get_option_name(option)}. Cannot determine whether ask value is fair")
             return
 
-        if stop_loss_trade:
-            stop_loss = stop_loss_trade.order.auxPrice
-            if last_price >= stop_loss * 0.5:
-                logger.info(f"Watching the current price of {get_option_name(option)}: {last_price:.2f}, stop loss is at {stop_loss:.2f}")
+        spy_option = self.spy_subscription_manager.create_matching_spy_contract(option)
+        if not self.is_fair_ask_value(option, spy_option):
+            logger.warning(
+                f"Ask value of {get_option_name(option)} is unfair (Ask: {option.ticker.ask}), "
+                f"will not close position")
+
+            high_limit_buy_trade = find_high_limit_buy_trade(option, open_trades)
+            if high_limit_buy_trade:
+                logger.warning(
+                    f"Cancelling buy order for {get_option_name(option)} since the ask value is unfair")
+                self.trading_bot.cancel_order(high_limit_buy_trade.order)
+            return
+
+        current_price = (option.ticker.bid + option.ticker.ask) / 2
+        if math.isnan(option.ticker.bid) or math.isnan(option.ticker.ask):
+            current_price = option.ticker.last
+
+        stop_loss_per_option = await self.max_loss_calculator.calculate_max_loss(option.right)
+        stop_loss = position.avgCost / 100 + stop_loss_per_option
+
+        high_limit_buy_trade = find_high_limit_buy_trade(option, open_trades)
+        if not high_limit_buy_trade:
+            if current_price > stop_loss:
+                logger.info(f"Creating missing limit order for {get_option_name(option)}, limit: {stop_loss}")
+                await self.trading_bot.close_short_option_position(position, limit=stop_loss)
+            return
+
+        if stop_loss * 0.5 <= current_price < stop_loss:
+            logger.info(f"Watching the current price of {get_option_name(option)}: {current_price:.2f}, stop loss is at {stop_loss:.2f}")
             return
 
         assert high_limit_buy_trade
-        current_limit_price = high_limit_buy_trade.order.lmtPrice
-        logger.warning(
-            f"Risky position detected: {get_option_name(option)}, current price is {last_price}, trying to close it using limit of {current_limit_price}")
-
-        time_passed_since_submission = get_time_passed_since_submission(high_limit_buy_trade)
-        stop_loss_per_option = await calculate_max_loss(option.right, should_consider_only_effective=True)
-        initial_stop_loss_price = position.avgCost / 100 + stop_loss_per_option
-
-        total_increment_period = await self.calculate_total_increment_period(option, last_price)
-        required_limit_price = initial_stop_loss_price + stop_loss_per_option * time_passed_since_submission / total_increment_period
-        logger.info(f"The required limit price for {get_option_name(option)} is {required_limit_price:.2f}, "
-                    f"total increment period is {total_increment_period}, time passed since submission is {time_passed_since_submission}, "
-                    f"initial stop loss is {initial_stop_loss_price:.2f}, maximal additional increment is {stop_loss_per_option:.2f}")
-
-        if abs(required_limit_price - current_limit_price) < 0.025:
-            logger.info(f"The required limit price ({required_limit_price}) is close to the current limit price ({current_limit_price}), leaving it as is")
+        last_mod_time = self.last_modification_times.get(high_limit_buy_trade.order.orderId, 0)
+        if time.time() - last_mod_time < 2:
+            logger.info(f"Skipping modification for {get_option_name(option)} as it was modified less than 2 seconds ago")
             return
 
+        current_limit_price = high_limit_buy_trade.order.lmtPrice
+        logger.warning(
+            f"Risky position detected: {get_option_name(option)}, current price is {current_price}, trying to close it using limit of {current_limit_price}")
+
+        red_line_stop_loss = stop_loss + stop_loss_per_option * 0.5
+        required_limit_price = min(option.ticker.ask + 0.1, red_line_stop_loss)
+        logger.info(f"The required limit price for {get_option_name(option)} is {required_limit_price:.2f}, "
+                    f"red line stop loss is {red_line_stop_loss:.2f}, maximal additional increment is {stop_loss_per_option:.2f}")
+
         logger.warning(f"Trying to close risky position {get_option_name(option)} at limit of {required_limit_price:.2f}, replacing current limit of {current_limit_price}")
+
+
+        self.last_modification_times[high_limit_buy_trade.order.orderId] = time.time()
         req_id_to_comment[high_limit_buy_trade.order.orderId] = f"Limit order: {current_limit_price}"
 
         await self.trading_bot.modify_limit_order(high_limit_buy_trade, required_limit_price)
-
-    async def calculate_total_increment_period(self, option, option_price) -> timedelta:
-        strike_suffix = option.strike % 100
-        if strike_suffix in [0, 25, 50, 75]:
-            return timedelta(minutes=10)
-
-        open_trades = self.trading_bot.get_cache_open_trades()
-        higher_strike_trades = [trade for trade in open_trades if trade.contract.strike > option.strike]
-        lower_strike_trades = [trade for trade in open_trades if trade.contract.strike < option.strike]
-        riskier_trades = lower_strike_trades if option.right == 'C' else higher_strike_trades
-
-        if option.strike % 100 in [10, 20, 30, 40, 60, 70, 80, 90]:
-            for riskier_trade in riskier_trades:
-                riskier_option = riskier_trade.contract
-                if riskier_option.strike in [5, 15, 35, 45, 55, 65, 85, 95]:
-                    continue
-                ticker = self.ib.ticker(riskier_option)
-                if ticker is not None and ticker.last < option_price:
-                    return timedelta(minutes=20)
-
-            return timedelta(minutes=15)
-
-        for riskier_trade in riskier_trades:
-            riskier_option = riskier_trade.contract
-            ticker = self.ib.ticker(riskier_option)
-            if ticker is not None and ticker.last < option_price:
-                return timedelta(minutes=25)
-
-        return timedelta(minutes=20)

@@ -7,7 +7,7 @@ from utilities.ib_utils import get_delta, OPEN_SELL_ORDER_EXPIRATION_TIME, \
     get_time_passed_since_submission
 from utilities.utils import *
 
-from .max_loss_calculator import calculate_max_loss
+from .max_loss_calculator import MaxLossCalculator
 from .opportunity_explorer import OpportunityExplorer, calculate_max_options_for_market_drop, \
     calculate_max_options_for_market_rise, MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION
 from .positions_manager import PositionsManager, MINIMAL_SELL_PRICE_TO_CLOSE_POSITION
@@ -27,6 +27,7 @@ class OptionTrader:
         self.connection_manager = ConnectionManager()
         self.ib = self.connection_manager.ib
         self.trading_bot = TradingBot()
+        self.max_loss_calculator = MaxLossCalculator()
         self.opportunity_explorer = OpportunityExplorer()
         self.positions_manager = PositionsManager()
         self.market_data_fetcher = MarketDataFetcher()
@@ -183,48 +184,7 @@ class OptionTrader:
                     self.trading_bot.cancel_trade(buy_limit_trade)
 
 
-        logger.info("Checking for invalid stop loss trades")
-        open_stop_loss_trades = [trade for trade in open_trades if trade.order.orderType == 'STP LMT']
-        for open_stop_loss_trade in open_stop_loss_trades:
-            matching_position = next(
-                (position for position in positions
-                 if position.contract.conId == open_stop_loss_trade.contract.conId),
-                None
-            )
-
-            if matching_position:
-                option = open_stop_loss_trade.contract
-                current_stop_loss = open_stop_loss_trade.order.auxPrice
-                sell_price = matching_position.avgCost / 100
-                right = option.right
-                required_max_loss_per_option = await calculate_max_loss(right, should_consider_only_effective=True)
-                required_stop_loss = required_max_loss_per_option + sell_price
-                stop_loss_ratio = required_stop_loss / current_stop_loss
-
-                current_price = self.market_data_fetcher.get_last_price(option)
-                logger.info(
-                    f"Matching position found for {get_option_name(option)}, the current stop loss is {current_stop_loss:.2f} and the required "
-                    f"stop loss is {required_stop_loss:.2f}, current price is {current_price}, "
-                    f"stop loss ratio: ({stop_loss_ratio:.2f})")
-                if math.isnan(current_price):
-                    ticker = self.ib.ticker(option)
-                    if ticker is None:
-                        logger.info(f"The ticker for {get_option_name(option)} is missing")
-
-                if stop_loss_ratio > 1.1 or (stop_loss_ratio < 0.9 and required_stop_loss > current_price * 2):
-                    logger.info(f"Going to modify stop loss for {get_option_name(option)} from {current_stop_loss} to {required_stop_loss:.2f}, "
-                                f"since the max loss ratio is {stop_loss_ratio:.2f}. Order status is {open_stop_loss_trade.orderStatus.status}")
-                    await self.trading_bot.modify_stop_loss(open_stop_loss_trade, required_stop_loss)
-                if stop_loss_ratio > 1.1 or (stop_loss_ratio < 0.9 and required_stop_loss <= current_price * 2):
-                    logger.warning(f"Cannot modify stop loss because the required stop loss ratio ({required_stop_loss:.2f})"
-                                   f"is too close the current price ({current_price})")
-
-            if not matching_position:
-                logger.info(f"Cancelling the stop loss for {get_option_name(open_stop_loss_trade.contract)} because it has no matching position")
-                self.trading_bot.cancel_trade(open_stop_loss_trade)
-
     async def verify_no_open_trades(self):
         open_trades = await self.trading_bot.get_open_trades()
         for open_trade in open_trades:
-            if open_trade.order.orderType != 'STP LMT':
-                self.trading_bot.cancel_trade(open_trade)
+            self.trading_bot.cancel_trade(open_trade)

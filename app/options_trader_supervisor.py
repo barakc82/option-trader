@@ -343,8 +343,7 @@ def check_process_state(process, should_print_health=False):
         pass
 
 def is_process_active():
-    last_ping = 0
-    last_pid = 0
+    time_since_last_ping = 0
     hb_path = f"{OPTION_TRADER_DIR}/cache/heartbeat.txt"
     for _ in range(24):
         try:
@@ -355,7 +354,7 @@ def is_process_active():
                     pid = heartbeat.get('pid')
                     timestamp = heartbeat.get('timestamp')
                     if timestamp:
-                        last_ping = float(timestamp)
+                        time_since_last_ping = float(timestamp)
                     if pid:
                         try:
                             option_trader_process = psutil.Process(pid)
@@ -364,18 +363,22 @@ def is_process_active():
                             pid_found = True
                         except psutil.NoSuchProcess:
                             logger.error(f"Could not find process {pid}")
+                    else:
+                        logger.info(f"No PID found in heartbeat file")
 
-            time_since_last_ping = time.time() - last_ping
+            time_since_last_ping = time.time() - time_since_last_ping
             is_process_alive = time_since_last_ping < 60 and pid_found
-            if not is_process_alive:
-                logger.error(f"No heartbeat from option trader, time since last ping: {time_since_last_ping:.0f}s")
-                if last_pid:
-                    try:
-                        option_trader_process = psutil.Process(last_pid)
-                        check_process_state(option_trader_process, should_print_health=True)
-                    except psutil.NoSuchProcess:
-                        pass
-            return is_process_alive
+            if is_process_alive:
+                return True
+
+            logger.error(f"No heartbeat from option trader, time since last ping: {time_since_last_ping:.0f}s")
+            if last_pid:
+                try:
+                    option_trader_process = psutil.Process(last_pid)
+                    check_process_state(option_trader_process, should_print_health=True)
+                except psutil.NoSuchProcess:
+                    pass
+
         except (json.JSONDecodeError, ValueError) as e:
             logger.error(f"Invalid data in heartbeat file: {e}")
             time.sleep(5)
@@ -475,6 +478,7 @@ def restart_platform():
         pass # restart_tws()
     global state
 
+    kill_option_trader()
     start_option_trader()
     time.sleep(20)
     is_process_alive = is_process_active()
@@ -600,6 +604,7 @@ def monitor(interval=5):
                 restart_platform()
             elif state == CANNOT_RESTART_OPTION_TRADER_STATE:
                 handle_cannot_restart_option_trader_state()
+                state = MONITOR_STATE
             elif state == CANNOT_RESTART_TWS_STATE:
                 handle_cannot_restart_tws_state()
                 return

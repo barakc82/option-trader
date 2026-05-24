@@ -1,11 +1,9 @@
 import asyncio
 import math
 import re
-import sys
-import time
-from datetime import date, datetime
+from datetime import date
 
-from ib_insync import IB, LimitOrder, MarketOrder, StopOrder, StopLimitOrder
+from ib_insync import LimitOrder, Trade
 
 from utilities.ib_utils import SellOptionResult, MINIMAL_SELL_PRICE
 from utilities.utils import *
@@ -77,7 +75,7 @@ class TradingBot:
         open_trades = [t for t in self.ib.openTrades() if not is_trade_cancelled(t) and t.contract.secType == 'OPT']
         return open_trades
 
-    async def get_open_trades(self):
+    async def get_open_trades(self) -> list[Trade]:
         should_use_cache = time.time() - self.last_request_all_open_trades_time < 300
         if not should_use_cache:
             async with self.req_all_open_orders_lock:
@@ -85,7 +83,7 @@ class TradingBot:
             self.last_request_all_open_trades_time = time.time()
 
         open_trades = [t for t in self.ib.openTrades() if not is_trade_cancelled(t) and t.contract.secType == 'OPT']
-        
+
         # Link tickers
         tickers = self.ib.tickers()
         for trade in open_trades:
@@ -99,46 +97,42 @@ class TradingBot:
         sell_trades = [t for t in open_trades if t.order.action.upper() == 'SELL']
         if sell_trades:
             await self.market_data_fetcher.update_ticker_data([t.contract for t in sell_trades])
-        
-        return open_trades
 
-    def place_order(self, contract, order):
-        logger.info(f"Placing {order.action} order for {get_option_name(contract)}")
-        trade = self.ib.placeOrder(contract, order)
-        self.last_request_all_open_trades_time = 0
-        return trade
+        return open_trades
 
     def cancel_order(self, order):
         trade = self.ib.cancelOrder(order)
         logger.info(f"Status of cancel: {trade.orderStatus.status}")
-        self.last_request_all_open_trades_time = 0
         return trade
 
     def cancel_trade(self, trade):
         return self.cancel_order(trade.order)
 
-    async def close_short_option(self, option, quantity, limit=None):
-        if limit is not None:
-            limit = await self.adjust_limit_to_market_rules(option, limit)
+    async def close_short_option(self, option, quantity, limit):
+        limit = await self.adjust_limit_to_market_rules(option, limit)
         open_trades = await self.get_open_trades()
         for t in open_trades:
             if option.conId == t.contract.conId and t.order.action.upper() == 'BUY':
                 logger.info(f"Cancelling the buy of {get_option_name(t.contract)} in order to place a new order that will close the positon")
                 self.cancel_trade(t)
 
-        if is_regular_hours() and limit is None:
-            order = MarketOrder('BUY', quantity, account=MY_ACCOUNT, usePriceMgmtAlgo=False)
-        else:
-            if limit is None:
-                ticker = self.ib.ticker(option)
-                limit = ticker.ask
-            order = LimitOrder('BUY', quantity, limit, account=MY_ACCOUNT, usePriceMgmtAlgo=False)
-            order.outsideRth = True
-            order.tif = 'GTC'
-        return self.place_order(option, order)
+        order = LimitOrder('BUY', quantity, limit, account=MY_ACCOUNT, usePriceMgmtAlgo=False)
+        order.outsideRth = True
+        order.tif = 'GTC'
+
+        logger.info(f"Placing {order.action} order for {get_option_name(option)}")
+        trade = self.ib.placeOrder(option, order)
+
+        # Wait for TWS to acknowledge the order
+        for _ in range(50):
+            if trade.orderStatus.status not in ('PendingSubmit', ''):
+                break
+            await asyncio.sleep(0.1)
+
+        return trade
 
     async def close_short_option_position(self, position, limit=None):
-        return await self.close_short_option(position.contract, -position.position, limit)
+        return await self.close_short_option(position.contract, abs(position.position), limit)
 
     async def verify_price_increments_exist(self, contract):
         if not self.price_increments:
@@ -155,18 +149,6 @@ class TradingBot:
                 current_increment = i.increment
         return round(round(raw_limit / current_increment) * current_increment, 6)
 
-    async def add_stop_loss(self, position, stop_loss_per_option):
-        raw_stop = position.avgCost / 100 + stop_loss_per_option
-        stop_price = await self.adjust_limit_to_market_rules(position.contract, raw_stop)
-        limit_price = await self.adjust_limit_to_market_rules(position.contract, stop_price * STOP_LIMIT_FACTOR)
-        
-        order = StopLimitOrder('BUY', abs(position.position), limit_price, stop_price, account=MY_ACCOUNT)
-        order.outsideRth = True
-        order.usePriceMgmtAlgo = False
-        order.tif = 'GTC'
-
-        logger.info(f"Adding stop loss for {get_option_name(position.contract)} at {stop_price} (limit {limit_price})")
-        return self.ib.placeOrder(position.contract, order)
 
     async def test_order(self, option, number_of_options, limit):
         assert number_of_options > 0
@@ -211,18 +193,6 @@ class TradingBot:
         result.success = True
         return result
 
-    async def modify_stop_loss(self, stop_loss_trade, new_stop_loss):
-        stop_loss_price  = await self.adjust_limit_to_market_rules(stop_loss_trade.contract, new_stop_loss)
-        limit_price = await self.adjust_limit_to_market_rules(stop_loss_trade.contract, stop_loss_price * STOP_LIMIT_FACTOR)
-        
-        stop_loss_trade.order.auxPrice = stop_loss_price
-        stop_loss_trade.order.lmtPrice = limit_price
-        stop_loss_trade.order.usePriceMgmtAlgo = False
-        stop_loss_trade.order.outsideRth = True
-        stop_loss_trade.order.tif = 'GTC'
-        stop_loss_trade.order.transmit = True
-        trade = self.ib.placeOrder(stop_loss_trade.contract, stop_loss_trade.order)
-        return trade
 
     async def calculate_limit(self, contract, bid, ask):
         assert not math.isnan(bid)
@@ -333,17 +303,6 @@ class TradingBot:
             return 0
 
         return float(order_state.initMarginChange)
-
-    async def create_limit_order(self, position, raw_limit):
-        limit_price = await self.adjust_limit_to_market_rules(position.contract, raw_limit)
-
-        order = LimitOrder('BUY', abs(position.position), limit_price, account=MY_ACCOUNT)
-        order.usePriceMgmtAlgo = False
-        order.outsideRth = True
-        order.tif = 'GTC'
-
-        logger.info(f"Creating a limit order for {get_option_name(position.contract)} (limit {limit_price})")
-        return self.ib.placeOrder(position.contract, order)
 
     async def modify_limit_order(self, limit_buy_trade, raw_limit):
         limit_price = await self.adjust_limit_to_market_rules(limit_buy_trade.contract, raw_limit)

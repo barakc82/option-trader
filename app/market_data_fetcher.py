@@ -71,7 +71,7 @@ class MarketDataFetcher:
         spx_ticker = self.ib.ticker(spx)
 
         if not spx_ticker:
-            spx_ticker = await self.req_mkt_data(spx)
+            spx_ticker = await self.request_ticker(spx)
             if not spx_ticker:
                 logger.error("Could not obtain SPX ticker")
                 return self.previous_spx_value
@@ -159,7 +159,7 @@ class MarketDataFetcher:
         for contract in contracts:
             contract.ticker = self.ib.ticker(contract)
 
-    async def req_mkt_data(self, contract, is_snapshot=False):
+    async def request_ticker(self, contract, is_snapshot=False):
         """Request market data for a single contract using reqTickersAsync."""
         await self.qualify([contract])
         await self.ensure_market_data_type()
@@ -168,6 +168,20 @@ class MarketDataFetcher:
         ticker = tickers[0]
         self._register_ticker(ticker)
         return ticker
+
+    def cancel_market_data(self, contract):
+        """Unsubscribe from market data updates for a given contract."""
+        if not contract or not contract.conId:
+            return
+
+        if contract.conId in self.registered_con_ids:
+            ticker = self.ib.ticker(contract)
+            if ticker:
+                ticker.updateEvent -= self.on_option_ticker_update
+            
+            self.ib.cancelMktData(contract)
+            self.registered_con_ids.remove(contract.conId)
+            logger.info(f"Unsubscribed from market data for {get_option_name(contract)}")
 
     def get_delta(self, option):
         ticker = self.get_ticker(option)

@@ -101,37 +101,34 @@ class StateUpdater:
 
         state_positions = []
         contract_id_to_delta = {}
-        for pos in positions:
-            opt = pos.contract
-            delta = self.market_data_fetcher.get_delta(opt)
-            last_price = self.market_data_fetcher.get_last_price(opt)
+        for position in positions:
+            option = position.contract
+            delta = self.market_data_fetcher.get_delta(option)
+            last_price = self.market_data_fetcher.get_last_price(option)
 
-            # Find stop loss if it exists
-            stop_loss = 0
-            for t in open_trades:
-                if t.contract.conId == opt.conId and t.order.orderType == 'STP LMT':
-                    stop_loss = t.order.auxPrice
+            stop_loss_per_option = await self.max_loss_calculator.calculate_max_loss(option.right)
+            stop_loss = position.avgCost / 100 + stop_loss_per_option
 
             state_positions.append({
-                'right': opt.right, 'strike': opt.strike, 'quantity': pos.position,
-                'date': datetime.strptime(opt.lastTradeDateOrContractMonth, "%Y%m%d").strftime("%d/%m/%y"),
+                'right': option.right, 'strike': option.strike, 'quantity': position.position,
+                'date': datetime.strptime(option.lastTradeDateOrContractMonth, "%Y%m%d").strftime("%d/%m/%y"),
                 'delta': delta, 'last_price': str(last_price) if not math.isnan(last_price) else '',
                 'stop_loss': stop_loss
             })
-            contract_id_to_delta[opt.conId] = delta
+            contract_id_to_delta[option.conId] = delta
 
         state['positions'] = sorted(state_positions, key=lambda x: (x['right'], x['date'], x['strike']))
 
         # 4. Process open trades
         state_trades = []
         for t in open_trades:
-            opt = t.contract
-            delta = self.market_data_fetcher.get_delta(opt) or contract_id_to_delta.get(opt.conId, '')
+            option = t.contract
+            delta = self.market_data_fetcher.get_delta(option) or contract_id_to_delta.get(option.conId, '')
             limit = t.order.lmtPrice if t.order.orderType == 'LMT' else (t.order.auxPrice if t.order.orderType == 'STP LMT' else '')
 
             state_trades.append({
-                'action': t.order.action, 'right': opt.right, 'strike': opt.strike,
-                'quantity': t.remaining(), 'date': datetime.strptime(opt.lastTradeDateOrContractMonth, "%Y%m%d").strftime("%d/%m/%y"),
+                'action': t.order.action, 'right': option.right, 'strike': option.strike,
+                'quantity': t.remaining(), 'date': datetime.strptime(option.lastTradeDateOrContractMonth, "%Y%m%d").strftime("%d/%m/%y"),
                 'delta': delta, 'order_type': t.order.orderType, 'limit': limit
             })
         state['trades'] = sorted(state_trades, key=lambda x: (x['order_type'], x['action'], x['right'], x['date'], x['strike']))

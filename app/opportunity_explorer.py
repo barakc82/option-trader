@@ -5,7 +5,7 @@ from utilities.utils import *
 from utilities.ib_utils import *
 from .account_data import AccountData
 from .market_data_fetcher import MarketDataFetcher
-from .max_loss_calculator import calculate_max_loss
+from .max_loss_calculator import MaxLossCalculator
 from .option_cache import OptionCache
 from .strike_finder import StrikeFinder
 from .target_delta_calculator import TargetDeltaCalculator
@@ -125,6 +125,7 @@ class OpportunityExplorer:
             self.account_data = AccountData()
             self.market_data_fetcher = MarketDataFetcher()
             self.trading_bot = TradingBot()
+            self.max_loss_calculator = MaxLossCalculator()
             self.last_submit_order_attempt_time = 0
             self.no_put_options_above_minimal_sell_price = False
             self.no_call_options_above_minimal_sell_price = False
@@ -208,7 +209,7 @@ class OpportunityExplorer:
             logger.info(f"The current price level for call options changed from {self.last_call_option_price} to {estimated_sell_price}")
             self.last_call_option_price = estimated_sell_price
 
-        stop_loss_per_option = await calculate_max_loss('C', should_consider_only_effective=True)
+        stop_loss_per_option = await self.max_loss_calculator.calculate_max_loss('C')
         if stop_loss_per_option < estimated_sell_price:
             logger.warning(f"Failed to sell {get_option_name(call_option)} since the acceptable loss ({stop_loss_per_option}) is smaller than the option price ({estimated_sell_price})")
             return sell_option_result
@@ -293,7 +294,7 @@ class OpportunityExplorer:
             logger.info(f"The current price level for put options changed from {self.last_put_option_price} to {estimated_sell_price}")
             self.last_put_option_price = estimated_sell_price
 
-        stop_loss_per_option = await calculate_max_loss('P', should_consider_only_effective=True)
+        stop_loss_per_option = await self.max_loss_calculator.calculate_max_loss('P')
         if stop_loss_per_option < estimated_sell_price:
             logger.warning(f"Failed to sell {get_option_name(put_option)} since the acceptable loss ({stop_loss_per_option}) is smaller than the option price ({estimated_sell_price})")
             return sell_option_result
@@ -336,9 +337,9 @@ class OpportunityExplorer:
         open_buy_trades_for_option = find_all_buy_trades(option, open_buy_trades)
         for open_buy_trade in open_buy_trades_for_option:
             logger.debug(
-                f"Checking if cancel needed for the stop loss of {get_option_name(open_buy_trade.contract)}, comparing between {option.conId} and {open_buy_trade.contract.conId}")
+                f"Checking if cancel needed for the buy order of {get_option_name(open_buy_trade.contract)}, comparing between {option.conId} and {open_buy_trade.contract.conId}")
             if option.conId == open_buy_trade.contract.conId:
-                logger.info(f"Cancelling stop loss for {get_option_name(option)}")
+                logger.info(f"Cancelling the buy order for {get_option_name(option)}")
                 self.trading_bot.cancel_trade(open_buy_trade)
 
 

@@ -9,6 +9,7 @@ from .logging_setup import setup_logging
 from .connection_manager import ConnectionManager
 from .option_trader import OptionTrader
 from .option_safeguard import OptionSafeguard
+from .spy_subscription_manager import SpySubscriptionManager
 
 OPTION_TRADER_CLIENT_ID = 1
 
@@ -37,13 +38,15 @@ async def main():
     # 2. Start Task Classes
     trader = OptionTrader()
     safeguard = OptionSafeguard()
+    spy_manager = SpySubscriptionManager()
 
     try:
         # Run everything concurrently under supervision
         await asyncio.gather(
             supervisor(connection_manager.connect(client_id=OPTION_TRADER_CLIENT_ID), "ConnectionManager"),
             supervisor(trader.run(), "OptionTrader"),
-            supervisor(safeguard.run(), "OptionSafeguard")
+            supervisor(safeguard.run(), "OptionSafeguard"),
+            supervisor(spy_manager.run(), "SpySubscriptionManager")
         )
     except asyncio.CancelledError:
         logger.info("Tasks were cancelled during shutdown.")

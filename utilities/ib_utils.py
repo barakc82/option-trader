@@ -55,6 +55,11 @@ def extract_ask(ticker):
     return ticker.ask
 
 
+def get_spy_option_name(spy_contract):
+    """Return a string representing the SPY option name."""
+    return f"SPY {spy_contract.right} {spy_contract.strike}"
+
+
 def is_hollow(ticker):
     if ticker is None:
         return True
