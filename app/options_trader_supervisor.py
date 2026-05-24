@@ -12,7 +12,7 @@ import requests
 from pathlib import Path
 import psutil
 
-from utilities.utils import is_in_docker, acquire_single_instance_lock
+from utilities.utils import is_in_docker, acquire_single_instance_lock, SUCCESS, ERROR
 from .state_updater import update_supervisor_state_async, post_current_state
 
 # Create a logger
@@ -41,9 +41,6 @@ file_handler.setFormatter(file_formatter)
 # Add handlers to the logger
 logger.addHandler(console_handler)
 logger.addHandler(file_handler)
-
-SUCCESS = 0
-ERROR = 1
 
 MONITOR_STATE = 1
 RESTART_PLATFORM_STATE = 2

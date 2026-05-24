@@ -124,27 +124,36 @@ class OptionSafeguard:
         if positions:
             await asyncio.gather(*(self.handle_current_risk(position, open_trades) for position in positions))
 
+    async def _ensure_ticker(self, option) -> None:
+        """Ensure the option has a valid, non-hollow ticker, fetching it if needed."""
+        if getattr(option, 'ticker', None) is None:
+            ticker = self.market_data_fetcher.get_ticker(option)
+            if ticker is not None:
+                logger.debug(f"Ticker for {get_option_name(option)} found in cache, attaching to contract")
+                option.ticker = ticker
+
+            logger.debug(f"Ticker for {get_option_name(option)} not in cache, requesting live data")
+
+        if not is_hollow(option.ticker):
+            return SUCCESS
+
+        logger.debug(f"Ticker for {get_option_name(option)} is hollow (no data), refreshing")
+
+        ticker = await self.market_data_fetcher.request_ticker(option, is_snapshot=False)
+        if ticker is None:
+            logger.error(f"Failed to retrieve ticker for {get_option_name(option)}")
+            return ERROR
+
+        option.ticker = ticker
+        return SUCCESS
+
+
     async def handle_current_risk(self, position, open_trades):
         if position.contract.conId in self.positions_manager.done_contract_ids:
             return
 
         option = position.contract
-        if not hasattr(option, 'ticker') or option.ticker is None:
-            ticker = self.market_data_fetcher.get_ticker(option)
-            if ticker is None:
-                logger.error(f"The ticker of {get_option_name(option)} is missing")
-                ticker = await self.market_data_fetcher.request_ticker(option, is_snapshot=False)
-                option.ticker = ticker
-            else:
-                logger.debug(f"The ticker of {get_option_name(option)} was found in search, attaching it to the contract")
-                option.ticker = ticker
-            return
-
-        if is_hollow(option.ticker):
-            logger.debug(f"The ticker of {get_option_name(option)} is hollow (no data), updating it")
-            ticker = await self.market_data_fetcher.request_ticker(option, is_snapshot=False)
-            option.ticker = ticker
-
+        await self._ensure_ticker(option)
 
         # Check if ask is present and positive
         if math.isnan(option.ticker.ask) or option.ticker.ask <= 0:
@@ -166,7 +175,7 @@ class OptionSafeguard:
             return
 
         current_price = (option.ticker.bid + option.ticker.ask) / 2
-        if math.isnan(option.ticker.bid) or math.isnan(option.ticker.ask):
+        if math.isnan(option.ticker.bid):
             current_price = option.ticker.last
 
         stop_loss_per_option = await self.max_loss_calculator.calculate_max_loss(option.right)

@@ -37,6 +37,9 @@ JUST_AFTER_TRADE_END_TIME = dt_time(17, 5)
 
 MY_ACCOUNT = 'U15897350'
 
+SUCCESS = 0
+ERROR = 1
+
 log_file_name = datetime.now().strftime("logs\\option_trader_%Y-%m-%d_%H-%M-%S.log")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
