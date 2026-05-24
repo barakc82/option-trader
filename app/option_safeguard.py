@@ -1,6 +1,5 @@
 import math
 import asyncio
-from datetime import date
 
 from utilities.utils import *
 from .max_loss_calculator import MaxLossCalculator
@@ -124,7 +123,7 @@ class OptionSafeguard:
         if positions:
             await asyncio.gather(*(self.handle_current_risk(position, open_trades) for position in positions))
 
-    async def _ensure_ticker(self, option) -> None:
+    async def _ensure_ticker(self, option) -> int:
         """Ensure the option has a valid, non-hollow ticker, fetching it if needed."""
         if getattr(option, 'ticker', None) is None:
             ticker = self.market_data_fetcher.get_ticker(option)
@@ -145,6 +144,13 @@ class OptionSafeguard:
             return ERROR
 
         option.ticker = ticker
+
+        # Check if ask is present and positive
+        if math.isnan(option.ticker.ask) or option.ticker.ask <= 0:
+            logger.error(
+                f"Bad value of ask for option {get_option_name(option)}. Cannot determine whether ask value is fair")
+            return ERROR
+
         return SUCCESS
 
 
@@ -153,15 +159,19 @@ class OptionSafeguard:
             return
 
         option = position.contract
-        await self._ensure_ticker(option)
-
-        # Check if ask is present and positive
-        if math.isnan(option.ticker.ask) or option.ticker.ask <= 0:
-            logger.error(
-                f"Bad value of ask for option {get_option_name(option)}. Cannot determine whether ask value is fair")
+        ensure_ticker_result = await self._ensure_ticker(option)
+        if ensure_ticker_result == ERROR:
             return
 
         spy_option = self.spy_subscription_manager.create_matching_spy_contract(option)
+        current_price = (option.ticker.bid + option.ticker.ask) / 2
+        if math.isnan(option.ticker.bid):
+            current_price = option.ticker.last
+
+        stop_loss_per_option = await self.max_loss_calculator.calculate_max_loss(option.right)
+        stop_loss = position.avgCost / 100 + stop_loss_per_option
+
+        high_limit_buy_trade = find_high_limit_buy_trade(option, open_trades)
         if not self.is_fair_ask_value(option, spy_option):
             logger.warning(
                 f"Ask value of {get_option_name(option)} is unfair (Ask: {option.ticker.ask}), "
@@ -172,16 +182,15 @@ class OptionSafeguard:
                 logger.warning(
                     f"Cancelling buy order for {get_option_name(option)} since the ask value is unfair")
                 self.trading_bot.cancel_order(high_limit_buy_trade.order)
+
+            spy_current_price = (spy_option.ticker.bid + spy_option.ticker.ask) / 2
+            spy_current_adjusted_price = spy_current_price * 10
+            if spy_current_adjusted_price > stop_loss:
+                logger.warning(f"Should consider buying {get_spy_option_name(spy_option)}, since the ask value of "
+                               f"{get_option_name(option)} is unfair, and the fair price is above the stop loss")
             return
 
-        current_price = (option.ticker.bid + option.ticker.ask) / 2
-        if math.isnan(option.ticker.bid):
-            current_price = option.ticker.last
 
-        stop_loss_per_option = await self.max_loss_calculator.calculate_max_loss(option.right)
-        stop_loss = position.avgCost / 100 + stop_loss_per_option
-
-        high_limit_buy_trade = find_high_limit_buy_trade(option, open_trades)
         if not high_limit_buy_trade:
             if current_price > stop_loss:
                 logger.info(f"Creating missing limit order for {get_option_name(option)}, limit: {stop_loss}")
