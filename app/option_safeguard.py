@@ -129,9 +129,9 @@ class OptionSafeguard:
             ticker = self.market_data_fetcher.get_ticker(option)
             if ticker is not None:
                 logger.debug(f"Ticker for {get_option_name(option)} found in cache, attaching to contract")
-                option.ticker = ticker
-
-            logger.debug(f"Ticker for {get_option_name(option)} not in cache, requesting live data")
+            else:
+                logger.debug(f"Ticker for {get_option_name(option)} not in cache, requesting live data")
+            option.ticker = ticker
 
         if not is_hollow(option.ticker):
             return SUCCESS
@@ -177,17 +177,22 @@ class OptionSafeguard:
                 f"Ask value of {get_option_name(option)} is unfair (Ask: {option.ticker.ask}), "
                 f"will not close position")
 
-            high_limit_buy_trade = find_high_limit_buy_trade(option, open_trades)
             if high_limit_buy_trade:
                 logger.warning(
                     f"Cancelling buy order for {get_option_name(option)} since the ask value is unfair")
                 self.trading_bot.cancel_order(high_limit_buy_trade.order)
 
-            spy_current_price = (spy_option.ticker.bid + spy_option.ticker.ask) / 2
-            spy_current_adjusted_price = spy_current_price * 10
-            if spy_current_adjusted_price > stop_loss:
-                logger.warning(f"Should consider buying {get_spy_option_name(spy_option)}, since the ask value of "
-                               f"{get_option_name(option)} is unfair, and the fair price is above the stop loss")
+            spy_ticker = self.ib.ticker(spy_option)
+            if spy_ticker:
+                spy_current_price = (spy_ticker.bid + spy_ticker.ask) / 2
+                if math.isnan(spy_ticker.bid):
+                    spy_current_price = spy_ticker.last
+                
+                if not math.isnan(spy_current_price):
+                    spy_current_adjusted_price = spy_current_price * 10
+                    if spy_current_adjusted_price > stop_loss:
+                        logger.warning(f"Should consider buying {get_spy_option_name(spy_option)}, since the ask value of "
+                                       f"{get_option_name(option)} is unfair, and the fair price is above the stop loss")
             return
 
 
