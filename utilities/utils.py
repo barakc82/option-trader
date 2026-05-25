@@ -40,6 +40,8 @@ MY_ACCOUNT = 'U15897350'
 SUCCESS = 0
 ERROR = 1
 
+SAFEGUARD_MAX_CADENCE = 1.0
+
 log_file_name = datetime.now().strftime("logs\\option_trader_%Y-%m-%d_%H-%M-%S.log")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

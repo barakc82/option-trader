@@ -69,8 +69,8 @@ class OptionSafeguard:
                 now = time.time()
                 if last_run_start_time > 0:
                     elapsed = now - last_run_start_time
-                    if elapsed > 1.0:
-                        logger.warning(f"OptionSafeguard loop cycle took too long: {elapsed:.2f}s (target <= 1s)")
+                    if elapsed > SAFEGUARD_MAX_CADENCE:
+                        logger.warning(f"OptionSafeguard loop cycle took too long: {elapsed:.2f}s (target <= {SAFEGUARD_MAX_CADENCE}s)")
                 last_run_start_time = now
 
                 if now - self.last_alive_log_time > 300:

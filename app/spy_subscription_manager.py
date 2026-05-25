@@ -33,7 +33,7 @@ class SpySubscriptionManager:
             try:
                 from .option_safeguard import OptionSafeguard
                 safeguard = OptionSafeguard()
-                if time.time() - safeguard.last_run_end_time > 1.0:
+                if time.time() - safeguard.last_run_end_time > SAFEGUARD_MAX_CADENCE:
                     await asyncio.sleep(0)
                     continue
 
