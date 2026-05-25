@@ -1,5 +1,9 @@
 import math
 import asyncio
+import time
+from typing import Any
+
+from ib_insync import Option, Trade
 
 from utilities.utils import *
 from .max_loss_calculator import MaxLossCalculator
@@ -88,7 +92,7 @@ class OptionSafeguard:
         except Exception as e:
             logger.error(f"Error reading safeguard config: {e}")
 
-    def is_fair_ask_value(self, option, spy_option):
+    def is_unfair_ask_value(self, option, spy_option):
         ticker = option.ticker
         spx_ask = ticker.ask
 
@@ -96,21 +100,23 @@ class OptionSafeguard:
         spy_name = get_spy_option_name(spy_option)
 
         if not spy_ticker:
-            logger.info(f"Matching ticker for {get_option_name(option)} ({spy_name}) not found in tickers cache")
+            logger.info(f"Matching ticker for {get_option_name(option)} ({spy_name}) not found in tickers cache. "
+                        f"Unfairness is not detected")
             return False
 
         if math.isnan(spy_ticker.ask) or spy_ticker.ask <= 0:
-            logger.info(f"Matching ticker for {get_option_name(option)} ({spy_name}) has an invalid ask value: {spy_ticker.ask}")
+            logger.info(f"Matching ticker for {get_option_name(option)} ({spy_name}) has an invalid ask value: "
+                        f"{spy_ticker.ask}. Unfairness is not detected")
             return False
 
         adjusted_spy_ask = spy_ticker.ask * 10.0
         deviation = (spx_ask - adjusted_spy_ask) / adjusted_spy_ask
 
-        if deviation > MAX_DEVIATION:
-            logger.warning(
-                f"Unfair ask for {get_option_name(option)} against {spy_name}: SPX Ask={spx_ask}, SPY Ask={spy_ticker.ask} (Adjusted={adjusted_spy_ask})")
+        if deviation < MAX_DEVIATION:
             return False
 
+        logger.warning(
+            f"Unfair ask for {get_option_name(option)} against {spy_name}: SPX Ask={spx_ask}, SPY Ask={spy_ticker.ask} (Adjusted={adjusted_spy_ask})")
         return True
 
     async def guard_current_positions(self):
@@ -133,7 +139,7 @@ class OptionSafeguard:
                 logger.debug(f"Ticker for {get_option_name(option)} not in cache, requesting live data")
             option.ticker = ticker
 
-        if not is_hollow(option.ticker):
+        if not is_hollow(option.ticker) and not math.isnan(option.ticker.ask):
             return SUCCESS
 
         logger.debug(f"Ticker for {get_option_name(option)} is hollow (no data), refreshing")
@@ -164,37 +170,15 @@ class OptionSafeguard:
             return
 
         spy_option = self.spy_subscription_manager.create_matching_spy_contract(option)
-        current_price = (option.ticker.bid + option.ticker.ask) / 2
-        if math.isnan(option.ticker.bid):
-            current_price = option.ticker.last
+        current_price = self.calculate_current_price(option)
 
         stop_loss_per_option = await self.max_loss_calculator.calculate_max_loss(option.right)
         stop_loss = position.avgCost / 100 + stop_loss_per_option
 
         high_limit_buy_trade = find_high_limit_buy_trade(option, open_trades)
-        if not self.is_fair_ask_value(option, spy_option):
-            logger.warning(
-                f"Ask value of {get_option_name(option)} is unfair (Ask: {option.ticker.ask}), "
-                f"will not close position")
-
-            if high_limit_buy_trade:
-                logger.warning(
-                    f"Cancelling buy order for {get_option_name(option)} since the ask value is unfair")
-                self.trading_bot.cancel_order(high_limit_buy_trade.order)
-
-            spy_ticker = self.ib.ticker(spy_option)
-            if spy_ticker:
-                spy_current_price = (spy_ticker.bid + spy_ticker.ask) / 2
-                if math.isnan(spy_ticker.bid):
-                    spy_current_price = spy_ticker.last
-                
-                if not math.isnan(spy_current_price):
-                    spy_current_adjusted_price = spy_current_price * 10
-                    if spy_current_adjusted_price > stop_loss:
-                        logger.warning(f"Should consider buying {get_spy_option_name(spy_option)}, since the ask value of "
-                                       f"{get_option_name(option)} is unfair, and the fair price is above the stop loss")
+        if self.is_unfair_ask_value(option, spy_option):
+            await self.handle_unfair_ask_value(high_limit_buy_trade, option, spy_option, stop_loss)
             return
-
 
         if not high_limit_buy_trade:
             if current_price > stop_loss:
@@ -206,12 +190,27 @@ class OptionSafeguard:
             logger.info(f"Watching the current price of {get_option_name(option)}: {current_price:.2f}, stop loss is at {stop_loss:.2f}")
             return
 
+        await self.handle_high_limit_buy_trade(high_limit_buy_trade, position, stop_loss_per_option)
+
+    def calculate_current_price(self, option) -> Any:
+        current_price = (option.ticker.bid + option.ticker.ask) / 2
+        if math.isnan(option.ticker.bid):
+            current_price = option.ticker.last
+        return current_price
+
+    async def handle_high_limit_buy_trade(self, high_limit_buy_trade: Trade, position,
+                                          stop_loss_per_option: float):
         assert high_limit_buy_trade
+
+        option = position.contract
         last_mod_time = self.last_modification_times.get(high_limit_buy_trade.order.orderId, 0)
         if time.time() - last_mod_time < 2:
-            logger.info(f"Skipping modification for {get_option_name(option)} as it was modified less than 2 seconds ago")
+            logger.info(
+                f"Skipping modification for {get_option_name(option)} as it was modified less than 2 seconds ago")
             return
 
+        current_price = self.calculate_current_price(option)
+        stop_loss = position.avgCost / 100 + stop_loss_per_option
         current_limit_price = high_limit_buy_trade.order.lmtPrice
         logger.warning(
             f"Risky position detected: {get_option_name(option)}, current price is {current_price}, trying to close it using limit of {current_limit_price}")
@@ -221,10 +220,33 @@ class OptionSafeguard:
         logger.info(f"The required limit price for {get_option_name(option)} is {required_limit_price:.2f}, "
                     f"red line stop loss is {red_line_stop_loss:.2f}, maximal additional increment is {stop_loss_per_option:.2f}")
 
-        logger.warning(f"Trying to close risky position {get_option_name(option)} at limit of {required_limit_price:.2f}, replacing current limit of {current_limit_price}")
-
+        logger.warning(
+            f"Trying to close risky position {get_option_name(option)} at limit of {required_limit_price:.2f}, replacing current limit of {current_limit_price}")
 
         self.last_modification_times[high_limit_buy_trade.order.orderId] = time.time()
         req_id_to_comment[high_limit_buy_trade.order.orderId] = f"Limit order: {current_limit_price}"
 
         await self.trading_bot.modify_limit_order(high_limit_buy_trade, required_limit_price)
+
+    async def handle_unfair_ask_value(self, high_limit_buy_trade: Any | None, option, spy_option: Option,
+                                      stop_loss: Any):
+        logger.warning(
+            f"Ask value of {get_option_name(option)} is unfair (Ask: {option.ticker.ask}), "
+            f"will not close position")
+
+        if high_limit_buy_trade:
+            logger.warning(
+                f"Cancelling buy order for {get_option_name(option)} since the ask value is unfair")
+            self.trading_bot.cancel_order(high_limit_buy_trade.order)
+
+        spy_ticker = self.ib.ticker(spy_option)
+        if spy_ticker:
+            spy_current_price = (spy_ticker.bid + spy_ticker.ask) / 2
+            if math.isnan(spy_ticker.bid):
+                spy_current_price = spy_ticker.last
+
+            if not math.isnan(spy_current_price):
+                spy_current_adjusted_price = spy_current_price * 10
+                if spy_current_adjusted_price > stop_loss:
+                    logger.warning(f"Should consider buying {get_spy_option_name(spy_option)}, since the ask value of "
+                                   f"{get_option_name(option)} is unfair, and the fair price is above the stop loss")
