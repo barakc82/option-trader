@@ -171,14 +171,13 @@ class OptionSafeguard:
         if ensure_ticker_result == ERROR:
             return
 
-        spy_option = self.spy_subscription_manager.create_matching_spy_contract(option)
         current_price = self.calculate_current_price(option)
-
         stop_loss_per_option = await self.max_loss_calculator.calculate_max_loss(option.right)
         stop_loss = position.avgCost / 100 + stop_loss_per_option
-
         high_limit_buy_trade = find_high_limit_buy_trade(option, open_trades)
-        if self.is_unfair_ask_value(option, spy_option):
+
+        spy_option = self.spy_subscription_manager.create_matching_spy_contract(option)
+        if is_regular_hours() and self.is_unfair_ask_value(option, spy_option):
             await self.handle_unfair_ask_value(high_limit_buy_trade, option, spy_option, stop_loss)
             return
 
@@ -189,7 +188,7 @@ class OptionSafeguard:
             return
 
         if stop_loss * 0.5 <= current_price < stop_loss:
-            logger.info(f"Watching the current price of {get_option_name(option)}: {current_price:.2f}, stop loss is at {stop_loss:.2f}")
+            logger.info(f"Watch ing the current price of {get_option_name(option)}: {current_price:.2f}, stop loss is at {stop_loss:.2f}")
             return
 
         await self.handle_high_limit_buy_trade(high_limit_buy_trade, position, stop_loss_per_option)
@@ -252,3 +251,6 @@ class OptionSafeguard:
                 if spy_current_adjusted_price > stop_loss:
                     logger.warning(f"Should consider buying {get_spy_option_name(spy_option)}, since the ask value of "
                                    f"{get_option_name(option)} is unfair, and the fair price is above the stop loss")
+
+                    if self.enable_spy_option_hedging:
+                        pass
