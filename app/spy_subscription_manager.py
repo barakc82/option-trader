@@ -31,6 +31,12 @@ class SpySubscriptionManager:
         logger.info("SpySubscriptionManager: Starting background loop...")
         while True:
             try:
+                from .option_safeguard import OptionSafeguard
+                safeguard = OptionSafeguard()
+                if time.time() - safeguard.last_run_end_time > 1.0:
+                    await asyncio.sleep(0)
+                    continue
+
                 if self.trading_bot.ib.isConnected():
                     await self.manage_subscriptions()
             except Exception:

@@ -43,6 +43,12 @@ class OptionTrader:
 
         while True:
             try:
+                from .option_safeguard import OptionSafeguard
+                safeguard = OptionSafeguard()
+                if time.time() - safeguard.last_run_end_time > 1.0:
+                    await asyncio.sleep(0)
+                    continue
+
                 if not self.ib.isConnected():
                     logger.warning("OptionTrader: Task is waiting for IB connection...")
                     await asyncio.sleep(2)

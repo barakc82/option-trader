@@ -21,25 +21,37 @@ logger = logging.getLogger(__name__)
 MAX_DEVIATION = 0.05
 
 class OptionSafeguard:
-    def __init__(self):
-        # Accessing singleton instances
-        self.connection_manager = ConnectionManager()
-        self.ib = self.connection_manager.ib
-        self.trading_bot = TradingBot()
-        self.max_loss_calculator = MaxLossCalculator()
-        self.market_data_fetcher = MarketDataFetcher()
-        self.positions_manager = PositionsManager()
-        self.spy_subscription_manager = SpySubscriptionManager()
+    _instance = None
 
-        self.connection_failure_start_time = None
-        self.last_alive_log_time = 0
-        self.config = {}
-        self.should_guard_positions = True
-        self.enable_spy_option_hedging = False
-        self.last_modification_times = {}
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(OptionSafeguard, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self):
+        if not self._initialized:
+            # Accessing singleton instances
+            self.connection_manager = ConnectionManager()
+            self.ib = self.connection_manager.ib
+            self.trading_bot = TradingBot()
+            self.max_loss_calculator = MaxLossCalculator()
+            self.market_data_fetcher = MarketDataFetcher()
+            self.positions_manager = PositionsManager()
+            self.spy_subscription_manager = SpySubscriptionManager()
+
+            self.connection_failure_start_time = None
+            self.last_alive_log_time = 0
+            self.config = {}
+            self.should_guard_positions = True
+            self.enable_spy_option_hedging = False
+            self.last_modification_times = {}
+            self.last_run_end_time = 0
+            self._initialized = True
 
     async def run(self):
         logger.info("OptionSafeguard: Starting safeguard loop...")
+        last_run_start_time = 0
         while True:
             try:
                 self.load_config()
@@ -50,12 +62,20 @@ class OptionSafeguard:
 
                 if not self.ib.isConnected():
                     logger.warning("OptionSafeguard: Task is waiting for IB connection...")
+                    last_run_start_time = 0
                     await asyncio.sleep(2)
                     continue
 
-                if time.time() - self.last_alive_log_time > 300:
+                now = time.time()
+                if last_run_start_time > 0:
+                    elapsed = now - last_run_start_time
+                    if elapsed > 1.0:
+                        logger.warning(f"OptionSafeguard loop cycle took too long: {elapsed:.2f}s (target <= 1s)")
+                last_run_start_time = now
+
+                if now - self.last_alive_log_time > 300:
                     logger.info("Option safeguard is still running")
-                    self.last_alive_log_time = time.time()
+                    self.last_alive_log_time = now
 
                 logger.debug("OptionSafeguard: Monitoring position risk...")
                 if is_market_open():
@@ -67,6 +87,7 @@ class OptionSafeguard:
                     logger.info("OptionSafeguard: Connection error resolved.")
                     self.connection_failure_start_time = None
 
+                self.last_run_end_time = time.time()
                 await asyncio.sleep(0 if is_market_open() else 0.1)
 
             except Exception:
