@@ -304,6 +304,40 @@ def monitor_option_trader():
             logger.warning("It seems that option trader has difficulties getting delta data, switching to restart platform state")
             soft_restart()
 
+        check_for_manual_restart_request()
+
+
+def check_for_manual_restart_request():
+    config_path = "config/supervisor_config.json"
+    if not os.path.exists(config_path):
+        return
+
+    try:
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+
+        if config.get('should_restart_option_trader') == 1:
+            logger.info("Manual restart of Option Trader requested via config.")
+            kill_option_trader()
+            
+            # Post state to indicate restart
+            asyncio.run(post_current_state({'status': 'Restarting'}))
+            
+            start_result = start_option_trader()
+            if start_result == SUCCESS:
+                logger.info("Manual restart of Option Trader successful. Resetting config flag.")
+                config['should_restart_option_trader'] = 0
+                with open(config_path, 'w') as f:
+                    json.dump(config, f, indent=4)
+                send_telegram_message("Option Trader successfully restarted via manual request.")
+            else:
+                logger.error("Manual restart of Option Trader failed.")
+                global state
+                state = CANNOT_RESTART_OPTION_TRADER_STATE
+
+    except Exception as e:
+        logger.error(f"Error checking for manual restart request: {e}")
+
 
 def set_switch_to_restart_platform_state():
     global state
