@@ -35,6 +35,7 @@ class OptionSafeguard:
         self.last_alive_log_time = 0
         self.config = {}
         self.should_guard_positions = True
+        self.enable_spy_option_hedging = False
         self.last_modification_times = {}
 
     async def run(self):
@@ -89,6 +90,7 @@ class OptionSafeguard:
                 with open(config_path, "r") as f:
                     self.config = json.load(f)
                     self.should_guard_positions = self.config.get("should_guard_positions", True)
+                    self.enable_spy_option_hedging = self.config.get("enable_spy_option_hedging", False)
         except Exception as e:
             logger.error(f"Error reading safeguard config: {e}")
 
