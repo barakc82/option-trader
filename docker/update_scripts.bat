@@ -14,7 +14,7 @@ if %ERRORLEVEL% neq 0 (
 )
 
 echo Extracting and updating scripts in Docker container...
-gcloud compute ssh %VM_NAME% --command "tar -xzf /home/barakc82/scripts.tar.gz -C /home/barakc82/ && sudo docker cp /home/barakc82/app option-trader:/home/option-trader/ && sudo docker cp /home/barakc82/utilities option-trader:/home/option-trader/ && sudo docker exec option-trader pkill -f 'python3 -m app.main' || true"
+gcloud compute ssh %VM_NAME% --command "tar -xzf /home/barakc82/scripts.tar.gz -C /home/barakc82/ && sudo docker cp /home/barakc82/app option-trader:/home/option-trader/ && sudo docker cp /home/barakc82/utilities option-trader:/home/option-trader/ && sudo docker exec option-trader sh -c 'echo \"{\\\"should_restart_option_trader\\\": 1}\" > /home/option-trader/config/supervisor_config.json'"
 
 echo Cleaning up...
 if exist scripts.tar.gz del scripts.tar.gz

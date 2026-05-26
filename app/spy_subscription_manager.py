@@ -1,10 +1,11 @@
+import time
 import asyncio
 import logging
 import math
 from ib_insync import Option
 from .trading_bot import TradingBot
 from .market_data_fetcher import MarketDataFetcher
-from utilities.utils import get_option_name
+from utilities.utils import get_option_name, SAFEGUARD_MAX_CADENCE
 from utilities.ib_utils import get_spy_option_name
 
 logger = logging.getLogger(__name__)

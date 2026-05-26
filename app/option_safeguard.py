@@ -124,8 +124,10 @@ class OptionSafeguard:
 
         if not spy_ticker:
             logger.info(f"Matching ticker for {get_option_name(option)} ({spy_name}) not found in tickers cache. "
-                        f"Unfairness is not detected")
+                        f"Invalidating subscription in SpySubscriptionManager. Unfairness is not detected")
+            self.spy_subscription_manager.spx_to_spy_map.pop(option.conId, None)
             return False
+
 
         if math.isnan(spy_ticker.ask) or spy_ticker.ask <= 0:
             logger.info(f"Matching ticker for {get_option_name(option)} ({spy_name}) has an invalid ask value: "

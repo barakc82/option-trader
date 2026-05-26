@@ -376,6 +376,7 @@ def check_process_state(process, should_print_health=False):
 def is_process_active():
     time_since_last_ping = 0
     hb_path = f"{OPTION_TRADER_DIR}/cache/heartbeat.txt"
+    last_pid = 0
     for _ in range(24):
         try:
             pid_found = False
