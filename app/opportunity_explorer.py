@@ -211,7 +211,8 @@ class OpportunityExplorer:
 
         stop_loss_per_option = await self.max_loss_calculator.calculate_max_loss('C')
         if stop_loss_per_option < estimated_sell_price:
-            logger.warning(f"Failed to sell {get_option_name(call_option)} since the acceptable loss ({stop_loss_per_option}) is smaller than the option price ({estimated_sell_price})")
+            logger.warning(f"Failed to sell {get_option_name(call_option)} since the acceptable loss ({stop_loss_per_option:2f})"
+                           f" is smaller than the option price ({estimated_sell_price})")
             return sell_option_result
 
         logger.info(f"Testing sell 2 options of {get_option_name(call_option)}")
