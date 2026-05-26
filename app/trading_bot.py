@@ -109,8 +109,9 @@ class TradingBot:
         return self.cancel_order(trade.order)
 
     async def close_short_option(self, option, quantity, limit):
-        limit = await self.adjust_limit_to_market_rules(option, limit)
+        limit = self.adjust_limit_to_market_rules(option, limit)
         open_trades = await self.get_open_trades()
+
         for t in open_trades:
             if option.conId == t.contract.conId and t.order.action.upper() == 'BUY':
                 logger.info(f"Cancelling the buy of {get_option_name(t.contract)} in order to place a new order that will close the positon")
@@ -134,15 +135,14 @@ class TradingBot:
     async def close_short_option_position(self, position, limit=None):
         return await self.close_short_option(position.contract, abs(position.position), limit)
 
-    async def verify_price_increments_exist(self, contract):
+    async def fetch_price_increments(self, contract):
         if not self.price_increments:
             details = await self.ib.reqContractDetailsAsync(contract)
             market_rule_id = int(details[0].marketRuleIds.split(',')[0])
             rule = await self.ib.reqMarketRuleAsync(market_rule_id)
             self.price_increments = sorted(rule, key=lambda i: i.lowEdge)
 
-    async def adjust_limit_to_market_rules(self, contract, raw_limit):
-        await self.verify_price_increments_exist(contract)
+    def adjust_limit_to_market_rules(self, contract, raw_limit):
         current_increment = self.price_increments[0].increment
         for i in self.price_increments:
             if raw_limit > i.lowEdge:
@@ -202,7 +202,7 @@ class TradingBot:
             return ask
         spread = ask - bid
         raw_limit = bid + spread / 2
-        return await self.adjust_limit_to_market_rules(contract, raw_limit)
+        return self.adjust_limit_to_market_rules(contract, raw_limit)
 
     async def sell(self, contract, quantity):
         ticker = contract.ticker
@@ -305,7 +305,7 @@ class TradingBot:
         return float(order_state.initMarginChange)
 
     async def modify_limit_order(self, limit_buy_trade, raw_limit):
-        limit_price = await self.adjust_limit_to_market_rules(limit_buy_trade.contract, raw_limit)
+        limit_price = self.adjust_limit_to_market_rules(limit_buy_trade.contract, raw_limit)
         if limit_price == limit_buy_trade.order.lmtPrice:
             logger.info(f"Skipping modification for {get_option_name(limit_buy_trade.contract)} as limit price {limit_price} is unchanged")
             return limit_buy_trade

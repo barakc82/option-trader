@@ -86,6 +86,9 @@ class OptionCache:
                 # noinspection PyTypeChecker
                 pickle.dump(options, file)
 
+        from .trading_bot import TradingBot
+        await TradingBot().fetch_price_increments(options[0])
+
         assert options
         return options
 

@@ -110,7 +110,7 @@ class StateUpdater:
 
             stop_loss_per_option = await self.max_loss_calculator.calculate_max_loss(option.right)
             raw_stop_loss = position.avgCost / 100 + stop_loss_per_option
-            stop_loss = await self.trading_bot.adjust_limit_to_market_rules(option, raw_stop_loss)
+            stop_loss = self.trading_bot.adjust_limit_to_market_rules(option, raw_stop_loss)
 
             state_positions.append({
                 'right': option.right, 'strike': option.strike, 'quantity': position.position,
