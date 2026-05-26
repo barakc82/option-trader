@@ -3,7 +3,7 @@ import asyncio
 from datetime import timedelta
 
 from utilities.ib_utils import get_delta, OPEN_SELL_ORDER_EXPIRATION_TIME, \
-    POSITION_BUYBACK_ORDERR_EXPIRATION_TIME, OPEN_GENERAL_MARGIN_REDUCTION_BUY_ORDER_EXPIRATION_TIME, \
+    POSITION_BUYBACK_ORDER_EXPIRATION_TIME, OPEN_GENERAL_MARGIN_REDUCTION_BUY_ORDER_EXPIRATION_TIME, \
     get_time_passed_since_submission
 from utilities.utils import *
 
@@ -169,7 +169,7 @@ class OptionTrader:
             time_passed_since_submission = get_time_passed_since_submission(buy_limit_trade)
 
             if corresponding_position_found and option_ask_value == 0.05:
-                if price_level < MINIMAL_SELL_PRICE_TO_CLOSE_POSITION and time_passed_since_submission > POSITION_BUYBACK_ORDERR_EXPIRATION_TIME:
+                if price_level < MINIMAL_SELL_PRICE_TO_CLOSE_POSITION and time_passed_since_submission > POSITION_BUYBACK_ORDER_EXPIRATION_TIME:
                     logger.info(f"Cancelling {get_option_name(option)} because it has the current price level for "
                                 f"'{option.right}' is too low ({price_level}) for position buyback")
                     self.trading_bot.cancel_trade(buy_limit_trade)

@@ -70,11 +70,12 @@ class SpySubscriptionManager:
             await self.market_data_fetcher.update_ticker_data(contracts_to_subscribe)
             
             for spx_contract, spy_contract in new_spy_contracts:
-                if spy_contract.conId:
+                if spy_contract.conId and self.market_data_fetcher.get_ticker(spy_contract):
                     self.spx_to_spy_map[spx_contract.conId] = spy_contract
-                    logger.info(f"Subscribed to {get_spy_option_name(spy_contract)} for SPX position {get_option_name(spx_contract)}")
+                    logger.info(f"Subscribed to {get_spy_option_name(spy_contract)}, id: {id(spy_contract)} for SPX position {get_option_name(spx_contract)}")
                 else:
                     logger.error(f"Failed to qualify matching SPY option for {get_option_name(spx_contract)}")
+
                 
         # 2. Unsubscribe from SPY options for closed SPX positions
         closed_spx_con_ids = [con_id for con_id in self.spx_to_spy_map.keys() if con_id not in current_spx_con_ids]

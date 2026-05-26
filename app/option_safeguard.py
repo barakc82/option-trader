@@ -119,11 +119,11 @@ class OptionSafeguard:
         ticker = option.ticker
         spx_ask = ticker.ask
 
-        spy_ticker = self.ib.ticker(spy_option)
+        spy_ticker = self.market_data_fetcher.get_ticker(spy_option)
         spy_name = get_spy_option_name(spy_option)
 
         if not spy_ticker:
-            logger.info(f"Matching ticker for {get_option_name(option)} ({spy_name}) not found in tickers cache. "
+            logger.info(f"Matching ticker for {get_option_name(option)} ({spy_name}, id: {id(spy_option)}) not found in tickers cache. "
                         f"Invalidating subscription in SpySubscriptionManager. Unfairness is not detected")
             self.spy_subscription_manager.spx_to_spy_map.pop(option.conId, None)
             return False
@@ -199,8 +199,8 @@ class OptionSafeguard:
         stop_loss = position.avgCost / 100 + stop_loss_per_option
         high_limit_buy_trade = find_high_limit_buy_trade(option, open_trades)
 
-        spy_option = self.spy_subscription_manager.create_matching_spy_contract(option)
-        if is_regular_hours() and self.is_unfair_ask_value(option, spy_option):
+        spy_option = self.spy_subscription_manager.spx_to_spy_map.get(option.conId)
+        if is_regular_hours() and spy_option and self.is_unfair_ask_value(option, spy_option):
             await self.handle_unfair_ask_value(high_limit_buy_trade, option, spy_option, stop_loss)
             return
 

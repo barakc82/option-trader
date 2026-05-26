@@ -63,7 +63,7 @@ class PositionsManager:
                 options_type = 'Put' if option.right == 'P' else 'Call'
                 if limit_buy_trade:
                     time_passed_since_submission = get_time_passed_since_submission(limit_buy_trade)
-                    if time_passed_since_submission > POSITION_BUYBACK_ORDERR_EXPIRATION_TIME:
+                    if time_passed_since_submission > POSITION_BUYBACK_ORDER_EXPIRATION_TIME:
                         logger.info(
                             f"Cancelling a buy trade for position of {get_option_name(option)} since sell price for {options_type} options is too low ({current_price_level})")
                         self.trading_bot.cancel_trade(limit_buy_trade)
