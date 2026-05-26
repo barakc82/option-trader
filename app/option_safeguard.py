@@ -19,6 +19,7 @@ from utilities.ib_utils import is_hollow, req_id_to_comment, find_high_limit_buy
 logger = logging.getLogger(__name__)
 
 MAX_DEVIATION = 0.05
+MIN_PRICE_THRESHOLD = 1
 
 class OptionSafeguard:
     _instance = None
@@ -118,6 +119,8 @@ class OptionSafeguard:
     def is_unfair_ask_value(self, option, spy_option):
         ticker = option.ticker
         spx_ask = ticker.ask
+        if spx_ask < MIN_PRICE_THRESHOLD:
+            return False
 
         spy_ticker = self.market_data_fetcher.get_ticker(spy_option)
         spy_name = get_spy_option_name(spy_option)
@@ -128,7 +131,6 @@ class OptionSafeguard:
             self.spy_subscription_manager.spx_to_spy_map.pop(option.conId, None)
             return False
 
-
         if math.isnan(spy_ticker.ask) or spy_ticker.ask <= 0:
             logger.info(f"Matching ticker for {get_option_name(option)} ({spy_name}) has an invalid ask value: "
                         f"{spy_ticker.ask}. Unfairness is not detected")
@@ -136,6 +138,7 @@ class OptionSafeguard:
 
         adjusted_spy_ask = spy_ticker.ask * 10.0
         deviation = (spx_ask - adjusted_spy_ask) / adjusted_spy_ask
+
 
         if deviation < MAX_DEVIATION:
             return False
