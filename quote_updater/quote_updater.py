@@ -22,7 +22,10 @@ last_sent_prices = {symbol: None for symbol in SYMBOLS}
 
 def on_pending_tickers(tickers):
     for ticker in tickers:
-        symbol = ticker.contract.symbol
+        if isinstance(ticker.contract, Forex):
+            symbol = ticker.contract.pair()
+        else:
+            symbol = ticker.contract.symbol
 
         if not math.isnan(ticker.last) and ticker.last > 0:
             if symbol == "SP5Y" and latest_quotes.get("SP5Y", [0, 0])[1] != ticker.last:
@@ -33,6 +36,13 @@ def on_pending_tickers(tickers):
 def update_google_quotes_sheet_sync(worksheet, updates_payload):
     if not updates_payload:
         return
+
+    if "USDILS" in latest_quotes:
+        usd_ils_rate = latest_quotes["USDILS"][1]
+        updates_payload.append({
+            'range': 'F19',
+            'values': [[usd_ils_rate]]
+        })
 
     try:
         worksheet.batch_update(updates_payload)
@@ -110,6 +120,8 @@ def main():
     if 'SP5Y' in SYMBOLS:
         sp5y_index = SYMBOLS.index('SP5Y')
         contracts[sp5y_index].primaryExchange = 'LSEETF'
+
+    contracts.append(Forex('USDILS'))
 
     if ib.isConnected():
         setup_subscriptions(ib, contracts)
