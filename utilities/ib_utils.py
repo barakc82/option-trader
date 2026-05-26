@@ -75,6 +75,12 @@ def get_delta(ticker):
     return None
 
 
+def get_delta_for_sell(ticker):
+    if ticker.askGreeks and ticker.askGreeks.delta:
+        return abs(ticker.askGreeks.delta)
+    return None
+
+
 def find_high_limit_buy_trade(option, open_buy_trades):
     for open_buy_trade in open_buy_trades:
         if (option.conId == open_buy_trade.contract.conId and open_buy_trade.order.action.upper() == 'BUY' and
