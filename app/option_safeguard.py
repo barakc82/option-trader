@@ -52,31 +52,32 @@ class OptionSafeguard:
 
     async def run(self):
         logger.info("OptionSafeguard: Starting safeguard loop...")
-        last_run_start_time = 0
         while True:
             try:
+                iteration_start_time = time.time()
+                
+                # Check 1: Delay between iterations
+                if self.last_run_end_time > 0:
+                    delay_between_iterations = iteration_start_time - self.last_run_end_time
+                    if delay_between_iterations > SAFEGUARD_MAX_CADENCE:
+                         logger.warning(f"OptionSafeguard delay between iterations took too long: {delay_between_iterations:.2f}s (target <= {SAFEGUARD_MAX_CADENCE}s)")
+
                 self.load_config()
 
                 if not self.should_guard_positions:
+                    self.last_run_end_time = 0
                     await asyncio.sleep(1)
                     continue
 
                 if not self.ib.isConnected():
                     logger.warning("OptionSafeguard: Task is waiting for IB connection...")
-                    last_run_start_time = 0
+                    self.last_run_end_time = 0
                     await asyncio.sleep(2)
                     continue
 
-                now = time.time()
-                if last_run_start_time > 0:
-                    elapsed = now - last_run_start_time
-                    if elapsed > SAFEGUARD_MAX_CADENCE:
-                        logger.warning(f"OptionSafeguard loop cycle took too long: {elapsed:.2f}s (target <= {SAFEGUARD_MAX_CADENCE}s)")
-                last_run_start_time = now
-
-                if now - self.last_alive_log_time > 300:
+                if iteration_start_time - self.last_alive_log_time > 300:
                     logger.info("Option safeguard is still running")
-                    self.last_alive_log_time = now
+                    self.last_alive_log_time = iteration_start_time
 
                 logger.debug("OptionSafeguard: Monitoring position risk...")
                 if is_market_open():
@@ -88,7 +89,12 @@ class OptionSafeguard:
                     logger.info("OptionSafeguard: Connection error resolved.")
                     self.connection_failure_start_time = None
 
+                # Check 2: Duration of iteration
                 self.last_run_end_time = time.time()
+                iteration_duration = self.last_run_end_time - iteration_start_time
+                if iteration_duration > SAFEGUARD_MAX_CADENCE:
+                    logger.warning(f"OptionSafeguard iteration duration took too long: {iteration_duration:.2f}s (target <= {SAFEGUARD_MAX_CADENCE}s)")
+
                 await asyncio.sleep(0 if is_market_open() else 0.1)
 
             except Exception:
