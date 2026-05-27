@@ -42,8 +42,8 @@ class AccountData:
                 return value
         return value
 
-    async def get_quantity(self, option):
-        positions = await self.ib.reqPositionsAsync()
+    def get_quantity(self, option):
+        positions = self.ib.positions()
         for position in positions:
             if position.contract.conId == option.contract.conId:
                 return position.position

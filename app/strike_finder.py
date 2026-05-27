@@ -114,6 +114,7 @@ class StrikeFinder:
             log_message += f", model delta: {current_candidate.ticker.modelGreeks.delta}"
         if current_candidate.ticker.bidGreeks:
             log_message += f", bid delta: {current_candidate.ticker.bidGreeks.delta}"
+        log_message += f"bid: {current_candidate.ticker.bid}, ask: {current_candidate.ticker.ask}"
         logger.info(log_message)
         return current_candidate
 

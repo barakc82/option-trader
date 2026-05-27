@@ -57,6 +57,8 @@ class ConnectionManager:
             await self.ib.connectAsync(self.host, self.port, clientId=self.client_id)
             logger.info("Successfully connected to IB.")
             self.reconnect_delay = 1 # Reset delay on success
+            await self.ib.reqPositionsAsync()
+            await self.ib.reqAllOpenOrdersAsync()
             await self.request_account_updates()
         except Exception as e:
             logger.error(f"Connection failed: {e}. Retrying soon...")

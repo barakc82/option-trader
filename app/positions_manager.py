@@ -41,10 +41,9 @@ class PositionsManager:
 
     async def manage_current_positions(self):
         logger.info("Checking current positions")
-        positions, open_trades = await asyncio.gather(
-            self.trading_bot.get_short_options(),
-            self.trading_bot.get_open_trades()
-        )
+        positions = await self.trading_bot.get_short_options()
+        open_trades = self.trading_bot.get_open_trades()
+
         open_buy_trades = [trade for trade in open_trades if trade.order.action.upper() == 'BUY' and
                            not is_trade_cancelled(trade) and trade.order.orderType == 'LMT']
 

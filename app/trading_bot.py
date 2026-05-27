@@ -35,25 +35,12 @@ class TradingBot:
             self.market_data_fetcher = MarketDataFetcher()
             self.account_data = AccountData()
 
-            self.req_all_open_orders_lock = asyncio.Lock()
-            self.req_positions_lock = asyncio.Lock()
-            self.last_request_positions_time = 0
-            self.last_request_all_open_trades_time = 0
             self.price_increments = []
             logger.info("TradingBot singleton initialized.")
             self._initialized = True
 
     async def get_short_options(self):
-        """Fetches active short option positions with optional server refresh."""
-
-        should_use_cache = time.time() - self.last_request_positions_time < 60
-        if not should_use_cache and not self.req_positions_lock.locked():
-            async with self.req_positions_lock:
-                logger.debug("Requesting fresh positions from IB server...")
-                # reqPositionsAsync returns the list directly (Optimization)
-                await self.ib.reqPositionsAsync()
-                self.last_request_positions_time = time.time()
-
+        """Fetches active short option positions from the internal cache."""
         positions = self.ib.positions(MY_ACCOUNT)
         if not positions:
             logger.warning("No position were found")
@@ -72,17 +59,7 @@ class TradingBot:
             await self.market_data_fetcher.update_ticker_data(options)
         return option_positions
 
-    def get_cache_open_trades(self):
-        open_trades = [t for t in self.ib.openTrades() if not is_trade_cancelled(t) and t.contract.secType == 'OPT']
-        return open_trades
-
-    async def get_open_trades(self) -> list[Trade]:
-        should_use_cache = time.time() - self.last_request_all_open_trades_time < 300
-        if not should_use_cache:
-            async with self.req_all_open_orders_lock:
-                await self.ib.reqAllOpenOrdersAsync()
-            self.last_request_all_open_trades_time = time.time()
-
+    def get_open_trades(self) -> list[Trade]:
         open_trades = [t for t in self.ib.openTrades() if not is_trade_cancelled(t) and t.contract.secType == 'OPT']
 
         # Link tickers
@@ -93,11 +70,6 @@ class TradingBot:
                     if t.contract.conId == trade.contract.conId:
                         trade.contract.ticker = t
                         break
-
-        # Update sell trade tickers
-        sell_trades = [t for t in open_trades if t.order.action.upper() == 'SELL']
-        if sell_trades:
-            await self.market_data_fetcher.update_ticker_data([t.contract for t in sell_trades])
 
         return open_trades
 
@@ -111,7 +83,7 @@ class TradingBot:
 
     async def close_short_option(self, option, quantity, limit):
         limit = self.adjust_limit_to_market_rules(option, limit)
-        open_trades = await self.get_open_trades()
+        open_trades = self.get_open_trades()
 
         for t in open_trades:
             if option.conId == t.contract.conId and t.order.action.upper() == 'BUY':

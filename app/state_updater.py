@@ -99,7 +99,7 @@ class StateUpdater:
 
         # 3. Gather positions and trades
         positions = await self.trading_bot.get_short_options()
-        open_trades = await self.trading_bot.get_open_trades()
+        open_trades = self.trading_bot.get_open_trades()
 
         if positions:
             await self.trading_bot.fetch_price_increments(positions[0].contract)
