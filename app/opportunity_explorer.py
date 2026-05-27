@@ -42,7 +42,7 @@ async def calculate_max_options_for_market_rise(call_option):
         return sys.float_info.max
 
     trading_bot = TradingBot()
-    positions = await trading_bot.get_short_options()
+    positions = trading_bot.get_short_options()
     current_total_liability = 0
     for position in positions:
         if not position.contract.secType == 'OPT' or position.position >= 0 or position.contract.right != 'C':
@@ -85,7 +85,7 @@ async def calculate_max_options_for_market_drop(put_option):
         return sys.float_info.max
 
     trading_bot = TradingBot()
-    positions = await trading_bot.get_short_options()
+    positions = trading_bot.get_short_options()
     current_total_liability = 0
     for position in positions:
         if not position.contract.secType == 'OPT' or position.position >= 0 or position.contract.right != 'P':
