@@ -109,16 +109,19 @@ class OptionTrader:
 
     async def guard_pending_trades(self):
         logger.info("Checking pending trades")
-        positions, open_trades = await asyncio.gather(
-            self.trading_bot.get_short_options(),
-            self.trading_bot.get_open_trades()
-        )
+        positions = await self.trading_bot.get_short_options()
+        open_trades = self.trading_bot.get_open_trades()
+
         open_sell_trades = [trade for trade in open_trades if trade.order.action.upper() == 'SELL']
         logger.info(f"Number of open sell trades: {len(open_sell_trades)}")
 
+        call_delta_task = self.target_delta_calculator.calculate_target_delta('C')
+        put_delta_task = self.target_delta_calculator.calculate_target_delta('P')
+        call_delta, put_delta = await asyncio.gather(call_delta_task, put_delta_task)
+        
         target_deltas = {
-            'C': await self.target_delta_calculator.calculate_target_delta('C'),
-            'P': await self.target_delta_calculator.calculate_target_delta('P')
+            'C': call_delta,
+            'P': put_delta
         }
         logger.info(f"Target deltas: C={target_deltas['C']:.3f}, P={target_deltas['P']:.3f}")
 
@@ -191,6 +194,6 @@ class OptionTrader:
 
 
     async def verify_no_open_trades(self):
-        open_trades = await self.trading_bot.get_open_trades()
+        open_trades = self.trading_bot.get_open_trades()
         for open_trade in open_trades:
             self.trading_bot.cancel_trade(open_trade)
