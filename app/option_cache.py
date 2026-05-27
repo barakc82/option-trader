@@ -68,6 +68,7 @@ class OptionCache:
                                     exchange='CBOE', currency='USD', tradingClass='SPXW')
                     call_options.append(option)
 
+            logger.info(f"Before contract qualification, number of call options: {len(call_options)}, number of put options: {len(put_options)}")
             await self.market_data_fetcher.qualify(put_options + call_options)
             put_options = list(filter(lambda contract: contract.conId, put_options))
             call_options = list(filter(lambda contract: contract.conId, call_options))

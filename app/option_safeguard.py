@@ -155,7 +155,7 @@ class OptionSafeguard:
 
     async def guard_current_positions(self):
         logger.debug("Checking current positions")
-        positions = await self.trading_bot.get_short_options()
+        positions = self.trading_bot.get_short_options()
         open_trades = self.trading_bot.get_open_trades()
 
         if positions:

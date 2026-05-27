@@ -41,7 +41,7 @@ class PositionsManager:
 
     async def manage_current_positions(self):
         logger.info("Checking current positions")
-        positions = await self.trading_bot.get_short_options()
+        positions = self.trading_bot.get_short_options()
         open_trades = self.trading_bot.get_open_trades()
 
         open_buy_trades = [trade for trade in open_trades if trade.order.action.upper() == 'BUY' and

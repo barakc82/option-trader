@@ -59,7 +59,7 @@ class MaxLossCalculator:
         if time.time() - self.last_save_time[right] < 3600:
             return self.last_max_loss[right]
 
-        positions = await self.trading_bot.get_short_options()
+        positions = self.trading_bot.get_short_options()
         now = time.time()
 
         position_quantities_for_right = [-position.position for position in positions if position.contract.right == right]

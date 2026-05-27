@@ -351,7 +351,7 @@ class OpportunityExplorer:
             return
 
         strike_finder = StrikeFinder()
-        positions = await self.trading_bot.get_short_options()
+        positions = self.trading_bot.get_short_options()
         min_strike = min(position.contract.strike for position in positions)
         available_cheap_call_option = await strike_finder.get_available_cheap_call_option(call_options, min_strike)
         initial_margin_change = await self.trading_bot.get_initial_margin_change(available_cheap_call_option, 1)
@@ -397,7 +397,7 @@ class OpportunityExplorer:
             return
 
         strike_finder = StrikeFinder()
-        positions = await self.trading_bot.get_short_options()
+        positions = self.trading_bot.get_short_options()
         max_strike = max(position.contract.strike for position in positions)
         available_cheap_put_option = await strike_finder.get_available_cheap_put_option(put_options, max_strike)
         initial_margin_change = await self.trading_bot.get_initial_margin_change(available_cheap_put_option, 1)

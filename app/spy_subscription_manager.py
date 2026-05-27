@@ -48,7 +48,7 @@ class SpySubscriptionManager:
 
     async def manage_subscriptions(self):
         """Check current SPX positions and update SPY subscriptions."""
-        positions = await self.trading_bot.get_short_options()
+        positions = self.trading_bot.get_short_options()
         # SPX options can have symbol 'SPX' or 'SPXW' (weekly)
         spx_positions = [p for p in positions if p.contract.symbol in ('SPX', 'SPXW')]
 

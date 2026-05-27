@@ -39,7 +39,7 @@ class TradingBot:
             logger.info("TradingBot singleton initialized.")
             self._initialized = True
 
-    async def get_short_options(self):
+    def get_short_options(self):
         """Fetches active short option positions from the internal cache."""
         positions = self.ib.positions(MY_ACCOUNT)
         if not positions:
@@ -54,9 +54,6 @@ class TradingBot:
                     continue
                 option_positions.append(position)
 
-        options = [p.contract for p in option_positions]
-        if options:
-            await self.market_data_fetcher.update_ticker_data(options)
         return option_positions
 
     def get_open_trades(self) -> list[Trade]:

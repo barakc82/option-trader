@@ -98,7 +98,7 @@ class StateUpdater:
         state['put_implied_volatility'] = round(await self.market_data_fetcher.get_spx_implied_volatility('P'), 2)
 
         # 3. Gather positions and trades
-        positions = await self.trading_bot.get_short_options()
+        positions = self.trading_bot.get_short_options()
         open_trades = self.trading_bot.get_open_trades()
 
         if positions:

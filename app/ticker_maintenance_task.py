@@ -44,7 +44,7 @@ class TickerMaintenanceTask:
 
     async def maintain_tickers(self):
         """Transverse positions and ensure tickers are attached to contracts."""
-        positions = await self.trading_bot.get_short_options()
+        positions = self.trading_bot.get_short_options()
         
         contracts_missing_tickers = []
         for position in positions:

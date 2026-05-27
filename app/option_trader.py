@@ -109,7 +109,7 @@ class OptionTrader:
 
     async def guard_pending_trades(self):
         logger.info("Checking pending trades")
-        positions = await self.trading_bot.get_short_options()
+        positions = self.trading_bot.get_short_options()
         open_trades = self.trading_bot.get_open_trades()
 
         open_sell_trades = [trade for trade in open_trades if trade.order.action.upper() == 'SELL']
