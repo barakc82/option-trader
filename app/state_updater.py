@@ -101,6 +101,9 @@ class StateUpdater:
         positions = await self.trading_bot.get_short_options()
         open_trades = await self.trading_bot.get_open_trades()
 
+        if positions:
+            await self.trading_bot.fetch_price_increments(positions[0].contract)
+
         state_positions = []
         contract_id_to_delta = {}
         for position in positions:

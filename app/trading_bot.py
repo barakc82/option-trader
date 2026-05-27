@@ -59,10 +59,11 @@ class TradingBot:
             logger.warning("No position were found")
 
         option_positions = []
+        now_in_nyc = datetime.now(new_york_timezone)
         for position in positions:
             if position.contract.secType == 'OPT' and position.position < 0:
                 expiry = datetime.strptime(position.contract.lastTradeDateOrContractMonth, "%Y%m%d").date()
-                if expiry < date.today() or (expiry == date.today() and is_after_hours()):
+                if expiry < now_in_nyc.date() or (expiry == now_in_nyc.date() and REGULAR_HOURS_END_TIME < now_in_nyc.time()):
                     continue
                 option_positions.append(position)
 

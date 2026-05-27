@@ -107,7 +107,14 @@ class StrikeFinder:
             logger.error(f"The selected option ({get_option_name(current_candidate)}) has a delta of {final_delta:.3f}, which is higher than the target delta ({target_delta:.3f}), thus no option selected")
             return None
 
-        logger.info(f"Selected option: {get_option_name(current_candidate)}, delta: {final_delta:.3f}, target: {target_delta:.3f}")
+        log_message = f"Selected option: {get_option_name(current_candidate)}, delta: {final_delta:.3f}, target: {target_delta:.3f}"
+        if current_candidate.ticker.lastGreeks:
+            log_message += f", last delta: {current_candidate.ticker.lastGreeks.delta}"
+        if current_candidate.ticker.modelGreeks:
+            log_message += f", model delta: {current_candidate.ticker.modelGreeks.delta}"
+        if current_candidate.ticker.bidGreeks:
+            log_message += f", bid delta: {current_candidate.ticker.bidGreeks.delta}"
+        logger.info(log_message)
         return current_candidate
 
     def find_first_cheap_option(self, right):
