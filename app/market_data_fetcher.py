@@ -222,18 +222,23 @@ class MarketDataFetcher:
             logger.warning(f"Options in cache are expired ({expiration_date}). Returning last implied volatility for {right}: {self.last_implied_volatility[right]}")
             return self.last_implied_volatility[right]
 
-        # Find ATM option for the requested side
-        atm_option = min((o for o in options if o.right == right), key=lambda o: abs(o.strike - spx_price), default=None)
+        # Find 5 closest ATM options for the requested side
+        candidate_options = sorted((o for o in options if o.right == right), key=lambda o: abs(o.strike - spx_price))[:5]
 
-        if not atm_option:
+        if not candidate_options:
             logger.error(f"At the money level could not be found for {right}")
             return self.last_implied_volatility[right]
 
         write_heartbeat()
-        await self.update_ticker_data([atm_option])
+        await self.update_ticker_data(candidate_options)
         write_heartbeat()
-        
-        implied_volatility = get_implied_volatility(atm_option.ticker)
+
+        implied_volatility = math.nan
+        for option in candidate_options:
+            iv = get_implied_volatility(option.ticker)
+            if not math.isnan(iv):
+                implied_volatility = iv
+                break
 
         if math.isnan(implied_volatility):
             logger.warning(f"Implied volatility missing for ATM {right} option. SPX: {spx_price}. Using last known: {self.last_implied_volatility[right]}")

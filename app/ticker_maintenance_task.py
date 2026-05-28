@@ -43,12 +43,18 @@ class TickerMaintenanceTask:
             await asyncio.sleep(60)
 
     async def maintain_tickers(self):
-        """Transverse positions and ensure tickers are attached to contracts."""
+        """Transverse positions and open trades to ensure tickers are attached to contracts."""
         positions = self.trading_bot.get_short_options()
-        
+        open_trades = self.trading_bot.get_open_trades()
+
+        # Combine unique contracts from positions and open trades
+        unique_contracts = {p.contract.conId: p.contract for p in positions}
+        for trade in open_trades:
+            if trade.contract.conId not in unique_contracts:
+                unique_contracts[trade.contract.conId] = trade.contract
+
         contracts_missing_tickers = []
-        for position in positions:
-            contract = position.contract
+        for contract in unique_contracts.values():
             ticker = self.market_data_fetcher.get_ticker(contract)
             
             if ticker is not None:
@@ -58,7 +64,7 @@ class TickerMaintenanceTask:
                 contracts_missing_tickers.append(contract)
 
         if contracts_missing_tickers:
-            logger.info(f"Found {len(contracts_missing_tickers)} positions missing tickers. Updating...")
+            logger.info(f"Found {len(contracts_missing_tickers)} contracts missing tickers. Updating...")
             # update_ticker_data will request tickers and attach them to the contracts
             await self.market_data_fetcher.update_ticker_data(contracts_missing_tickers)
             
@@ -68,4 +74,4 @@ class TickerMaintenanceTask:
                 else:
                     logger.warning(f"Failed to attach ticker to {get_option_name(contract)}")
         else:
-            logger.debug("All current positions have tickers attached.")
+            logger.debug("All current positions and open trades have tickers attached.")

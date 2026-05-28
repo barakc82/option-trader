@@ -54,7 +54,8 @@ class AccountData:
         for item in summary:
             if item.tag == item_tag:
                 return self._parse_value(item.value, data_type)
-        return sys.float_info.max
+        logger.error(f"Could not find an account summary item for {item_tag}")
+        return 1
 
     def get_account_value(self, item_tag, data_type='float', currency=None):
         """Fetches from the streaming accountValues list (no network call)."""
@@ -62,7 +63,8 @@ class AccountData:
         for val in account_values:
             if val.tag == item_tag and (currency is None or val.currency == currency):
                 return self._parse_value(val.value, data_type)
-        return sys.float_info.max
+        logger.error(f"Could not find an account value for {item_tag}")
+        return 1
 
     async def get_cushion(self): return await self.get_account_summary_item('Cushion')
     async def get_previous_day_equity_with_loan(self): return await self.get_account_summary_item('PreviousDayEquityWithLoanValue')

@@ -209,7 +209,7 @@ class OpportunityExplorer:
             logger.info(f"The current price level for call options changed from {self.last_call_option_price} to {estimated_sell_price}")
             self.last_call_option_price = estimated_sell_price
 
-        stop_loss_per_option = await self.max_loss_calculator.calculate_max_loss('C')
+        stop_loss_per_option = self.max_loss_calculator.calculate_max_loss('C')
         if stop_loss_per_option < estimated_sell_price:
             logger.warning(f"Failed to sell {get_option_name(call_option)} since the acceptable loss ({stop_loss_per_option:2f})"
                            f" is smaller than the option price ({estimated_sell_price})")
@@ -295,7 +295,7 @@ class OpportunityExplorer:
             logger.info(f"The current price level for put options changed from {self.last_put_option_price} to {estimated_sell_price}")
             self.last_put_option_price = estimated_sell_price
 
-        stop_loss_per_option = await self.max_loss_calculator.calculate_max_loss('P')
+        stop_loss_per_option = self.max_loss_calculator.calculate_max_loss('P')
         if stop_loss_per_option < estimated_sell_price:
             logger.warning(f"Failed to sell {get_option_name(put_option)} since the acceptable loss ({stop_loss_per_option}) is smaller than the option price ({estimated_sell_price})")
             return sell_option_result

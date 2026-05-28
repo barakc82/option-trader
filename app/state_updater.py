@@ -111,7 +111,7 @@ class StateUpdater:
             delta = self.market_data_fetcher.get_delta(option)
             last_price = self.market_data_fetcher.get_last_price(option)
 
-            stop_loss_per_option = await self.max_loss_calculator.calculate_max_loss(option.right)
+            stop_loss_per_option = self.max_loss_calculator.calculate_max_loss(option.right)
             raw_stop_loss = position.avgCost / 100 + stop_loss_per_option
             stop_loss = self.trading_bot.adjust_limit_to_market_rules(option, raw_stop_loss)
 

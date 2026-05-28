@@ -202,13 +202,13 @@ class OptionSafeguard:
             return
 
         current_price = self.calculate_current_price(option)
-        stop_loss_per_option = await self.max_loss_calculator.calculate_max_loss(option.right)
+        stop_loss_per_option = self.max_loss_calculator.calculate_max_loss(option.right)
         stop_loss = position.avgCost / 100 + stop_loss_per_option
         high_limit_buy_trade = find_high_limit_buy_trade(option, open_trades)
 
         spy_option = self.spy_subscription_manager.spx_to_spy_map.get(option.conId)
         if is_regular_hours() and spy_option and self.is_unfair_ask_value(option, spy_option):
-            await self.handle_unfair_ask_value(high_limit_buy_trade, option, spy_option, stop_loss)
+            self.handle_unfair_ask_value(high_limit_buy_trade, option, spy_option, stop_loss)
             return
 
         if not high_limit_buy_trade:
@@ -259,7 +259,7 @@ class OptionSafeguard:
 
         await self.trading_bot.modify_limit_order(high_limit_buy_trade, required_limit_price)
 
-    async def handle_unfair_ask_value(self, high_limit_buy_trade: Any | None, option, spy_option: Option,
+    def handle_unfair_ask_value(self, high_limit_buy_trade: Any | None, option, spy_option: Option,
                                       stop_loss: Any):
         logger.warning(
             f"Ask value of {get_option_name(option)} is unfair (Ask: {option.ticker.ask}), "

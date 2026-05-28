@@ -49,7 +49,7 @@ class MaxLossCalculator:
 
             self._initialized = True
 
-    async def calculate_max_loss(self, right):
+    def calculate_max_loss(self, right):
         regular_hours_end_time_today = datetime.combine(datetime.today(), REGULAR_HOURS_END_TIME)
         end_time_timestamp = regular_hours_end_time_today.timestamp()
         current_time = time.time()
