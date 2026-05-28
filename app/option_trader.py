@@ -4,7 +4,7 @@ from datetime import timedelta
 
 from utilities.ib_utils import get_delta, OPEN_SELL_ORDER_EXPIRATION_TIME, \
     POSITION_BUYBACK_ORDER_EXPIRATION_TIME, OPEN_GENERAL_MARGIN_REDUCTION_BUY_ORDER_EXPIRATION_TIME, \
-    get_time_passed_since_submission
+    get_time_passed_since_submission, get_delta_for_sell
 from utilities.utils import *
 
 from .max_loss_calculator import MaxLossCalculator
@@ -135,7 +135,7 @@ class OptionTrader:
                 continue
 
             option = open_sell_trade.contract
-            delta = get_delta(option.ticker)
+            delta = get_delta_for_sell(option.ticker)
             target_delta = target_deltas[option.right]
             if delta > target_delta:
                 logger.info(

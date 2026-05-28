@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+from .connection_manager import ConnectionManager
 from .trading_bot import TradingBot
 from .market_data_fetcher import MarketDataFetcher
 from utilities.utils import get_option_name, SAFEGUARD_MAX_CADENCE
@@ -18,6 +19,7 @@ class TickerMaintenanceTask:
 
     def __init__(self):
         if not self._initialized:
+            self.ib = ConnectionManager().ib
             self.trading_bot = TradingBot()
             self.market_data_fetcher = MarketDataFetcher()
             logger.info("TickerMaintenanceTask singleton initialized.")
@@ -55,11 +57,10 @@ class TickerMaintenanceTask:
 
         contracts_missing_tickers = []
         for contract in unique_contracts.values():
-            ticker = self.market_data_fetcher.get_ticker(contract)
+            ticker = self.ib.ticker(contract)
             
             if ticker is not None:
-                if getattr(contract, 'ticker', None) is None:
-                    contract.ticker = ticker
+                contract.ticker = ticker
             else:
                 contracts_missing_tickers.append(contract)
 

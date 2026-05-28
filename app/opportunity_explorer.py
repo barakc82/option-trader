@@ -442,7 +442,7 @@ class OpportunityExplorer:
             logger.info(f"Will not buy {get_option_name(available_cheap_put_option)} since the potential sell price is too low ({self.last_put_option_price})")
 
     async def estimate_sell_price(self, option):
-        if math.isnan(option.ticker.bid) or math.isnan(option.ticker.bid):
+        if math.isnan(option.ticker.bid) or math.isnan(option.ticker.ask):
             return option.ticker.last
         return await self.trading_bot.calculate_limit(option, option.ticker.bid, option.ticker.ask)
 

@@ -67,6 +67,9 @@ def is_hollow(ticker):
 
 
 def get_delta(ticker):
+    if (ticker.bidGreeks and ticker.bidGreeks.delta and math.isnan(ticker.bidGreeks.delta) and
+            ticker.askGreeks and ticker.askGreeks.delta and math.isnan(ticker.askGreeks.delta)):
+        return (abs(ticker.bidGreeks.delta) + abs(ticker.askGreeks.delta)) / 2
     if ticker.lastGreeks and ticker.lastGreeks.delta:
         return abs(ticker.lastGreeks.delta)
     if ticker.modelGreeks and ticker.modelGreeks.delta:
