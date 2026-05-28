@@ -148,9 +148,17 @@ class OpportunityExplorer:
             if os.path.exists(config_path):
                 with open(config_path, "r") as f:
                     config = json.load(f)
-                    self.should_write_options_overnight = config.get("should_write_options_overnight", True)
-                    self.should_monitor_only = config.get("should_monitor_only", False)
-                    logger.debug(f"OpportunityExplorer: Config loaded (overnight={self.should_write_options_overnight})")
+
+                    new_write_overnight = config.get("should_write_options_overnight", True)
+                    if new_write_overnight != self.should_write_options_overnight:
+                        logger.info(f"OpportunityExplorer: should_write_options_overnight changed from {self.should_write_options_overnight} to {new_write_overnight}")
+                        self.should_write_options_overnight = new_write_overnight
+
+                    new_monitor_only = config.get("should_monitor_only", False)
+                    if new_monitor_only != self.should_monitor_only:
+                        logger.info(f"OpportunityExplorer: should_monitor_only changed from {self.should_monitor_only} to {new_monitor_only}")
+                        self.should_monitor_only = new_monitor_only
+
         except Exception as e:
             logger.error(f"OpportunityExplorer: Error reading config: {e}")
 
