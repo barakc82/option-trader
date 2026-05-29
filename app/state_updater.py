@@ -185,7 +185,6 @@ class StateUpdater:
 
         # 6. Finalize
         self.store_state_locally(state)
-        logger.info(f"Sending state to {UPDATE_STATE_URL}")
         try:
             await self._post_data(UPDATE_STATE_URL, state)
         except Exception as e:

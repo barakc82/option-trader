@@ -62,17 +62,15 @@ class MarketDataFetcher:
         if con_id not in self.registered_con_ids:
             ticker.updateEvent += self.on_option_ticker_update
             self.registered_con_ids.add(con_id)
-            logger.debug(f"Registered update handler for {get_option_name(ticker.contract)}")
+            logger.info(f"Registered update handler for {get_option_name(ticker.contract)}")
 
     async def get_spx_price(self):
         spx = Index('SPX', 'CBOE', 'USD')
         spx_ticker = self.ib.ticker(spx)
 
         if not spx_ticker:
+            logger.info("Fetching SPX ticker")
             spx_ticker = await self.request_ticker(spx)
-            if not spx_ticker:
-                logger.error("Could not obtain SPX ticker")
-                return self.previous_spx_value
 
         if math.isnan(spx_ticker.last):
             if is_regular_hours():
@@ -88,6 +86,8 @@ class MarketDataFetcher:
         return price
 
     def get_cached_spx_price(self):
+        if math.isnan(self.previous_spx_value):
+            asyncio.ensure_future(self.get_spx_price())
         return self.previous_spx_value
 
     def get_cached_spx_implied_volatility(self, right):
@@ -141,7 +141,38 @@ class MarketDataFetcher:
         # Note: Subscription cleanup is handled separately or can be added here if highly selective.
         # Periodic cleanup is usually safer to avoid constant churning during volatile markets.
 
-    async def update_ticker_data(self, contracts):
+    async def request_subscriptions(self, contracts):
+        """Qualify contracts and request fresh tickers for a batch of contracts."""
+        if not contracts:
+            return
+
+        await self.qualify(contracts)
+        await self.ensure_market_data_type()
+
+        # Filter out what we already have active
+        missing = [c for c in contracts if self.ib.ticker(c) is None]
+
+        if missing:
+            write_heartbeat()
+            new_tickers = [self.ib.reqMktData(c) for c in contracts]
+
+            timeout = 5 * math.pow(len(contracts), 0.2)
+            start = time.time()
+            while time.time() - start < timeout:
+                if all(t.last and not math.isnan(t.last) for t in new_tickers):
+                    break
+                await asyncio.sleep(0.1)
+
+            write_heartbeat()
+            for ticker in new_tickers:
+                self._register_ticker(ticker)
+
+        # Ensure all contracts have their internal ticker reference updated (for convenience)
+        for contract in contracts:
+            contract.ticker = self.ib.ticker(contract)
+
+
+    async def request_snapshots(self, contracts):
         """Qualify contracts and request fresh tickers for a batch of contracts."""
         if not contracts:
             return
@@ -156,21 +187,27 @@ class MarketDataFetcher:
             write_heartbeat()
             new_tickers = await self.ib.reqTickersAsync(*missing)
             write_heartbeat()
-            for ticker in new_tickers:
-                self._register_ticker(ticker)
 
         # Ensure all contracts have their internal ticker reference updated (for convenience)
         for contract in contracts:
             contract.ticker = self.ib.ticker(contract)
 
-    async def request_ticker(self, contract, is_snapshot=False):
+    async def request_ticker(self, contract):
         """Request market data for a single contract using reqTickersAsync."""
         await self.qualify([contract])
         await self.ensure_market_data_type()
         
-        tickers = await self.ib.reqTickersAsync(contract)
-        ticker = tickers[0]
-        self._register_ticker(ticker)
+        ticker = self.ib.reqMktData(contract)
+
+        timeout = 5
+        start = time.time()
+        while math.isnan(ticker.last) and (time.time() - start) < timeout:
+            await asyncio.sleep(0.1)
+
+        if not math.isnan(ticker.last):
+            self._register_ticker(ticker)
+        else:
+            logger.error(f"Could not fetch ticker for {get_option_name(contract)}")
         return ticker
 
     def cancel_market_data(self, contract):
@@ -234,7 +271,7 @@ class MarketDataFetcher:
             return self.last_implied_volatility[right]
 
         write_heartbeat()
-        await self.update_ticker_data(candidate_options)
+        await self.request_snapshots(candidate_options)
         write_heartbeat()
 
         implied_volatility = math.nan

@@ -67,7 +67,7 @@ class TickerMaintenanceTask:
         if contracts_missing_tickers:
             logger.info(f"Found {len(contracts_missing_tickers)} contracts missing tickers. Updating...")
             # update_ticker_data will request tickers and attach them to the contracts
-            await self.market_data_fetcher.update_ticker_data(contracts_missing_tickers)
+            await self.market_data_fetcher.request_subscriptions(contracts_missing_tickers)
             
             for contract in contracts_missing_tickers:
                 ticker = getattr(contract, 'ticker', None)
@@ -86,4 +86,4 @@ class TickerMaintenanceTask:
                 continue
             
             if contract.conId not in unique_contracts:
-                self.market_data_fetcher.cancel_market_data(contract)
+                self.ib.cancelMktData(contract)

@@ -148,7 +148,7 @@ class StrikeFinder:
     async def fetch_options_block(self, lower_idx, higher_idx, strike_to_option, strikes):
         if lower_idx > higher_idx: return []
         options_block = [strike_to_option[strikes[i]] for i in range(lower_idx, higher_idx + 1)]
-        await self.market_data_fetcher.update_ticker_data(options_block)
+        await self.market_data_fetcher.request_snapshots(options_block)
         return options_block
 
     async def get_available_cheap_call_option(self, call_options, min_strike):

@@ -55,8 +55,8 @@ class OptionTrader:
 
                 write_heartbeat()
 
-                # Consistent status message
-                logger.info(f"OptionTrader: Checking market status...")
+                if is_market_open() or int(time.time()) % 100 == 0:
+                    logger.info(f"OptionTrader: Checking market status...")
 
                 if is_market_open():
                     await self.trade()
@@ -91,7 +91,7 @@ class OptionTrader:
 
     async def yield_execution(self):
         write_heartbeat()
-        await asyncio.sleep(0)
+        await asyncio.sleep(0.5)
 
     async def trade(self):
         await self.positions_manager.manage_current_positions()

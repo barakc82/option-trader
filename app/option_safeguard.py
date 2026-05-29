@@ -176,7 +176,7 @@ class OptionSafeguard:
 
         logger.debug(f"Ticker for {get_option_name(option)} is hollow (no data), refreshing")
 
-        ticker = await self.market_data_fetcher.request_ticker(option, is_snapshot=False)
+        ticker = await self.market_data_fetcher.request_ticker(option)
         if ticker is None:
             logger.error(f"Failed to retrieve ticker for {get_option_name(option)}")
             return ERROR

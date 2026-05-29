@@ -67,7 +67,7 @@ class SpySubscriptionManager:
             logger.info(f"Subscribing to {len(contracts_to_subscribe)} new matching SPY options in a batch.")
             
             # update_ticker_data qualifies and requests tickers for all contracts
-            await self.market_data_fetcher.update_ticker_data(contracts_to_subscribe)
+            await self.market_data_fetcher.request_subscriptions(contracts_to_subscribe)
             
             for spx_contract, spy_contract in new_spy_contracts:
                 if spy_contract.conId and self.market_data_fetcher.get_ticker(spy_contract):
