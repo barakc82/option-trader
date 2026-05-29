@@ -47,6 +47,8 @@ RUN echo "alias taillog='tail -f \$(ls -1 option_trader_*.log | sort | tail -1)'
 RUN echo "alias showsupervisor='less supervisor.log'" >> ~/.bashrc
 RUN echo "alias tailsupervisor='tail -f supervisor.log'" >> ~/.bashrc
 RUN echo "alias runsupervisor='python3 -m app.options_trader_supervisor'" >> ~/.bashrc
+RUN echo "alias restartsupervisor='pkill -f app.options_trader_supervisor; cd /home/option-trader && python3 -m app.options_trader_supervisor &'" >> ~/.bashrc
+RUN echo "alias restarttrader='echo \"{\\\"should_restart_option_trader\\\": 1}\" > /home/option-trader/config/supervisor_config.json'" >> ~/.bashrc
 
 EXPOSE 8080
 

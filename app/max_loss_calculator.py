@@ -1,12 +1,11 @@
 import math
 
 from utilities.utils import *
-from utilities.ib_utils import get_delta
 from .trading_bot import TradingBot
 from .account_data import AccountData
 from .market_data_fetcher import MarketDataFetcher
 
-MIN_NUMBER_OF_RECORDED_OPTIONS_QUNATITIES = 5
+MIN_NUMBER_OF_RECORDED_OPTIONS_QUANTITIES = 5
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -19,13 +18,6 @@ CALL_OPTIONS_FILE_NAME = "cache/calls.txt"
 PUT_OPTIONS_FILE_NAME = "cache/puts.txt"
 options_file_names = {'C': CALL_OPTIONS_FILE_NAME, 'P': PUT_OPTIONS_FILE_NAME}
 
-
-async def calculate_max_loss(right, should_consider_only_effective=False):
-    max_loss_calculator = MaxLossCalculator()
-    if should_consider_only_effective:
-        return await max_loss_calculator.calculate_effective_max_loss(right)
-    else:
-        return await max_loss_calculator.calculate_max_loss(right)
 
 class MaxLossCalculator:
     _instance = None
@@ -42,9 +34,7 @@ class MaxLossCalculator:
             self.market_data_fetcher = MarketDataFetcher()
             self.trading_bot = TradingBot()
             self.last_max_loss = {'C': DEFAULT_MAX_LOSS, 'P': DEFAULT_MAX_LOSS}
-            self.last_effective_max_loss = {'C': DEFAULT_MAX_LOSS, 'P': DEFAULT_MAX_LOSS}
             self.last_save_time = {'C': 0.0, 'P': 0.0}
-            self.last_effective_calculation_time = {'C': 0.0, 'P': 0.0}
             self.quantity = {'C': [], 'P': []}
             self.risk_fraction = {'C': 1.0, 'P': 1.0}
             try:
@@ -59,7 +49,7 @@ class MaxLossCalculator:
 
             self._initialized = True
 
-    async def calculate_max_loss(self, right):
+    def calculate_max_loss(self, right):
         regular_hours_end_time_today = datetime.combine(datetime.today(), REGULAR_HOURS_END_TIME)
         end_time_timestamp = regular_hours_end_time_today.timestamp()
         current_time = time.time()
@@ -69,7 +59,7 @@ class MaxLossCalculator:
         if time.time() - self.last_save_time[right] < 3600:
             return self.last_max_loss[right]
 
-        positions = await self.trading_bot.get_short_options()
+        positions = self.trading_bot.get_short_options()
         now = time.time()
 
         position_quantities_for_right = [-position.position for position in positions if position.contract.right == right]
@@ -86,7 +76,7 @@ class MaxLossCalculator:
         max_number_of_options = self.get_max_number_of_options(right)
 
         max_loss = DEFAULT_MAX_LOSS
-        if max_number_of_options and len(self.quantity[right]) >= MIN_NUMBER_OF_RECORDED_OPTIONS_QUNATITIES:
+        if max_number_of_options and len(self.quantity[right]) >= MIN_NUMBER_OF_RECORDED_OPTIONS_QUANTITIES:
             write_heartbeat()
             total_cash_value = self.account_data.get_cash_balance_value()
             extra_cash_per_contract = (total_cash_value - 1000) / max_number_of_options
@@ -97,11 +87,10 @@ class MaxLossCalculator:
             if extra_cash_per_option > 0:
                 raw_risk_fraction = 1 / math.sqrt(extra_cash_per_option)
             risk_fraction = min(raw_risk_fraction, 1)
-            fraction_of_time_left_to_expiration = await self.calculate_fraction_of_time_left_to_expiration()
+
             logger.info(f"Risk fraction for {right} is {risk_fraction:.2f}, extra cash per option: {extra_cash_per_option:.2f}, "
-                        f"total cash: {total_cash_value:.2f}, max number of options: {max_number_of_options}, "
-                        f"fraction of time left to expiration: {fraction_of_time_left_to_expiration}")
-            max_loss = max(extra_cash_per_option * risk_fraction * math.sqrt(fraction_of_time_left_to_expiration), DEFAULT_MAX_LOSS)
+                        f"total cash: {total_cash_value:.2f}, max number of options: {max_number_of_options}")
+            max_loss = max(extra_cash_per_option * risk_fraction, DEFAULT_MAX_LOSS)
             self.risk_fraction[right] = risk_fraction
 
         self.last_save_time[right] = time.time()
@@ -109,74 +98,6 @@ class MaxLossCalculator:
 
         return max_loss
 
-    async def calculate_effective_max_loss(self, right):
-        regular_hours_end_time_today = datetime.combine(datetime.today(), REGULAR_HOURS_END_TIME)
-        end_time_timestamp = regular_hours_end_time_today.timestamp()
-        current_time = time.time()
-        if current_time > end_time_timestamp and self.last_effective_calculation_time[right] <= end_time_timestamp:
-            self.last_effective_calculation_time[right] = 0
-
-        if current_time - self.last_effective_calculation_time[right] < STOP_LOSS_CHANGE_INTERVAL:
-            return self.last_effective_max_loss[right]
-
-        positions = await self.trading_bot.get_short_options()
-        now = time.time()
-
-        position_quantities_for_right = [-position.position for position in positions if position.contract.right == right]
-        number_of_options = sum(position_quantities_for_right)
-        self.quantity[right].append((now, number_of_options))
-        self.quantity[right] = [(t, v) for t, v in self.quantity[right] if now - t <= WINDOW_SECONDS]
-
-        max_number_of_options = self.get_max_number_of_options(right)
-        effective_number_of_options = 0
-        positions_for_right = [position for position in positions if position.contract.right == right]
-        fraction_of_time_left_to_expiration = await self.calculate_fraction_of_time_left_to_expiration()
-        for position in positions_for_right:
-            delta = get_delta(position.contract.ticker)
-            if delta is None or math.isnan(delta) or is_night_break() or is_after_hours():
-                effective_number_of_options -= position.position
-                continue
-
-            initial_risk_by_delta = math.sqrt(min(abs(delta) * 100, 1))
-            risk_by_delta_and_time = initial_risk_by_delta + (1 - initial_risk_by_delta) * (1 - fraction_of_time_left_to_expiration)
-            effective_number_of_options -= position.position * risk_by_delta_and_time
-
-        effective_number_of_options = math.ceil(effective_number_of_options)
-        if effective_number_of_options == 0:
-            effective_number_of_options = max_number_of_options
-
-        write_heartbeat()
-        total_cash_value = self.account_data.get_cash_balance_value()
-        extra_cash_per_contract = (total_cash_value - 1000) / effective_number_of_options
-        extra_cash_per_contract = max(extra_cash_per_contract, 0)
-        extra_cash_per_option = extra_cash_per_contract / 100
-        raw_risk_fraction = 1
-        if extra_cash_per_option > 0:
-            raw_risk_fraction = 1 / math.sqrt(extra_cash_per_option)
-        risk_fraction = min(raw_risk_fraction, 1)
-        raw_max_loss = max(extra_cash_per_option * risk_fraction, DEFAULT_MAX_LOSS)
-        max_loss = math.sqrt(fraction_of_time_left_to_expiration) * raw_max_loss
-        if len(self.quantity[right]) < MIN_NUMBER_OF_RECORDED_OPTIONS_QUNATITIES:
-            max_loss = DEFAULT_MAX_LOSS
-        logger.info(f"Max Loss ({right}): {max_loss:.2f}, Risk Fraction: {risk_fraction:.2f}, Effective Options: {effective_number_of_options:.2f}")
-
-        self.last_effective_calculation_time[right] = time.time()
-        self.last_effective_max_loss[right] = max_loss
-
-        return self.last_effective_max_loss[right]
-
-    async def calculate_fraction_of_time_left_to_expiration(self) -> float:
-        now_in_nyc = datetime.now(new_york_timezone)
-        premarket_start_days_delta = 0 if now_in_nyc.time() > PREMARKET_START_TIME else -1
-        premarket_start_day = now_in_nyc.date() + timedelta(days=premarket_start_days_delta)
-        end_of_trade_day = premarket_start_day + timedelta(days=1)
-        start_dt = datetime.combine(premarket_start_day, PREMARKET_START_TIME, tzinfo=new_york_timezone)
-        end_dt = datetime.combine(end_of_trade_day, REGULAR_HOURS_END_TIME, tzinfo=new_york_timezone)
-        if is_market_open() and not is_after_hours():
-            fraction_of_time_left_to_expiration = (end_dt - now_in_nyc) / (end_dt - start_dt)
-        else:
-            fraction_of_time_left_to_expiration = 1
-        return fraction_of_time_left_to_expiration
 
     def get_max_number_of_options(self, right):
         if not self.quantity[right]:

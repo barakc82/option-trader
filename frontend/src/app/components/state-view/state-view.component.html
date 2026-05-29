@@ -104,7 +104,7 @@
         </thead>
         <tbody>
           <tr *ngFor="let trade of state.trades" [ngClass]="{
-            'stp-row': trade.order_type === 'STP',
+            'stp-row': trade.order_type === 'STP LMT',
             'sell-row': trade.action === 'SELL',
             'buy-at-limit-row': trade.action === 'BUY' && trade.order_type === 'LMT'
           }">
@@ -154,6 +154,9 @@
       </p>
       <p *ngIf="state.excess_liquidity !== ''">
         <strong>Excess Liquidity:</strong> {{ state.excess_liquidity }}
+      </p>
+      <p *ngIf="state.lookahead_excess_liquidity !== ''">
+        <strong>Lookahead Excess Liquidity:</strong> {{ state.lookahead_excess_liquidity }}
       </p>
       <p><strong>Liquidation Alert Time:</strong> {{ state.liquidation_alert_time === 0 
         ? 'No alert' 

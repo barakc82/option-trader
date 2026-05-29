@@ -5,11 +5,13 @@ import math
 import os
 import sys
 import aiohttp
+import asyncio
 import pytz
 from datetime import datetime
 from statistics import mean
 
 from utilities.ib_utils import req_id_to_comment
+from utilities.utils import is_market_open, SAFEGUARD_MAX_CADENCE
 
 from .account_data import AccountData
 from .market_data_fetcher import MarketDataFetcher
@@ -47,6 +49,29 @@ class StateUpdater:
             self.max_loss_calculator = MaxLossCalculator()
             self._initialized = True
 
+    async def run(self):
+        """Background task to periodically update the system state."""
+        logger.info("StateUpdater: Starting background state update loop...")
+        while True:
+            try:
+                from .option_safeguard import OptionSafeguard
+                safeguard = OptionSafeguard()
+                if time.time() - safeguard.last_run_end_time > SAFEGUARD_MAX_CADENCE:
+                    await asyncio.sleep(0)
+                    continue
+
+                if self.trading_bot.ib.isConnected():
+                    is_open = is_market_open()
+                    state = {
+                        'market_state': 'Open' if is_open else 'Closed',
+                        'status': 'Active' if is_open else 'Closed'
+                    }
+                    await self.update_state(state)
+            except Exception:
+                logger.exception("Error in StateUpdater loop:")
+
+            await asyncio.sleep(5)
+
     async def _post_data(self, url, data):
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=data, timeout=15) as response:
@@ -71,7 +96,9 @@ class StateUpdater:
         # 1. Gather account metrics
         state['cash'] = round(self.account_data.get_cash_balance_value())
         excess_liq = await self.account_data.get_excess_liquidity()
+        lookahead_excess_liq = await self.account_data.get_lookahead_excess_liquidity()
         state['excess_liquidity'] = '' if excess_liq == sys.float_info.max else round(excess_liq)
+        state['lookahead_excess_liquidity'] = '' if lookahead_excess_liq == sys.float_info.max else round(lookahead_excess_liq)
         state['cushion'] = round(await self.account_data.get_cushion(), 2)
         
         # Set last_updated in Israel time
@@ -96,42 +123,43 @@ class StateUpdater:
         state['put_implied_volatility'] = round(await self.market_data_fetcher.get_spx_implied_volatility('P'), 2)
 
         # 3. Gather positions and trades
-        positions = await self.trading_bot.get_short_options()
-        open_trades = await self.trading_bot.get_open_trades()
+        positions = self.trading_bot.get_short_options()
+        open_trades = self.trading_bot.get_open_trades()
+
+        if positions:
+            await self.trading_bot.fetch_price_increments(positions[0].contract)
 
         state_positions = []
         contract_id_to_delta = {}
-        for pos in positions:
-            opt = pos.contract
-            delta = self.market_data_fetcher.get_delta(opt)
-            last_price = self.market_data_fetcher.get_last_price(opt)
+        for position in positions:
+            option = position.contract
+            delta = self.market_data_fetcher.get_delta(option)
+            last_price = self.market_data_fetcher.get_last_price(option)
 
-            # Find stop loss if it exists
-            stop_loss = 0
-            for t in open_trades:
-                if t.contract.conId == opt.conId and t.order.orderType == 'STP':
-                    stop_loss = t.order.auxPrice
+            stop_loss_per_option = self.max_loss_calculator.calculate_max_loss(option.right)
+            raw_stop_loss = position.avgCost / 100 + stop_loss_per_option
+            stop_loss = self.trading_bot.adjust_limit_to_market_rules(option, raw_stop_loss)
 
             state_positions.append({
-                'right': opt.right, 'strike': opt.strike, 'quantity': pos.position,
-                'date': datetime.strptime(opt.lastTradeDateOrContractMonth, "%Y%m%d").strftime("%d/%m/%y"),
+                'right': option.right, 'strike': option.strike, 'quantity': position.position,
+                'date': datetime.strptime(option.lastTradeDateOrContractMonth, "%Y%m%d").strftime("%d/%m/%y"),
                 'delta': delta, 'last_price': str(last_price) if not math.isnan(last_price) else '',
                 'stop_loss': stop_loss
             })
-            contract_id_to_delta[opt.conId] = delta
+            contract_id_to_delta[option.conId] = delta
 
         state['positions'] = sorted(state_positions, key=lambda x: (x['right'], x['date'], x['strike']))
 
         # 4. Process open trades
         state_trades = []
         for t in open_trades:
-            opt = t.contract
-            delta = self.market_data_fetcher.get_delta(opt) or contract_id_to_delta.get(opt.conId, '')
-            limit = t.order.lmtPrice if t.order.orderType == 'LMT' else (t.order.auxPrice if t.order.orderType == 'STP' else '')
+            option = t.contract
+            delta = self.market_data_fetcher.get_delta(option) or contract_id_to_delta.get(option.conId, '')
+            limit = t.order.lmtPrice if t.order.orderType == 'LMT' else (t.order.auxPrice if t.order.orderType == 'STP LMT' else '')
 
             state_trades.append({
-                'action': t.order.action, 'right': opt.right, 'strike': opt.strike,
-                'quantity': t.remaining(), 'date': datetime.strptime(opt.lastTradeDateOrContractMonth, "%Y%m%d").strftime("%d/%m/%y"),
+                'action': t.order.action, 'right': option.right, 'strike': option.strike,
+                'quantity': t.remaining(), 'date': datetime.strptime(option.lastTradeDateOrContractMonth, "%Y%m%d").strftime("%d/%m/%y"),
                 'delta': delta, 'order_type': t.order.orderType, 'limit': limit
             })
         state['trades'] = sorted(state_trades, key=lambda x: (x['order_type'], x['action'], x['right'], x['date'], x['strike']))

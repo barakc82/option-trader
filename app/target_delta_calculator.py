@@ -1,35 +1,24 @@
 import statistics
 import math
-import os
-import json
-import time
-import logging
 from collections import deque
 import traceback
 
 from utilities.utils import *
 
 from .market_data_fetcher import MarketDataFetcher
-from .max_loss_calculator import DEFAULT_MAX_LOSS, calculate_max_loss
+from .max_loss_calculator import DEFAULT_MAX_LOSS, MaxLossCalculator
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-MIN_TARGET_DELTA = {'C': 0.002, 'P': 0.004}
-MAX_TARGET_DELTA = {'C': 0.012, 'P': 0.014}
+MIN_TARGET_DELTA = {'C': 0.003, 'P': 0.004}
+MAX_TARGET_DELTA = {'C': 0.011, 'P': 0.014}
 AVERAGE_TARGET_DELTA = {
     'C': (MAX_TARGET_DELTA['C'] + MIN_TARGET_DELTA['C']) / 2,
     'P': (MAX_TARGET_DELTA['P'] + MIN_TARGET_DELTA['P']) / 2
 }
 
-DEFAULT_MAX_ENTRIES = 10000
-
-def get_implied_volatility(ticker):
-    if ticker.lastGreeks and ticker.lastGreeks.impliedVol:
-        return ticker.lastGreeks.impliedVol
-    if ticker.modelGreeks and ticker.modelGreeks.impliedVol:
-        return ticker.modelGreeks.impliedVol
-    return None
+DEFAULT_MAX_ENTRIES = 20000
 
 
 class TargetDeltaCalculator:
@@ -44,6 +33,7 @@ class TargetDeltaCalculator:
     def __init__(self):
         if not self._initialized:
             self.market_data_fetcher = MarketDataFetcher()
+            self.max_loss_calculator = MaxLossCalculator()
             self.last_target_delta = {'C': AVERAGE_TARGET_DELTA['C'], 'P': AVERAGE_TARGET_DELTA['P']}
             self.last_target_delta_calculation_time = {'C': 0, 'P': 0}
             self.last_target_delta_increase = {'C': 0, 'P': 0}
@@ -105,7 +95,7 @@ class TargetDeltaCalculator:
         regular_hours_end_time_today = datetime.combine(datetime.today(), REGULAR_HOURS_END_TIME)
         end_time_timestamp = regular_hours_end_time_today.timestamp()
         current_time = time.time()
-        if current_time > end_time_timestamp and self.last_target_delta_calculation_time[right] <= end_time_timestamp:
+        if  self.last_target_delta_calculation_time[right] <= end_time_timestamp < current_time:
             self.last_target_delta_calculation_time[right] = 0
 
         if time.time() - self.last_target_delta_calculation_time[right] < 60:
@@ -145,11 +135,11 @@ class TargetDeltaCalculator:
 
         target_delta = max(target_delta, MIN_TARGET_DELTA[right])
         
-        max_loss = await calculate_max_loss(right)
+        max_loss = self.max_loss_calculator.calculate_max_loss(right)
         logger.info(f"Max loss ({right}): {max_loss:.2f}")
         target_delta_increase = (max_loss - DEFAULT_MAX_LOSS) / 1000
-        logger.info(f"Target delta increase ({right}): {target_delta_increase:.4f}")
         target_delta += target_delta_increase
+        logger.info(f"Target delta ({right}): {target_delta:.4f}, increase: {target_delta_increase:.4f}")
         
         self.last_target_delta_calculation_time[right] = time.time()
         self.last_target_delta[right] = target_delta

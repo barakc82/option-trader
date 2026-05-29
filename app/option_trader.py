@@ -1,16 +1,13 @@
 import math
 import asyncio
 from datetime import timedelta
-from typing import Any
-
-from ib_insync import Trade
 
 from utilities.ib_utils import get_delta, OPEN_SELL_ORDER_EXPIRATION_TIME, \
-    POSITION_BUYBACK_ORDERR_EXPIRATION_TIME, OPEN_GENERAL_MARGIN_REDUCTION_BUY_ORDER_EXPIRATION_TIME, \
-    get_time_passed_since_submission
+    POSITION_BUYBACK_ORDER_EXPIRATION_TIME, OPEN_GENERAL_MARGIN_REDUCTION_BUY_ORDER_EXPIRATION_TIME, \
+    get_time_passed_since_submission, get_delta_for_sell
 from utilities.utils import *
 
-from .max_loss_calculator import calculate_max_loss
+from .max_loss_calculator import MaxLossCalculator
 from .opportunity_explorer import OpportunityExplorer, calculate_max_options_for_market_drop, \
     calculate_max_options_for_market_rise, MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION
 from .positions_manager import PositionsManager, MINIMAL_SELL_PRICE_TO_CLOSE_POSITION
@@ -30,11 +27,11 @@ class OptionTrader:
         self.connection_manager = ConnectionManager()
         self.ib = self.connection_manager.ib
         self.trading_bot = TradingBot()
+        self.max_loss_calculator = MaxLossCalculator()
         self.opportunity_explorer = OpportunityExplorer()
         self.positions_manager = PositionsManager()
         self.market_data_fetcher = MarketDataFetcher()
         self.target_delta_calculator = TargetDeltaCalculator()
-        self.state_updater = StateUpdater()
         
         self.connection_failure_start_time = None
         self.config = {}
@@ -45,6 +42,12 @@ class OptionTrader:
 
         while True:
             try:
+                from .option_safeguard import OptionSafeguard
+                safeguard = OptionSafeguard()
+                if time.time() - safeguard.last_run_end_time > SAFEGUARD_MAX_CADENCE:
+                    await asyncio.sleep(0)
+                    continue
+
                 if not self.ib.isConnected():
                     logger.warning("OptionTrader: Task is waiting for IB connection...")
                     await asyncio.sleep(2)
@@ -55,18 +58,10 @@ class OptionTrader:
                 # Consistent status message
                 logger.info(f"OptionTrader: Checking market status...")
 
-                is_open = is_market_open()
-                state = {'market_state': 'Open' if is_open else 'Closed'}
-                
-                if is_open:
+                if is_market_open():
                     await self.trade()
-                    state['status'] = 'Active'
                 else:
                     await self.verify_no_open_trades()
-                    state['status'] = 'Closed'
-
-                # Report state to Render/Local JSON
-                await self.state_updater.update_state(state)
                 
                 if self.connection_failure_start_time is not None:
                     logger.info("OptionTrader: Connection error resolved.")
@@ -105,16 +100,19 @@ class OptionTrader:
 
     async def guard_pending_trades(self):
         logger.info("Checking pending trades")
-        positions, open_trades = await asyncio.gather(
-            self.trading_bot.get_short_options(),
-            self.trading_bot.get_open_trades()
-        )
+        positions = self.trading_bot.get_short_options()
+        open_trades = self.trading_bot.get_open_trades()
+
         open_sell_trades = [trade for trade in open_trades if trade.order.action.upper() == 'SELL']
         logger.info(f"Number of open sell trades: {len(open_sell_trades)}")
 
+        call_delta_task = self.target_delta_calculator.calculate_target_delta('C')
+        put_delta_task = self.target_delta_calculator.calculate_target_delta('P')
+        call_delta, put_delta = await asyncio.gather(call_delta_task, put_delta_task)
+        
         target_deltas = {
-            'C': await self.target_delta_calculator.calculate_target_delta('C'),
-            'P': await self.target_delta_calculator.calculate_target_delta('P')
+            'C': call_delta,
+            'P': put_delta
         }
         logger.info(f"Target deltas: C={target_deltas['C']:.3f}, P={target_deltas['P']:.3f}")
 
@@ -128,7 +126,7 @@ class OptionTrader:
                 continue
 
             option = open_sell_trade.contract
-            delta = get_delta(option.ticker)
+            delta = get_delta_for_sell(option.ticker)
             target_delta = target_deltas[option.right]
             if delta > target_delta:
                 logger.info(
@@ -165,7 +163,7 @@ class OptionTrader:
             time_passed_since_submission = get_time_passed_since_submission(buy_limit_trade)
 
             if corresponding_position_found and option_ask_value == 0.05:
-                if price_level < MINIMAL_SELL_PRICE_TO_CLOSE_POSITION and time_passed_since_submission > POSITION_BUYBACK_ORDERR_EXPIRATION_TIME:
+                if price_level < MINIMAL_SELL_PRICE_TO_CLOSE_POSITION and time_passed_since_submission > POSITION_BUYBACK_ORDER_EXPIRATION_TIME:
                     logger.info(f"Cancelling {get_option_name(option)} because it has the current price level for "
                                 f"'{option.right}' is too low ({price_level}) for position buyback")
                     self.trading_bot.cancel_trade(buy_limit_trade)
@@ -186,48 +184,7 @@ class OptionTrader:
                     self.trading_bot.cancel_trade(buy_limit_trade)
 
 
-        logger.info("Checking for invalid stop loss trades")
-        open_stop_loss_trades = [trade for trade in open_trades if trade.order.orderType == 'STP']
-        for open_stop_loss_trade in open_stop_loss_trades:
-            matching_position = next(
-                (position for position in positions
-                 if position.contract.conId == open_stop_loss_trade.contract.conId),
-                None
-            )
-
-            if matching_position:
-                option = open_stop_loss_trade.contract
-                current_stop_loss = open_stop_loss_trade.order.auxPrice
-                sell_price = matching_position.avgCost / 100
-                right = option.right
-                required_max_loss_per_option = await calculate_max_loss(right, should_consider_only_effective=True)
-                required_stop_loss = required_max_loss_per_option + sell_price
-                stop_loss_ratio = required_stop_loss / current_stop_loss
-
-                current_price = self.market_data_fetcher.get_last_price(option)
-                logger.info(
-                    f"Matching position found for {get_option_name(option)}, the current stop loss is {current_stop_loss:.2f} and the required "
-                    f"stop loss is {required_stop_loss:.2f}, current price is {current_price}, "
-                    f"stop loss ratio: ({stop_loss_ratio:.2f})")
-                if math.isnan(current_price):
-                    ticker = self.ib.ticker(option)
-                    if ticker is None:
-                        logger.info(f"The ticker for {get_option_name(option)} is missing")
-
-                if stop_loss_ratio > 1.1 or (stop_loss_ratio < 0.9 and required_stop_loss > current_price * 2):
-                    logger.info(f"Going to modify stop loss for {get_option_name(option)} from {current_stop_loss} to {required_stop_loss:.2f}, "
-                                f"since the max loss ratio is {stop_loss_ratio:.2f}. Order status is {open_stop_loss_trade.orderStatus.status}")
-                    await self.trading_bot.modify_stop_loss(open_stop_loss_trade, required_stop_loss)
-                if stop_loss_ratio > 1.1 or (stop_loss_ratio < 0.9 and required_stop_loss <= current_price * 2):
-                    logger.warning(f"Cannot modify stop loss because the required stop loss ratio ({required_stop_loss:.2f})"
-                                   f"is too close the current price ({current_price})")
-
-            if not matching_position:
-                logger.info(f"Cancelling the stop loss for {get_option_name(open_stop_loss_trade.contract)} because it has no matching position")
-                self.trading_bot.cancel_trade(open_stop_loss_trade)
-
     async def verify_no_open_trades(self):
-        open_trades = await self.trading_bot.get_open_trades()
+        open_trades = self.trading_bot.get_open_trades()
         for open_trade in open_trades:
-            if open_trade.order.orderType != 'STP':
-                self.trading_bot.cancel_trade(open_trade)
+            self.trading_bot.cancel_trade(open_trade)

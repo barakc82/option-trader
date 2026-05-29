@@ -15,7 +15,7 @@ PORTFOLIO_MARGIN = "portfolio_margin"
 MINIMAL_SELL_PRICE = 0.15
 
 OPEN_SELL_ORDER_EXPIRATION_TIME = timedelta(minutes=20)
-POSITION_BUYBACK_ORDERR_EXPIRATION_TIME = timedelta(minutes=10)
+POSITION_BUYBACK_ORDER_EXPIRATION_TIME = timedelta(minutes=10)
 OPEN_GENERAL_MARGIN_REDUCTION_BUY_ORDER_EXPIRATION_TIME = timedelta(minutes=5)
 
 req_id_to_comment = {}
@@ -55,6 +55,11 @@ def extract_ask(ticker):
     return ticker.ask
 
 
+def get_spy_option_name(spy_contract):
+    """Return a string representing the SPY option name."""
+    return f"SPY {spy_contract.right} {spy_contract.strike}"
+
+
 def is_hollow(ticker):
     if ticker is None:
         return True
@@ -62,9 +67,26 @@ def is_hollow(ticker):
 
 
 def get_delta(ticker):
+    if (ticker.bidGreeks and ticker.bidGreeks.delta and math.isnan(ticker.bidGreeks.delta) and
+            ticker.askGreeks and ticker.askGreeks.delta and math.isnan(ticker.askGreeks.delta)):
+        return (abs(ticker.bidGreeks.delta) + abs(ticker.askGreeks.delta)) / 2
     if ticker.lastGreeks and ticker.lastGreeks.delta:
         return abs(ticker.lastGreeks.delta)
     if ticker.modelGreeks and ticker.modelGreeks.delta:
         logger.warning("Using model greeks to calculate delta")
         return abs(ticker.modelGreeks.delta)
+    return None
+
+
+def get_delta_for_sell(ticker):
+    if ticker.askGreeks and ticker.askGreeks.delta:
+        return abs(ticker.askGreeks.delta)
+    return None
+
+
+def find_high_limit_buy_trade(option, open_buy_trades):
+    for open_buy_trade in open_buy_trades:
+        if (option.conId == open_buy_trade.contract.conId and open_buy_trade.order.action.upper() == 'BUY' and
+                open_buy_trade.order.orderType == 'LMT' and open_buy_trade.order.lmtPrice > 0.05):
+            return open_buy_trade
     return None

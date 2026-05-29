@@ -1,7 +1,7 @@
 import logging
 import math
 from utilities.utils import get_option_name
-from utilities.ib_utils import extract_ask, get_delta
+from utilities.ib_utils import extract_ask, get_delta, get_delta_for_sell
 from .market_data_fetcher import MarketDataFetcher
 
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ class StrikeFinder:
         highest_delta_option = None
 
         for option in options_block:
-            delta = get_delta(option.ticker)
+            delta = get_delta_for_sell(option.ticker)
             if delta is None or math.isnan(delta): continue
             delta = abs(delta)
             if delta < lowest_delta: lowest_delta = delta
@@ -78,7 +78,7 @@ class StrikeFinder:
 
         highest_delta_under_target = 0
         for option in options_block:
-            delta = get_delta(option.ticker)
+            delta = get_delta_for_sell(option.ticker)
             if delta is None or math.isnan(delta): continue
             delta = abs(delta)
 
@@ -95,7 +95,7 @@ class StrikeFinder:
             logger.error(f"No {right} option candidate found")
             return None
 
-        final_delta = get_delta(current_candidate.ticker)
+        final_delta = get_delta_for_sell(current_candidate.ticker)
         if final_delta is None:
             logger.error(f"No delta data available for the candidate {right} option")
             return None
@@ -107,7 +107,15 @@ class StrikeFinder:
             logger.error(f"The selected option ({get_option_name(current_candidate)}) has a delta of {final_delta:.3f}, which is higher than the target delta ({target_delta:.3f}), thus no option selected")
             return None
 
-        logger.info(f"Selected option: {get_option_name(current_candidate)}, delta: {final_delta:.3f}, target: {target_delta:.3f}")
+        log_message = f"Selected option: {get_option_name(current_candidate)}, delta: {final_delta:.3f}, target: {target_delta:.3f}"
+        if current_candidate.ticker.lastGreeks:
+            log_message += f", last delta: {current_candidate.ticker.lastGreeks.delta}"
+        if current_candidate.ticker.modelGreeks:
+            log_message += f", model delta: {current_candidate.ticker.modelGreeks.delta}"
+        if current_candidate.ticker.bidGreeks:
+            log_message += f", bid delta: {current_candidate.ticker.bidGreeks.delta}"
+        log_message += f"bid: {current_candidate.ticker.bid}, ask: {current_candidate.ticker.ask}"
+        logger.info(log_message)
         return current_candidate
 
     def find_first_cheap_option(self, right):

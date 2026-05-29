@@ -12,7 +12,7 @@ import requests
 from pathlib import Path
 import psutil
 
-from utilities.utils import is_in_docker, acquire_single_instance_lock
+from utilities.utils import is_in_docker, acquire_single_instance_lock, SUCCESS, ERROR
 from .state_updater import update_supervisor_state_async, post_current_state
 
 # Create a logger
@@ -41,9 +41,6 @@ file_handler.setFormatter(file_formatter)
 # Add handlers to the logger
 logger.addHandler(console_handler)
 logger.addHandler(file_handler)
-
-SUCCESS = 0
-ERROR = 1
 
 MONITOR_STATE = 1
 RESTART_PLATFORM_STATE = 2
@@ -307,6 +304,40 @@ def monitor_option_trader():
             logger.warning("It seems that option trader has difficulties getting delta data, switching to restart platform state")
             soft_restart()
 
+        check_for_manual_restart_request()
+
+
+def check_for_manual_restart_request():
+    config_path = "config/supervisor_config.json"
+    if not os.path.exists(config_path):
+        return
+
+    try:
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+
+        if config.get('should_restart_option_trader') == 1:
+            logger.info("Manual restart of Option Trader requested via config.")
+            kill_option_trader()
+            
+            # Post state to indicate restart
+            asyncio.run(post_current_state({'status': 'Restarting'}))
+            
+            start_result = start_option_trader()
+            if start_result == SUCCESS:
+                logger.info("Manual restart of Option Trader successful. Resetting config flag.")
+                config['should_restart_option_trader'] = 0
+                with open(config_path, 'w') as f:
+                    json.dump(config, f, indent=4)
+                send_telegram_message("Option Trader successfully restarted via manual request.")
+            else:
+                logger.error("Manual restart of Option Trader failed.")
+                global state
+                state = CANNOT_RESTART_OPTION_TRADER_STATE
+
+    except Exception as e:
+        logger.error(f"Error checking for manual restart request: {e}")
+
 
 def set_switch_to_restart_platform_state():
     global state
@@ -343,9 +374,9 @@ def check_process_state(process, should_print_health=False):
         pass
 
 def is_process_active():
-    last_ping = 0
-    last_pid = 0
+    time_since_last_ping = 0
     hb_path = f"{OPTION_TRADER_DIR}/cache/heartbeat.txt"
+    last_pid = 0
     for _ in range(24):
         try:
             pid_found = False
@@ -355,7 +386,7 @@ def is_process_active():
                     pid = heartbeat.get('pid')
                     timestamp = heartbeat.get('timestamp')
                     if timestamp:
-                        last_ping = float(timestamp)
+                        time_since_last_ping = float(timestamp)
                     if pid:
                         try:
                             option_trader_process = psutil.Process(pid)
@@ -364,18 +395,22 @@ def is_process_active():
                             pid_found = True
                         except psutil.NoSuchProcess:
                             logger.error(f"Could not find process {pid}")
+                    else:
+                        logger.info(f"No PID found in heartbeat file")
 
-            time_since_last_ping = time.time() - last_ping
+            time_since_last_ping = time.time() - time_since_last_ping
             is_process_alive = time_since_last_ping < 60 and pid_found
-            if not is_process_alive:
-                logger.error(f"No heartbeat from option trader, time since last ping: {time_since_last_ping:.0f}s")
-                if last_pid:
-                    try:
-                        option_trader_process = psutil.Process(last_pid)
-                        check_process_state(option_trader_process, should_print_health=True)
-                    except psutil.NoSuchProcess:
-                        pass
-            return is_process_alive
+            if is_process_alive:
+                return True
+
+            logger.error(f"No heartbeat from option trader, time since last ping: {time_since_last_ping:.0f}s")
+            if last_pid:
+                try:
+                    option_trader_process = psutil.Process(last_pid)
+                    check_process_state(option_trader_process, should_print_health=True)
+                except psutil.NoSuchProcess:
+                    pass
+
         except (json.JSONDecodeError, ValueError) as e:
             logger.error(f"Invalid data in heartbeat file: {e}")
             time.sleep(5)
@@ -475,6 +510,7 @@ def restart_platform():
         pass # restart_tws()
     global state
 
+    kill_option_trader()
     start_option_trader()
     time.sleep(20)
     is_process_alive = is_process_active()
@@ -600,6 +636,7 @@ def monitor(interval=5):
                 restart_platform()
             elif state == CANNOT_RESTART_OPTION_TRADER_STATE:
                 handle_cannot_restart_option_trader_state()
+                state = MONITOR_STATE
             elif state == CANNOT_RESTART_TWS_STATE:
                 handle_cannot_restart_tws_state()
                 return

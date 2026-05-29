@@ -37,6 +37,11 @@ JUST_AFTER_TRADE_END_TIME = dt_time(17, 5)
 
 MY_ACCOUNT = 'U15897350'
 
+SUCCESS = 0
+ERROR = 1
+
+SAFEGUARD_MAX_CADENCE = 1.0
+
 log_file_name = datetime.now().strftime("logs\\option_trader_%Y-%m-%d_%H-%M-%S.log")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -44,8 +49,8 @@ logger.setLevel(logging.DEBUG)
 current_thread = threading.local()
 
 
-def current_time_of_the_day() -> dt_time:
-    return datetime.now(new_york_timezone).time()
+def current_time_of_the_day() -> float:
+    return datetime.now(new_york_timezone).timestamp()
 
 def get_current_trading_day():
     """Returns the YYYYMMDD string of the current or next trading day."""

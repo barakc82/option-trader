@@ -1,8 +1,8 @@
 import asyncio
 import math
-from ib_insync import Index
-
+from ib_insync import Index, Option
 from utilities.utils import *
+
 from utilities.ib_utils import get_delta
 
 from .connection_manager import ConnectionManager
@@ -26,7 +26,6 @@ def get_implied_volatility(ticker):
     if ticker.lastGreeks and ticker.lastGreeks.impliedVol is not None:
         return ticker.lastGreeks.impliedVol
     if ticker.modelGreeks and ticker.modelGreeks.impliedVol is not None:
-        logger.warning("Using model greeks to calculate implied volatility")
         return ticker.modelGreeks.impliedVol
     return math.nan
 
@@ -45,10 +44,8 @@ class MarketDataFetcher:
             self.market_data_state = LIVE_DATA
             self.registered_con_ids = set()
             self.last_implied_volatility = {'C': 0.0, 'P': 0.0}
-            self.last_implied_volatility_calculation_time = {
-                'C': current_time_of_the_day(),
-                'P': current_time_of_the_day()
-            }
+            self.last_implied_volatility_calculation_time = {'C': 0.0, 'P': 0.0}
+            self.options_dump_time = 0
             self.previous_spx_value = math.nan
 
             # Use a lock for market data type switching
@@ -72,7 +69,7 @@ class MarketDataFetcher:
         spx_ticker = self.ib.ticker(spx)
 
         if not spx_ticker:
-            spx_ticker = await self.req_mkt_data(spx)
+            spx_ticker = await self.request_ticker(spx)
             if not spx_ticker:
                 logger.error("Could not obtain SPX ticker")
                 return self.previous_spx_value
@@ -160,7 +157,7 @@ class MarketDataFetcher:
         for contract in contracts:
             contract.ticker = self.ib.ticker(contract)
 
-    async def req_mkt_data(self, contract, is_snapshot=False):
+    async def request_ticker(self, contract, is_snapshot=False):
         """Request market data for a single contract using reqTickersAsync."""
         await self.qualify([contract])
         await self.ensure_market_data_type()
@@ -169,6 +166,20 @@ class MarketDataFetcher:
         ticker = tickers[0]
         self._register_ticker(ticker)
         return ticker
+
+    def cancel_market_data(self, contract):
+        """Unsubscribe from market data updates for a given contract."""
+        if not contract or not contract.conId:
+            return
+
+        if contract.conId in self.registered_con_ids:
+            ticker = self.ib.ticker(contract)
+            if ticker:
+                ticker.updateEvent -= self.on_option_ticker_update
+            
+            self.ib.cancelMktData(contract)
+            self.registered_con_ids.remove(contract.conId)
+            logger.info(f"Unsubscribed from market data for {get_option_name(contract)}")
 
     def get_delta(self, option):
         ticker = self.get_ticker(option)
@@ -184,7 +195,7 @@ class MarketDataFetcher:
         return ticker.ask
 
     async def get_spx_implied_volatility(self, right):
-        if self.last_implied_volatility_calculation_time[right] < REGULAR_HOURS_END_TIME < current_time_of_the_day():
+        if self.last_implied_volatility_calculation_time[right] < self.options_dump_time:
             self.last_implied_volatility[right] = 0.0
 
         """Calculate implied volatility for the requested side from ATM SPX options."""
@@ -193,7 +204,7 @@ class MarketDataFetcher:
             logger.error("The SPX price is NaN")
             return self.last_implied_volatility[right]
 
-        options_cache = OptionCache(self)
+        options_cache = OptionCache()
         options = options_cache.load_cached_options()
         if not options:
             logger.error("No options cached in options_cache")
@@ -209,18 +220,23 @@ class MarketDataFetcher:
             logger.warning(f"Options in cache are expired ({expiration_date}). Returning last implied volatility for {right}: {self.last_implied_volatility[right]}")
             return self.last_implied_volatility[right]
 
-        # Find ATM option for the requested side
-        atm_option = min((o for o in options if o.right == right), key=lambda o: abs(o.strike - spx_price), default=None)
+        # Find 5 closest ATM options for the requested side
+        candidate_options = sorted((o for o in options if o.right == right), key=lambda o: abs(o.strike - spx_price))[:5]
 
-        if not atm_option:
+        if not candidate_options:
             logger.error(f"At the money level could not be found for {right}")
             return self.last_implied_volatility[right]
 
         write_heartbeat()
-        await self.update_ticker_data([atm_option])
+        await self.update_ticker_data(candidate_options)
         write_heartbeat()
-        
-        implied_volatility = get_implied_volatility(atm_option.ticker)
+
+        implied_volatility = math.nan
+        for option in candidate_options:
+            iv = get_implied_volatility(option.ticker)
+            if not math.isnan(iv):
+                implied_volatility = iv
+                break
 
         if math.isnan(implied_volatility):
             logger.warning(f"Implied volatility missing for ATM {right} option. SPX: {spx_price}. Using last known: {self.last_implied_volatility[right]}")
@@ -248,3 +264,74 @@ class MarketDataFetcher:
 
     async def qualify(self, contracts):
         return await self.ib.qualifyContractsAsync(*contracts)
+
+    async def get_options(self, date):
+        """Orchestrates the loading of options from cache or fetching them fresh."""
+        options_cache = OptionCache()
+        options = options_cache.load_cached_options()
+        
+        options_obtained = False
+        spx_price = await self.get_spx_price()
+
+        if options:
+            options = [] if options[0].lastTradeDateOrContractMonth != date else options
+            if options:
+                put_options = [option.strike for option in options if option.right == 'P']
+                call_options = [option.strike for option in options if option.right == 'C']
+                if put_options and call_options:
+                    options_obtained = True
+                    maximal_put_strike = max(put_options)
+                    minimal_call_strike = min(call_options)
+                    previous_spx_index_value = (maximal_put_strike + minimal_call_strike) / 2
+                    
+                    if math.isnan(spx_price):
+                        logger.warning(f"The ticker of SPX index is missing")
+                    else:
+                        change_from_previous_spx_index_value = abs(spx_price - previous_spx_index_value)
+                        if change_from_previous_spx_index_value / previous_spx_index_value > 0.015:
+                            logger.info(f"Fetching option tickers as SPX index made a big change from {previous_spx_index_value} to {spx_price}")
+                            options = []
+                            options_obtained = False
+                else:
+                    logger.error(f"Options could not be obtained from cache, number of options is {len(options)}")
+
+        if not options_obtained:
+            logger.info(f"Fetching fresh options for {date}. SPX Last Price: {spx_price}")
+            spx = Index('SPX', 'CBOE', 'USD')
+            chains = await self.get_chains(spx)
+            chain = next(c for c in chains if c.exchange == 'CBOE' and c.tradingClass == 'SPXW')
+            
+            put_options = []
+            call_options = []
+            for strike in chain.strikes:
+                if strike < spx_price:
+                    option = Option(symbol='SPX', lastTradeDateOrContractMonth=date, strike=strike, right='P',
+                                    exchange='CBOE', currency='USD', tradingClass='SPXW')
+                    put_options.append(option)
+                else:
+                    option = Option(symbol='SPXW', lastTradeDateOrContractMonth=date, strike=strike, right='C',
+                                    exchange='CBOE', currency='USD', tradingClass='SPXW')
+                    call_options.append(option)
+
+            logger.info(f"Before contract qualification, number of call options: {len(call_options)}, number of put options: {len(put_options)}")
+            await self.qualify(put_options + call_options)
+            
+            options = [o for o in (put_options + call_options) if o.conId]
+            
+            put_strikes = [o.strike for o in options if o.right == 'P']
+            call_strikes = [o.strike for o in options if o.right == 'C']
+            
+            if put_strikes:
+                logger.info(f"Minimal strike for put options: {min(put_strikes)}, Maximal strike for put options: {max(put_strikes)}")
+                logger.info(f"Minimal strike for call options: {min(call_strikes)}, Maximal strike for call options: {max(call_strikes)}")
+                options_cache.save(options)
+                self.options_dump_time = time.time()
+            else:
+                logger.error(f"No put strikes found for {date}")
+
+        if options:
+            from .trading_bot import TradingBot
+            await TradingBot().fetch_price_increments(options[0])
+
+        assert options
+        return options

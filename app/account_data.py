@@ -42,8 +42,8 @@ class AccountData:
                 return value
         return value
 
-    async def get_quantity(self, option):
-        positions = await self.ib.reqPositionsAsync()
+    def get_quantity(self, option):
+        positions = self.ib.positions()
         for position in positions:
             if position.contract.conId == option.contract.conId:
                 return position.position
@@ -54,7 +54,8 @@ class AccountData:
         for item in summary:
             if item.tag == item_tag:
                 return self._parse_value(item.value, data_type)
-        return sys.float_info.max
+        logger.error(f"Could not find an account summary item for {item_tag}")
+        return 1
 
     def get_account_value(self, item_tag, data_type='float', currency=None):
         """Fetches from the streaming accountValues list (no network call)."""
@@ -62,12 +63,14 @@ class AccountData:
         for val in account_values:
             if val.tag == item_tag and (currency is None or val.currency == currency):
                 return self._parse_value(val.value, data_type)
-        return sys.float_info.max
+        logger.error(f"Could not find an account value for {item_tag}")
+        return 1
 
     async def get_cushion(self): return await self.get_account_summary_item('Cushion')
     async def get_previous_day_equity_with_loan(self): return await self.get_account_summary_item('PreviousDayEquityWithLoanValue')
     async def get_equity_with_loan(self): return await self.get_account_summary_item('EquityWithLoanValue')
     async def get_excess_liquidity(self): return await self.get_account_summary_item('ExcessLiquidity')
+    async def get_lookahead_excess_liquidity(self): return await self.get_account_summary_item('LookAheadExcessLiquidity')
     async def get_net_liquidation_value(self): return await self.get_account_summary_item('NetLiquidation')
     async def get_margin_maintenance_requirement(self): return await self.get_account_summary_item('MaintMarginReq')
     async def get_available_funds(self): return await self.get_account_summary_item('AvailableFunds')
