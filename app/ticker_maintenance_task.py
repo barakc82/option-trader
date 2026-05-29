@@ -78,3 +78,12 @@ class TickerMaintenanceTask:
                     logger.warning(f"Failed to attach ticker to {get_option_name(contract)}")
         else:
             logger.debug("All current positions and open trades have tickers attached.")
+
+        # Cleanup: Cancel market data for tickers no longer needed
+        for ticker in self.ib.tickers():
+            contract = ticker.contract
+            if contract.secType == 'IND' and contract.symbol == 'SPX':
+                continue
+            
+            if contract.conId not in unique_contracts:
+                self.market_data_fetcher.cancel_market_data(contract)
