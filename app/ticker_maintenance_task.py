@@ -70,7 +70,9 @@ class TickerMaintenanceTask:
             await self.market_data_fetcher.update_ticker_data(contracts_missing_tickers)
             
             for contract in contracts_missing_tickers:
-                if getattr(contract, 'ticker', None):
+                ticker = getattr(contract, 'ticker', None)
+                if ticker:
+                    self.market_data_fetcher._register_ticker(ticker)
                     logger.debug(f"Ticker successfully attached to {get_option_name(contract)}")
                 else:
                     logger.warning(f"Failed to attach ticker to {get_option_name(contract)}")
