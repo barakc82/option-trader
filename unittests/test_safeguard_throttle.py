@@ -34,10 +34,11 @@ class TestOptionSafeguardThrottle(unittest.IsolatedAsyncioTestCase):
         # Mock dependencies
         self.safeguard.positions_manager.done_contract_ids = set()
         ticker = MagicMock()
+        ticker.bid = 4.8
         ticker.last = 5.0  # High enough to be risky
         ticker.ask = 4.9
         self.safeguard.market_data_fetcher.get_ticker.return_value = ticker
-        self.safeguard.max_loss_calculator.calculate_max_loss = AsyncMock(return_value=1.0)
+        self.safeguard.max_loss_calculator.calculate_max_loss = MagicMock(return_value=1.0)
         
         with patch('app.option_safeguard.is_hollow', return_value=False), \
              patch('app.option_safeguard.find_high_limit_buy_trade', return_value=trade), \

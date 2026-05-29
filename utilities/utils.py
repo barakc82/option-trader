@@ -49,8 +49,8 @@ logger.setLevel(logging.DEBUG)
 current_thread = threading.local()
 
 
-def current_time_of_the_day() -> dt_time:
-    return datetime.now(new_york_timezone).time()
+def current_time_of_the_day() -> float:
+    return datetime.now(new_york_timezone).timestamp()
 
 def get_current_trading_day():
     """Returns the YYYYMMDD string of the current or next trading day."""

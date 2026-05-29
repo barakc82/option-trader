@@ -5,11 +5,13 @@ import math
 import os
 import sys
 import aiohttp
+import asyncio
 import pytz
 from datetime import datetime
 from statistics import mean
 
 from utilities.ib_utils import req_id_to_comment
+from utilities.utils import is_market_open, SAFEGUARD_MAX_CADENCE
 
 from .account_data import AccountData
 from .market_data_fetcher import MarketDataFetcher
@@ -46,6 +48,29 @@ class StateUpdater:
             self.target_delta_calculator = TargetDeltaCalculator()
             self.max_loss_calculator = MaxLossCalculator()
             self._initialized = True
+
+    async def run(self):
+        """Background task to periodically update the system state."""
+        logger.info("StateUpdater: Starting background state update loop...")
+        while True:
+            try:
+                from .option_safeguard import OptionSafeguard
+                safeguard = OptionSafeguard()
+                if time.time() - safeguard.last_run_end_time > SAFEGUARD_MAX_CADENCE:
+                    await asyncio.sleep(0)
+                    continue
+
+                if self.trading_bot.ib.isConnected():
+                    is_open = is_market_open()
+                    state = {
+                        'market_state': 'Open' if is_open else 'Closed',
+                        'status': 'Active' if is_open else 'Closed'
+                    }
+                    await self.update_state(state)
+            except Exception:
+                logger.exception("Error in StateUpdater loop:")
+
+            await asyncio.sleep(5)
 
     async def _post_data(self, url, data):
         async with aiohttp.ClientSession() as session:

@@ -32,7 +32,6 @@ class OptionTrader:
         self.positions_manager = PositionsManager()
         self.market_data_fetcher = MarketDataFetcher()
         self.target_delta_calculator = TargetDeltaCalculator()
-        self.state_updater = StateUpdater()
         
         self.connection_failure_start_time = None
         self.config = {}
@@ -59,18 +58,10 @@ class OptionTrader:
                 # Consistent status message
                 logger.info(f"OptionTrader: Checking market status...")
 
-                is_open = is_market_open()
-                state = {'market_state': 'Open' if is_open else 'Closed'}
-                
-                if is_open:
+                if is_market_open():
                     await self.trade()
-                    state['status'] = 'Active'
                 else:
                     await self.verify_no_open_trades()
-                    state['status'] = 'Closed'
-
-                # Report state to Render/Local JSON
-                await self.state_updater.update_state(state)
                 
                 if self.connection_failure_start_time is not None:
                     logger.info("OptionTrader: Connection error resolved.")

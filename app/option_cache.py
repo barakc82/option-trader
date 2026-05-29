@@ -1,10 +1,7 @@
-import math
 import os
 import pickle
-
-from ib_insync import Index, Option
+import time
 import logging
-
 
 file_path = "cache/option_store.pql"
 
@@ -13,91 +10,36 @@ logger.setLevel(logging.DEBUG)
 
 
 class OptionCache:
+    _instance = None
 
-    def __init__(self, market_data_fetcher):
-        self.market_data_fetcher = market_data_fetcher
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(OptionCache, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
 
-    async def load(self, date):
+    def __init__(self):
+        if not self._initialized:
+            self._initialized = True
 
-        options = []
-        spx = Index('SPX', 'CBOE', 'USD')
-        spx_price = await self.market_data_fetcher.get_spx_price()
+    def save(self, options):
+        """Saves options to the cache file."""
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        with open(file_path, "wb") as file:
+            pickle.dump(options, file)
+        logger.info(f"Options saved to cache at {file_path}")
 
-        options_obtained = False
+    def load_cached_options(self):
+        """Loads options from the cache file if it exists."""
         if os.path.exists(file_path):
             try:
                 with open(file_path, 'rb') as file:
                     options = pickle.load(file)
-            except EOFError as e:
-                logger.error(f"{e}")
-                os.remove(file_path)
-            options = [] if options and options[0].lastTradeDateOrContractMonth != date else options
-            if options:
-                put_options = [option.strike for option in options if option.right == 'P']
-                call_options = [option.strike for option in options if option.right == 'C']
-                if put_options and call_options:
-                    options_obtained = True
-                    maximal_put_strike = max(put_options)
-                    minimal_call_strike = min(call_options)
-                    previous_spx_index_value = (maximal_put_strike + minimal_call_strike) / 2
-                    if math.isnan(spx_price):
-                        logger.warning(f"The ticker of SPX index is missing")
-                    else:
-                        change_from_previous_spx_index_value = abs(spx_price - previous_spx_index_value)
-                        if change_from_previous_spx_index_value / previous_spx_index_value > 0.015:
-                            logger.info(f"Fetching option tickers as SPX index made a big change from {previous_spx_index_value} to {spx_price}")
-                            options = []  # Let's get a new strike list based on an updated spx index value
-                            options_obtained = False
-                else:
-                    logger.error(f"Options could not be obtained from cache, number of options is {len(options)}, "
-                                 f"number of puts is {len(put_options)}, number of calls is {len(call_options)}")
-
-        if not options_obtained:
-            print(f"SPX Last Price: {spx_price}")
-            chains = await self.market_data_fetcher.get_chains(spx)
-            chain = next(c for c in chains if c.exchange == 'CBOE' and c.tradingClass == 'SPXW')
-            put_options = []
-            call_options = []
-            for strike in chain.strikes:
-                if strike < spx_price:
-                    option = Option(symbol='SPX', lastTradeDateOrContractMonth=date, strike=strike, right='P',
-                                    exchange='CBOE', currency='USD', tradingClass='SPXW')
-                    put_options.append(option)
-                else:  # strike > spx_ticker.last:
-                    option = Option(symbol='SPXW', lastTradeDateOrContractMonth=date, strike=strike, right='C',
-                                    exchange='CBOE', currency='USD', tradingClass='SPXW')
-                    call_options.append(option)
-
-            logger.info(f"Before contract qualification, number of call options: {len(call_options)}, number of put options: {len(put_options)}")
-            await self.market_data_fetcher.qualify(put_options + call_options)
-            put_options = list(filter(lambda contract: contract.conId, put_options))
-            call_options = list(filter(lambda contract: contract.conId, call_options))
-            options = put_options + call_options
-            put_strikes = [put_option.strike for put_option in put_options]
-            call_strikes = [call_option.strike for call_option in call_options]
-            if put_strikes:
-                logger.info(
-                    f"Minimal strike for put options: {min(put_strikes)}, Maximal strike for put options: {max(put_strikes)}")
-                logger.info(
-                    f"Minimal strike for call options: {min(call_strikes)}, Maximal strike for call options: {max(call_strikes)}")
-            else:
-                logger.error(f"No put strikes, size of put options: {len(put_options)}, size of chain.strikes: {len(chain.strikes)}, size of call options: {len(call_options)}, date: {date}")
-
-            with open(file_path, "wb") as file:
-                # noinspection PyTypeChecker
-                pickle.dump(options, file)
-
-        from .trading_bot import TradingBot
-        await TradingBot().fetch_price_increments(options[0])
-
-        assert options
-        return options
-
-    def load_cached_options(self):
-        try:
-            with open(file_path, 'rb') as file:
-                options = pickle.load(file)
-                return options
-        except FileNotFoundError:
-            return []
-
+                    return options
+            except (EOFError, pickle.UnpicklingError) as e:
+                logger.error(f"Failed to load options from cache: {e}")
+                try:
+                    os.remove(file_path)
+                except OSError:
+                    pass
+        return []

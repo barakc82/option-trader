@@ -25,9 +25,11 @@ class TestStrikeFinder(unittest.IsolatedAsyncioTestCase):
         
         ticker = MagicMock()
         ticker.contract = option
-        # Mocking greeks for utilities.ib_utils.get_delta
-        ticker.lastGreeks = MagicMock()
-        ticker.lastGreeks.delta = delta
+        # Mocking greeks for utilities.ib_utils.get_delta and get_delta_for_sell
+        greeks = MagicMock()
+        greeks.delta = delta
+        ticker.lastGreeks = greeks
+        ticker.askGreeks = greeks
         ticker.modelGreeks = None
         
         ticker.ask = ask

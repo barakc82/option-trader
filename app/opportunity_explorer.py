@@ -170,8 +170,7 @@ class OpportunityExplorer:
 
         logger.info("Exploring new opportunities")
         date = get_current_trading_day()
-        options_cache = OptionCache(self.market_data_fetcher)
-        options = await options_cache.load(date)
+        options = await self.market_data_fetcher.get_options(date)
         open_trades = self.trading_bot.get_open_trades()
         self.can_submit_orders = time.time() - self.last_submit_order_attempt_time > TIME_UNTIL_NEXT_SELL_CHECK
 

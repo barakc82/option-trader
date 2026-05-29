@@ -18,14 +18,7 @@ AVERAGE_TARGET_DELTA = {
     'P': (MAX_TARGET_DELTA['P'] + MIN_TARGET_DELTA['P']) / 2
 }
 
-DEFAULT_MAX_ENTRIES = 10000
-
-def get_implied_volatility(ticker):
-    if ticker.lastGreeks and ticker.lastGreeks.impliedVol:
-        return ticker.lastGreeks.impliedVol
-    if ticker.modelGreeks and ticker.modelGreeks.impliedVol:
-        return ticker.modelGreeks.impliedVol
-    return None
+DEFAULT_MAX_ENTRIES = 20000
 
 
 class TargetDeltaCalculator:
@@ -102,7 +95,7 @@ class TargetDeltaCalculator:
         regular_hours_end_time_today = datetime.combine(datetime.today(), REGULAR_HOURS_END_TIME)
         end_time_timestamp = regular_hours_end_time_today.timestamp()
         current_time = time.time()
-        if current_time > end_time_timestamp and self.last_target_delta_calculation_time[right] <= end_time_timestamp:
+        if  self.last_target_delta_calculation_time[right] <= end_time_timestamp < current_time:
             self.last_target_delta_calculation_time[right] = 0
 
         if time.time() - self.last_target_delta_calculation_time[right] < 60:
