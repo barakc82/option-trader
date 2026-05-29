@@ -89,6 +89,9 @@ class TargetDeltaCalculator:
             except Exception as e:
                 logger.error(f"TargetDeltaCalculator: Error loading IV history for {right}: {e}")
 
+    def get_cached_target_delta(self, right):
+        return self.last_target_delta[right]
+
     async def calculate_target_delta(self, right):
         self.load_config()
 

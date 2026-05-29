@@ -95,22 +95,22 @@ class StateUpdater:
         
         # 1. Gather account metrics
         state['cash'] = round(self.account_data.get_cash_balance_value())
-        excess_liq = await self.account_data.get_excess_liquidity()
+        excess_liq = self.account_data.get_cached_excess_liquidity()
         lookahead_excess_liq = await self.account_data.get_lookahead_excess_liquidity()
         state['excess_liquidity'] = '' if excess_liq == sys.float_info.max else round(excess_liq)
         state['lookahead_excess_liquidity'] = '' if lookahead_excess_liq == sys.float_info.max else round(lookahead_excess_liq)
-        state['cushion'] = round(await self.account_data.get_cushion(), 2)
+        state['cushion'] = round(self.account_data.get_cached_cushion(), 2)
         
         # Set last_updated in Israel time
         israel_tz = pytz.timezone('Asia/Jerusalem')
         state['last_updated'] = datetime.now(israel_tz).strftime("%d/%m/%y %H:%M")
 
         # 2. Gather logic metrics
-        spx_price = await self.market_data_fetcher.get_spx_price()
+        spx_price = self.market_data_fetcher.get_cached_spx_price()
         state['spx_price'] = round(spx_price, 2) if not math.isnan(spx_price) else None
         
-        call_target_delta = await self.target_delta_calculator.calculate_target_delta('C')
-        put_target_delta = await self.target_delta_calculator.calculate_target_delta('P')
+        call_target_delta = self.target_delta_calculator.get_cached_target_delta('C')
+        put_target_delta = self.target_delta_calculator.get_cached_target_delta('P')
         
         state['call_target_delta'] = round(call_target_delta, 4)
         state['put_target_delta'] = round(put_target_delta, 4)
@@ -119,8 +119,8 @@ class StateUpdater:
         
         state['call_risk_fraction'] = round(self.max_loss_calculator.risk_fraction['C'], 2)
         state['put_risk_fraction'] = round(self.max_loss_calculator.risk_fraction['P'], 2)
-        state['call_implied_volatility'] = round(await self.market_data_fetcher.get_spx_implied_volatility('C'), 2)
-        state['put_implied_volatility'] = round(await self.market_data_fetcher.get_spx_implied_volatility('P'), 2)
+        state['call_implied_volatility'] = round(self.market_data_fetcher.get_cached_spx_implied_volatility('C'), 2)
+        state['put_implied_volatility'] = round(self.market_data_fetcher.get_cached_spx_implied_volatility('P'), 2)
 
         # 3. Gather positions and trades
         positions = self.trading_bot.get_short_options()

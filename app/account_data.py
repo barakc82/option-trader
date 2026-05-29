@@ -57,6 +57,15 @@ class AccountData:
         logger.error(f"Could not find an account summary item for {item_tag}")
         return 1
 
+    def get_account_summary_cached_item(self, item_tag, data_type='float'):
+        if self._summary_cache is None:
+            return 1
+        for item in self._summary_cache:
+            if item.tag == item_tag:
+                return self._parse_value(item.value, data_type)
+        logger.error(f"Could not find an account summary item for {item_tag} in cache")
+        return 1
+
     def get_account_value(self, item_tag, data_type='float', currency=None):
         """Fetches from the streaming accountValues list (no network call)."""
         account_values = self.ib.accountValues(account=MY_ACCOUNT)
@@ -66,10 +75,11 @@ class AccountData:
         logger.error(f"Could not find an account value for {item_tag}")
         return 1
 
-    async def get_cushion(self): return await self.get_account_summary_item('Cushion')
+    def get_cached_cushion(self): return self.get_account_summary_cached_item('Cushion')
     async def get_previous_day_equity_with_loan(self): return await self.get_account_summary_item('PreviousDayEquityWithLoanValue')
     async def get_equity_with_loan(self): return await self.get_account_summary_item('EquityWithLoanValue')
     async def get_excess_liquidity(self): return await self.get_account_summary_item('ExcessLiquidity')
+    def get_cached_excess_liquidity(self): return self.get_account_summary_cached_item('ExcessLiquidity')
     async def get_lookahead_excess_liquidity(self): return await self.get_account_summary_item('LookAheadExcessLiquidity')
     async def get_net_liquidation_value(self): return await self.get_account_summary_item('NetLiquidation')
     async def get_margin_maintenance_requirement(self): return await self.get_account_summary_item('MaintMarginReq')

@@ -87,6 +87,12 @@ class MarketDataFetcher:
 
         return price
 
+    def get_cached_spx_price(self):
+        return self.previous_spx_value
+
+    def get_cached_spx_implied_volatility(self, right):
+        return self.last_implied_volatility[right]
+
     def get_ticker(self, option):
         ticker = self.ib.ticker(option)
         if ticker:
