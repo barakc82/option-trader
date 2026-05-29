@@ -2,7 +2,7 @@ import asyncio
 import logging
 import random
 from ib_insync import IB
-from utilities.utils import is_in_docker
+from utilities.utils import is_in_docker, MY_ACCOUNT
 
 logger = logging.getLogger(__name__)
 
@@ -80,18 +80,10 @@ class ConnectionManager:
 
             # Stabilization for account-based data
             await asyncio.sleep(2)
-            for _ in range(10):
-                if self.ib.wrapper.accounts:
-                    break
-                await asyncio.sleep(0.1)
-
-            if self.ib.wrapper.accounts:
-                account = self.ib.wrapper.accounts[0]
-                logger.info(f"Initializing account data for {account}...")
-                await self.ib.reqAccountUpdatesAsync(account)
-                await self.ib.reqAccountSummaryAsync()
-            else:
-                logger.warning("No accounts found; account data not initialized.")
+            
+            logger.info(f"Initializing account data for {MY_ACCOUNT}...")
+            await self.ib.reqAccountUpdatesAsync(MY_ACCOUNT)
+            await self.ib.reqAccountSummaryAsync()
 
         except Exception as e:
             logger.error(f"Error during data initialization: {e}")
