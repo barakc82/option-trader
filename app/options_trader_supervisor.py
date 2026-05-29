@@ -47,6 +47,9 @@ RESTART_PLATFORM_STATE = 2
 CANNOT_RESTART_OPTION_TRADER_STATE = 3
 CANNOT_RESTART_TWS_STATE = 4
 
+IBGATEWAY_RESTART_REQUIRED = "IBGATEWAY_RESTART_REQUIRED"
+UNKNOWN_ISSUE = "UNKNOWN_ISSUE"
+
 state = MONITOR_STATE
 OPTION_TRADER_SUPERVISOR_CLIENT_ID = 100
 TWS_PROCESS_CMD = ["C:\\jts\\tws.exe", "main.py"]
@@ -122,6 +125,26 @@ def find_latest_option_trader_log():
     # Return the file with the newest modification time
     latest = max(log_files, key=lambda f: f.stat().st_mtime)
     return latest
+
+
+def analyze_option_trader_log():
+    latest_log = find_latest_option_trader_log()
+    if not latest_log:
+        return UNKNOWN_ISSUE
+
+    try:
+        with open(latest_log, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+            if not lines:
+                return UNKNOWN_ISSUE
+            
+            last_line = lines[-1]
+            if "Task is waiting for IB connection" in last_line or "No position were found" in last_line:
+                return IBGATEWAY_RESTART_REQUIRED
+    except Exception as e:
+        logger.error(f"Error analyzing log {latest_log}: {e}")
+
+    return UNKNOWN_ISSUE
 
 
 def test_connection_to_platform():
@@ -274,7 +297,14 @@ def monitor_option_trader():
     is_process_alive = is_process_active()
     if not is_process_alive:
         logger.warning(f"Option Trader is not alive.")
+
         kill_option_trader()
+        analysis_result = analyze_option_trader_log()
+        logger.info(f"Log analysis result after killing Option Trader: {analysis_result}")
+        if analysis_result == IBGATEWAY_RESTART_REQUIRED:
+            logger.info("Calling soft restart for IBGateway")
+            soft_restart()
+
         asyncio.run(post_current_state({'status': 'Terminated'}))
         is_session_expired_result = is_session_expired()
         if is_session_expired_result:
