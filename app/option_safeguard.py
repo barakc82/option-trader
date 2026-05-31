@@ -18,7 +18,7 @@ from utilities.ib_utils import is_hollow, req_id_to_comment, find_high_limit_buy
 
 logger = logging.getLogger(__name__)
 
-MAX_DEVIATION = 0.05
+MAX_DEVIATION = 0.1
 MIN_PRICE_THRESHOLD = 1
 
 class OptionSafeguard:
