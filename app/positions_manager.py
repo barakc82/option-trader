@@ -82,6 +82,9 @@ class PositionsManager:
                         f"Cancelling a buy trade for position of {get_option_name(option)}, trade quantity: {limit_buy_trade.remaining()}, position quantity: {position.position}")
                     self.trading_bot.cancel_trade(limit_buy_trade)
 
+            if not hasattr(option, "ticker"):
+                continue
+
             bid = option.ticker.bid
             ask = option.ticker.ask
             if not self.can_buy_options() or math.isnan(bid) or bid > 0.05 or math.isnan(ask) or ask > 0.2 or ask < 0:

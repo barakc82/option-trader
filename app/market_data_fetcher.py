@@ -123,8 +123,11 @@ class MarketDataFetcher:
         last_time = getattr(ticker, 'last_processed_time', 0)
         
         gamma = get_gamma(ticker)
+        price = ticker.last
         # Slower updates for low-gamma options (further out of money or illiquid)
-        throttle_interval = 5.0 if (math.isnan(gamma) or gamma == 0.0) else 0.5
+        throttle_interval = 5.0 if (math.isnan(gamma) or gamma < 0.001) else 0.5
+        if math.isnan(price):
+            throttle_interval = 20.0
         
         if now - last_time < throttle_interval:
             return
@@ -132,7 +135,7 @@ class MarketDataFetcher:
 
         option = ticker.contract
         delta = get_delta(ticker)
-        price = ticker.last
+
 
         delta_str = f"{abs(delta):.3f}" if delta is not None else "N/A"
         gamma_str = f"{gamma:.3f}" if not math.isnan(gamma) else "N/A"
@@ -181,16 +184,23 @@ class MarketDataFetcher:
         await self.ensure_market_data_type()
 
         # Filter out what we already have active
-        missing = [c for c in contracts if self.ib.ticker(c) is None]
-        
+        missing = [c for c in contracts if c.conId not in self.registered_con_ids]
+
         if missing:
             write_heartbeat()
-            new_tickers = await self.ib.reqTickersAsync(*missing)
+            ticker_snapshots = await self.ib.reqTickersAsync(*missing)
             write_heartbeat()
 
-        # Ensure all contracts have their internal ticker reference updated (for convenience)
-        for contract in contracts:
-            contract.ticker = self.ib.ticker(contract)
+            # Ensure all contracts have their internal ticker reference updated (for convenience)
+            for ticker_snapshot in ticker_snapshots:
+                ticker_snapshot.contract.ticker = ticker_snapshot
+
+            # Log contracts from the missing list which do not appear in any of the snapshot tickers
+            received_con_ids = {t.contract.conId for t in ticker_snapshots}
+            still_missing = [c for c in missing if c.conId not in received_con_ids]
+            if still_missing:
+                logger.info(f"The following contracts were requested but not fetched as snapshots: {[get_option_name(c) for c in still_missing]}")
+
 
     async def request_ticker(self, contract):
         """Request market data for a single contract using reqTickersAsync."""
@@ -201,10 +211,19 @@ class MarketDataFetcher:
 
         timeout = 5
         start = time.time()
-        while math.isnan(ticker.last) and (time.time() - start) < timeout:
+        # Loop until we have AT LEAST ONE valid piece of pricing data, or we timeout
+        while (time.time() - start) < timeout:
+            has_last = not math.isnan(ticker.last)
+            has_close = not math.isnan(ticker.close)
+            has_bid_ask = not math.isnan(ticker.bid) and not math.isnan(ticker.ask)
+
+            # If we have any of these, the ticker is successfully receiving data
+            if has_last or has_close or has_bid_ask:
+                break
+
             await asyncio.sleep(0.1)
 
-        if not math.isnan(ticker.last):
+        if not math.isnan(ticker.last) or not math.isnan(ticker.close) or (not math.isnan(ticker.bid) and not math.isnan(ticker.ask)):
             self._register_ticker(ticker)
         else:
             logger.error(f"Could not fetch ticker for {get_option_name(contract)}")
@@ -219,8 +238,8 @@ class MarketDataFetcher:
             ticker = self.ib.ticker(contract)
             if ticker:
                 ticker.updateEvent -= self.on_option_ticker_update
-            
-            self.ib.cancelMktData(contract)
+                self.ib.cancelMktData(contract)
+
             self.registered_con_ids.remove(contract.conId)
             logger.info(f"Unsubscribed from market data for {get_option_name(contract)}")
 
@@ -270,9 +289,7 @@ class MarketDataFetcher:
             logger.error(f"At the money level could not be found for {right}")
             return self.last_implied_volatility[right]
 
-        write_heartbeat()
         await self.request_snapshots(candidate_options)
-        write_heartbeat()
 
         implied_volatility = math.nan
         for option in candidate_options:
@@ -302,8 +319,11 @@ class MarketDataFetcher:
         return implied_volatility
 
     async def get_chains(self, underlying):
+        write_heartbeat()
         await self.qualify([underlying])
-        return await self.ib.reqSecDefOptParamsAsync(underlying.symbol, '', underlying.secType, underlying.conId)
+        chains = await self.ib.reqSecDefOptParamsAsync(underlying.symbol, '', underlying.secType, underlying.conId)
+        write_heartbeat()
+        return chains
 
     async def qualify(self, contracts):
         return await self.ib.qualifyContractsAsync(*contracts)

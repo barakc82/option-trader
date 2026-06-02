@@ -55,12 +55,12 @@ class OptionTrader:
 
                 write_heartbeat()
 
-                if is_market_open() or int(time.time()) % 100 == 0:
-                    logger.info(f"OptionTrader: Checking market status...")
-
                 if is_market_open():
+                    logger.info(f"OptionTrader: Checking market status...")
                     await self.trade()
                 else:
+                    if int(time.time()) % 100 == 0:
+                        logger.info(f"Market is closed")
                     await self.verify_no_open_trades()
                 
                 if self.connection_failure_start_time is not None:

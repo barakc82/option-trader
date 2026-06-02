@@ -43,6 +43,9 @@ class StrikeFinder:
         highest_delta_option = None
 
         for option in options_block:
+            if not hasattr(option, "ticker"):
+                logger.error(f"Option {get_option_name(option)} has no ticker field")
+                continue
             delta = get_delta_for_sell(option.ticker)
             if delta is None or math.isnan(delta): continue
             delta = abs(delta)

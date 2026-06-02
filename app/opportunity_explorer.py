@@ -172,6 +172,20 @@ class OpportunityExplorer:
         date = get_current_trading_day()
         options = await self.market_data_fetcher.get_options(date)
         open_trades = self.trading_bot.get_open_trades()
+        short_options = self.trading_bot.get_short_options()
+
+        # Build a mapping of conId -> contract from existing trades and positions
+        # These contract objects might already have tickers attached
+        existing_contracts = {t.contract.conId: t.contract for t in open_trades}
+        for pos in short_options:
+            if pos.contract.conId not in existing_contracts:
+                existing_contracts[pos.contract.conId] = pos.contract
+
+        # Replace options in the list with existing ones if found
+        for i, option in enumerate(options):
+            if option.conId in existing_contracts:
+                options[i] = existing_contracts[option.conId]
+
         self.can_submit_orders = time.time() - self.last_submit_order_attempt_time > TIME_UNTIL_NEXT_SELL_CHECK
 
         # During after hours trading it is ok to submit orders close in time

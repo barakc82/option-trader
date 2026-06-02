@@ -5,8 +5,8 @@ from datetime import datetime, timedelta
 from utilities.database_access import get_worksheet
 from utilities.utils import REGULAR_HOURS_END_TIME, new_york_timezone
 
-start_date = datetime(2026, 5, 19)
-history_days = 38
+start_date = datetime(year=2026, month=6, day=3)
+history_days = 40
 
 barak_sheet = get_worksheet("ברק")
 quotes_sheet = get_worksheet("$$$$")

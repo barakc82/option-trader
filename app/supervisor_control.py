@@ -50,17 +50,72 @@ def start_option_trader():
     return ERROR
 
 def kill_option_trader():
+    """
+    Kills the option trader process.
+    First tries the PID from the heartbeat file, but verifies it's the correct process.
+    Then searches for any other processes running 'app.main'.
+    """
     hb_path = f"{OPTION_TRADER_DIR}/cache/heartbeat.txt"
+    heartbeat_pid = None
     if os.path.exists(hb_path):
-        with open(hb_path, "r") as file:
-            try:
+        try:
+            with open(hb_path, "r") as file:
                 heartbeat = json.load(file)
-                pid = heartbeat['pid']
-                if psutil.pid_exists(pid):
-                    proc = psutil.Process(pid)
-                    proc.terminate()
-            except Exception as e:
-                logger.error(f"Error killing option trader: {e}")
+                heartbeat_pid = heartbeat.get('pid')
+        except Exception as e:
+            logger.error(f"Error reading heartbeat file: {e}")
+
+    processes_to_kill = []
+
+    # 1. Check if the PID from heartbeat is valid and is indeed an option trader
+    if heartbeat_pid:
+        try:
+            if psutil.pid_exists(heartbeat_pid):
+                proc = psutil.Process(heartbeat_pid)
+                cmdline = proc.cmdline()
+                if any('app.main' in arg for arg in cmdline):
+                    processes_to_kill.append(proc)
+                else:
+                    logger.warning(f"PID {heartbeat_pid} from heartbeat exists but does not appear to be 'app.main'.")
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+
+    # 2. Search for any other processes running 'app.main'
+    my_pid = os.getpid()
+    for proc in psutil.process_iter(['pid', 'cmdline']):
+        try:
+            pid = proc.info['pid']
+            if pid == my_pid:
+                continue
+            
+            cmdline = proc.info['cmdline']
+            if cmdline and '-m' in cmdline and 'app.main' in cmdline:
+                # Avoid duplicates
+                if not any(p.pid == pid for p in processes_to_kill):
+                    processes_to_kill.append(psutil.Process(pid))
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+
+    if not processes_to_kill:
+        logger.info("No active option trader processes found to kill.")
+        return
+
+    # Terminate the identified processes
+    for proc in processes_to_kill:
+        try:
+            logger.info(f"Terminating option trader process: PID {proc.pid}")
+            proc.terminate()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+
+    # Wait for processes to exit, then kill if still alive
+    gone, alive = psutil.wait_procs(processes_to_kill, timeout=5)
+    for proc in alive:
+        try:
+            logger.warning(f"Process {proc.pid} did not terminate after 5s. Killing it...")
+            proc.kill()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
 
 def kill_tws():
     killed = []

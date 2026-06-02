@@ -79,8 +79,10 @@ try:
 
     date_picker_items = driver.find_elements(By.XPATH, "//div[@class='date-picker-item']")
 
-    day_buttons = date_picker_items[1].find_elements(By.XPATH,
-                                                     f".//tbody//button[span[normalize-space()='{formatted_day}']]")
+    search_text = f"(.//tbody//button[span[normalize-space()='{formatted_day}']])"
+    if target_date.day > 15:
+        search_text += "[last()]"
+    day_buttons = date_picker_items[1].find_elements(By.XPATH, search_text)
     day_buttons[0].click()
 
 finally:

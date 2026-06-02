@@ -1,9 +1,10 @@
+import re
 from string import ascii_uppercase
 
 from selenium.common import NoSuchElementException
 from selenium.webdriver.common.by import By
 from gspread_formatting import CellFormat, TextFormat, format_cell_range, get_effective_format
-import re
+
 
 from utilities.database_access import get_worksheet
 from utilities.meitav.get_status import extract_status, select_orders_tab

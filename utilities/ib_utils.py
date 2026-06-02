@@ -6,7 +6,9 @@ from datetime import datetime, timedelta
 from typing import Any
 from ib_insync import Trade
 
+from utilities.utils import get_option_name
 from utilities.tws_connection import TwsConnection
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -73,7 +75,7 @@ def get_delta(ticker):
     if ticker.lastGreeks and ticker.lastGreeks.delta:
         return abs(ticker.lastGreeks.delta)
     if ticker.modelGreeks and ticker.modelGreeks.delta:
-        logger.warning("Using model greeks to calculate delta")
+        logger.warning(f"Using model greeks to calculate delta for {get_option_name(ticker.contract)}")
         return abs(ticker.modelGreeks.delta)
     return None
 

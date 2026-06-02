@@ -3,6 +3,8 @@ import traceback
 
 from selenium.common import NoSuchElementException
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 from utilities.meitav.meitav_common import *
 from utilities.meitav.start import start
@@ -20,8 +22,8 @@ def is_balance_values_tab_selected(holdings_tab_element):
 
 
 def select_tab(driver, tab_title):
-    balance_values_tab = driver.find_element(By.XPATH, f"//*[normalize-space(text())='{tab_title}']")
-    balance_values_tab.click()
+    tab = driver.find_element(By.XPATH, f"//*[normalize-space(text())='{tab_title}']")
+    tab.click()
 
 def select_balance_values_tab(driver):
     select_tab(driver, tab_title='יתרות')
@@ -42,8 +44,12 @@ def extract_holdings(driver):
     except NoSuchElementException:
         container = holdings_tab_element
 
-    # 2. Get Headers - Map the column class to the header text
-    header_cells = container.find_elements(By.CSS_SELECTOR, ".ui-grid-header-cell")
+    wait_object = WebDriverWait(container, 40, 1, ([NoSuchElementException]))
+    header_cells =wait_object.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ui-grid-header-cell")))
+
+     #container.find_elements(By.CSS_SELECTOR, ".ui-grid-header-cell")
+    assert header_cells
+
     headers = []
     for cell in header_cells:
         # Extract title or visible text
@@ -54,11 +60,20 @@ def extract_holdings(driver):
         headers.append({"text": title, "class": col_class})
 
     # 3. Get Rows
-    rows = container.find_elements(By.CSS_SELECTOR, ".ui-grid-row")
+    # Wait up to 10 seconds for the rows to appear inside your specific tab
+    wait = WebDriverWait(driver, 10)
+
+    # The lambda runs repeatedly until find_elements returns a non-empty list
+    rows = wait.until(
+        lambda _: container.find_elements(By.CSS_SELECTOR, ".ui-grid-row")
+    )
+    print(f"Number of rows: {len(rows)}, number of headers: {len(headers)}")
+
     holdings = {}
 
     for row in rows:
         row_data = {}
+        is_row_valid = False
         for header in headers:
             if not header["class"]: continue
 
@@ -80,14 +95,20 @@ def extract_holdings(driver):
                 if field is None:
                     continue
                 row_data[field] = clean_value
+                is_row_valid = True
             except:
                 row_data[header["text"]] = None
 
+        if not is_row_valid:
+            continue
+        if 'security_id' not in row_data:
+            print(row_data)
         assert row_data['security_id']
         row_data['security_id'] = int(row_data['security_id'])
         assert row_data['quantity']
         holdings[row_data['security_id']] = row_data
 
+    assert holdings
     return holdings
 
 def extract_field(driver, selector):
@@ -111,6 +132,8 @@ def extract_status(driver):
                 status['user'] = user
                 status['program_type'] = Gemel
         assert status['user']
+
+        """
         all_spans = driver.find_elements(By.CSS_SELECTOR, "span.ng-binding[title]")
         for span in all_spans:
             field_value = span.get_attribute("title")
@@ -130,7 +153,18 @@ def extract_status(driver):
                     status["cash"] = float(field_value.replace(",", ""))
                 if "שווי" in field_name:
                     status["total"] = float(field_value.replace(",", ""))
+        """
 
+        cash_word = 'מזומנים'
+        income_word = 'הכנסה'
+        cash_ancestor_element = driver.find_element(By.XPATH, f"//*[contains(., '{cash_word}') and not(contains(., '{income_word}'))]")
+
+        span_ng_binding_element = cash_ancestor_element.find_element(
+            By.XPATH,
+            "../../descendant::*[@class='ng-binding']"
+        )
+
+        status["cash"] = float(span_ng_binding_element.text.replace(",", ""))
         assert status["cash"]
 
         # Example of how to loop through a table of stocks/funds

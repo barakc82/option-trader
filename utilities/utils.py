@@ -164,18 +164,21 @@ def is_market_open():
     
     now_time = now_in_nyc.time()
     weekday = now_in_nyc.weekday()
-    
-    # Day session: Mon-Fri, early morning or late afternoon
-    in_day_session = (weekday in range(5) and
-                      (now_time < PREMARKET_END_TIME or REGULAR_HOURS_START_TIME < now_time < AFTER_HOURS_END_TIME))
-    
+
+    is_night_premarket = now_time >= PREMARKET_START_TIME
+
     # Evening session start (Sundays/Mondays etc at 20:15)
-    previous_weekday = (weekday - 1) % 7
-    in_evening_session = previous_weekday in [6, 0, 1, 2, 3] and now_time >= PREMARKET_START_TIME
+    in_evening_session = weekday in [6, 0, 1, 2, 3] and is_night_premarket
     
     if is_holiday and not in_evening_session:
         return False
-        
+
+    is_morning_premarket = now_time < PREMARKET_END_TIME
+    is_regular_hours_and_after_hours = REGULAR_HOURS_START_TIME < now_time < AFTER_HOURS_END_TIME
+    is_during_day_trade_part_of_the_day = is_morning_premarket or is_regular_hours_and_after_hours
+
+    # Day session: Mon-Fri, early morning or late afternoon
+    in_day_session = weekday in range(5) and is_during_day_trade_part_of_the_day
     return in_day_session or in_evening_session
 
 def is_buffer_time_around_trade_time():
