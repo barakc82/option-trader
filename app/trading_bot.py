@@ -210,7 +210,7 @@ class TradingBot:
             return result
 
         limit = await self.calculate_limit(contract, ticker.bid, ticker.ask)
-        minimal_sell_price = self.calculate_minimal_sell_price(ticker.last)
+        minimal_sell_price = self.calculate_minimal_sell_price(ticker.last, contract.lastTradeDateOrContractMonth)
         if limit < minimal_sell_price:
             logger.info(f"Sell of {get_option_name(contract)} limit ({limit}) < min price ({minimal_sell_price})")
             result.no_option_above_minimal_sell_price = True
@@ -247,10 +247,12 @@ class TradingBot:
         result.success = not is_cancelled
         return result
 
-    def calculate_minimal_sell_price(self, last_price):
-        if self.account_data.is_portfolio_margin() and is_late_regular_hours():
+    def calculate_minimal_sell_price(self, last_price, expiration_date):
+        if (self.account_data.is_portfolio_margin() and is_late_regular_hours() and
+                expiration_date == datetime.today().strftime('%Y%m%d')):
             return 0
-        if last_price == 0.05 and is_regular_hours():
+        if (last_price == 0.05 and is_regular_hours() and
+                expiration_date == datetime.today().strftime('%Y%m%d')):
             return 0.1
         return MINIMAL_SELL_PRICE
 

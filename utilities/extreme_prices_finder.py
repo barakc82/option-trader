@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from utilities.database_access import get_worksheet
 from utilities.utils import REGULAR_HOURS_END_TIME, new_york_timezone
 
-start_date = datetime(year=2026, month=6, day=3)
+start_date = datetime(year=2026, month=6, day=4)
 history_days = 40
 
 barak_sheet = get_worksheet("ברק")
@@ -22,8 +22,8 @@ print(f"History days: {history_days}")
 ib = IB()
 ib.connect('127.0.0.1', 7496, clientId=10)
 
-security_names = ['VT', 'AVUV', 'AVDV', 'VGT', 'UPRO', 'SPYU', 'SP5Y', 'SCHD', 'SCHY', 'SPHD', 'VIG', 'VIGI', 'ACWD', 'GBTC', 'SPYU', 'INTU', 'MA', 'AXP', 'META', 'ASML', 'OXY']
-row_indices = [177, 178, 179, None, None, None, None, 182, 183, 184, 185, 186, None, None, None, 189, 195, 198, 199, 202, 203]
+security_names = ['VT', 'AVUV', 'AVDV', 'VGT', 'UPRO', 'SPYU', 'SP5Y', 'SCHD', 'SCHY', 'SPHD', 'VIG', 'VIGI', 'ACWD', 'GBTC', 'SPYU', 'INTU', 'MA', 'SPGI', 'AXP', 'META', 'ASML', 'OXY']
+row_indices = [177, 178, 179, None, None, None, None, 182, 183, 184, 185, 186, None, None, None, 189, 195, 196, 198, 199, 202, 203]
 
 history_end_date = start_date - timedelta(days=1)
 print(f"History end date: {history_end_date}")

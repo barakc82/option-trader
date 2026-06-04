@@ -46,6 +46,9 @@ class StrikeFinder:
             if not hasattr(option, "ticker"):
                 logger.error(f"Option {get_option_name(option)} has no ticker field")
                 continue
+            if option.ticker is None:
+                logger.error(f"Option {get_option_name(option)} has an empty ticker field")
+                continue
             delta = get_delta_for_sell(option.ticker)
             if delta is None or math.isnan(delta): continue
             delta = abs(delta)
@@ -81,6 +84,9 @@ class StrikeFinder:
 
         highest_delta_under_target = 0
         for option in options_block:
+            if not hasattr(option, "ticker"):
+                logger.error(f"Option {get_option_name(option)} has no ticker field")
+                continue
             delta = get_delta_for_sell(option.ticker)
             if delta is None or math.isnan(delta): continue
             delta = abs(delta)
@@ -112,11 +118,11 @@ class StrikeFinder:
 
         log_message = f"Selected option: {get_option_name(current_candidate)}, delta: {final_delta:.3f}, target: {target_delta:.3f}"
         if current_candidate.ticker.lastGreeks:
-            log_message += f", last delta: {current_candidate.ticker.lastGreeks.delta}"
+            log_message += f", last delta: {current_candidate.ticker.lastGreeks.delta:.3f}"
         if current_candidate.ticker.modelGreeks:
-            log_message += f", model delta: {current_candidate.ticker.modelGreeks.delta}"
+            log_message += f", model delta: {current_candidate.ticker.modelGreeks.delta:.3f}"
         if current_candidate.ticker.bidGreeks:
-            log_message += f", bid delta: {current_candidate.ticker.bidGreeks.delta}"
+            log_message += f", bid delta: {current_candidate.ticker.bidGreeks.delta:.3f}"
         log_message += f"bid: {current_candidate.ticker.bid}, ask: {current_candidate.ticker.ask}"
         logger.info(log_message)
         return current_candidate

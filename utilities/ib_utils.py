@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Any
 from ib_insync import Trade
 
-from utilities.utils import get_option_name
+from utilities.utils import get_option_name, is_after_hours
 from utilities.tws_connection import TwsConnection
 
 
@@ -16,9 +16,16 @@ logger.setLevel(logging.DEBUG)
 PORTFOLIO_MARGIN = "portfolio_margin"
 MINIMAL_SELL_PRICE = 0.15
 
-OPEN_SELL_ORDER_EXPIRATION_TIME = timedelta(minutes=20)
+OPEN_SELL_ORDER_GENERAL_EXPIRATION_TIME = timedelta(minutes=20)
+OPEN_SELL_ORDER_AFTER_HOURS_EXPIRATION_TIME = timedelta(minutes=5)
 POSITION_BUYBACK_ORDER_EXPIRATION_TIME = timedelta(minutes=10)
 OPEN_GENERAL_MARGIN_REDUCTION_BUY_ORDER_EXPIRATION_TIME = timedelta(minutes=5)
+
+
+def get_open_sell_order_expiration_time():
+    if is_after_hours():
+        return OPEN_SELL_ORDER_AFTER_HOURS_EXPIRATION_TIME
+    return OPEN_SELL_ORDER_GENERAL_EXPIRATION_TIME
 
 req_id_to_comment = {}
 req_id_to_target_delta = {}

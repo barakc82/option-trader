@@ -2,7 +2,7 @@ import math
 import asyncio
 from datetime import timedelta
 
-from utilities.ib_utils import get_delta, OPEN_SELL_ORDER_EXPIRATION_TIME, \
+from utilities.ib_utils import get_delta, get_open_sell_order_expiration_time, \
     POSITION_BUYBACK_ORDER_EXPIRATION_TIME, OPEN_GENERAL_MARGIN_REDUCTION_BUY_ORDER_EXPIRATION_TIME, \
     get_time_passed_since_submission, get_delta_for_sell
 from utilities.utils import *
@@ -119,9 +119,10 @@ class OptionTrader:
         for open_sell_trade in open_sell_trades:
             logger.info(f"Working on open sell trade of option {get_option_name(open_sell_trade.contract)}")
             time_passed_since_submission = get_time_passed_since_submission(open_sell_trade)
-            if time_passed_since_submission > OPEN_SELL_ORDER_EXPIRATION_TIME:
+            expiration_time = get_open_sell_order_expiration_time()
+            if time_passed_since_submission > expiration_time:
                 logger.info(
-                    f"Cancelling sell of {get_option_name(open_sell_trade.contract)} since it has not been filled for the 20 minutes")
+                    f"Cancelling sell of {get_option_name(open_sell_trade.contract)} since it has not been filled for {expiration_time.total_seconds() / 60:.0f} minutes")
                 self.trading_bot.cancel_trade(open_sell_trade)
                 continue
 
