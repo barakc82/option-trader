@@ -12,7 +12,7 @@ from .trading_bot import TradingBot
 from .positions_manager import PositionsManager
 from .market_data_fetcher import MarketDataFetcher
 from .connection_manager import ConnectionManager
-from .spy_subscription_manager import SpySubscriptionManager
+from .subscription_manager import SubscriptionManager
 
 from utilities.ib_utils import is_hollow, req_id_to_comment, find_high_limit_buy_trade, get_spy_option_name
 
@@ -39,7 +39,7 @@ class OptionSafeguard:
             self.max_loss_calculator = MaxLossCalculator()
             self.market_data_fetcher = MarketDataFetcher()
             self.positions_manager = PositionsManager()
-            self.spy_subscription_manager = SpySubscriptionManager()
+            self.subscription_manager = SubscriptionManager()
 
             self.connection_failure_start_time = None
             self.last_alive_log_time = 0
@@ -133,8 +133,8 @@ class OptionSafeguard:
 
         if not spy_ticker:
             logger.info(f"Matching ticker for {get_option_name(option)} ({spy_name}, id: {id(spy_option)}) not found in tickers cache. "
-                        f"Invalidating subscription in SpySubscriptionManager. Unfairness is not detected")
-            self.spy_subscription_manager.spx_to_spy_map.pop(option.conId, None)
+                        f"Invalidating subscription in SubscriptionManager. Unfairness is not detected")
+            self.subscription_manager.spx_to_spy_map.pop(option.conId, None)
             return False
 
         if math.isnan(spy_ticker.ask) or spy_ticker.ask <= 0:
@@ -206,7 +206,7 @@ class OptionSafeguard:
         stop_loss = position.avgCost / 100 + stop_loss_per_option
         high_limit_buy_trade = find_high_limit_buy_trade(option, open_trades)
 
-        spy_option = self.spy_subscription_manager.spx_to_spy_map.get(option.conId)
+        spy_option = self.subscription_manager.spx_to_spy_map.get(option.conId)
         if is_regular_hours() and spy_option and self.is_unfair_ask_value(option, spy_option):
             self.handle_unfair_ask_value(high_limit_buy_trade, option, spy_option, stop_loss)
             return
