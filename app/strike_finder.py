@@ -87,6 +87,9 @@ class StrikeFinder:
             if not hasattr(option, "ticker"):
                 logger.error(f"Option {get_option_name(option)} has no ticker field")
                 continue
+            if option.ticker is None:
+                logger.error(f"Option {get_option_name(option)} has an empty ticker field")
+                continue
             delta = get_delta_for_sell(option.ticker)
             if delta is None or math.isnan(delta): continue
             delta = abs(delta)
