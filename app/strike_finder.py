@@ -75,11 +75,8 @@ class StrikeFinder:
         elif highest_delta < target_delta:
             current_candidate = highest_delta_option
             logger.info(f"Initial block deltas too low for {right}. Highest: {highest_delta:.3f}")
-            if right == 'P':
-                options_block = await self.fetch_options_block(higher_idx, number_of_strikes - 1, strike_to_option, strikes)
-            else:
-                if lower_idx > 0:
-                    options_block = await self.fetch_options_block(0, lower_idx - 1, strike_to_option, strikes)
+            logger.info(f"Fetching {right} option block: {strikes[higher_idx]} -> {strikes[number_of_strikes - 1]}")
+            options_block = await self.fetch_options_block(higher_idx, number_of_strikes - 1, strike_to_option, strikes)
             self.edge_fetched_block[right] = options_block
 
         highest_delta_under_target = 0
@@ -109,7 +106,7 @@ class StrikeFinder:
 
         final_delta = get_delta_for_sell(current_candidate.ticker)
         if final_delta is None:
-            logger.error(f"No delta data available for the candidate {right} option")
+            logger.error(f"No delta data available for the candidate option {get_option_name(current_candidate)}")
             return None
 
         if current_candidate == options_block[0] and final_delta < 0.0001:
@@ -120,13 +117,13 @@ class StrikeFinder:
             return None
 
         log_message = f"Selected option: {get_option_name(current_candidate)}, delta: {final_delta:.3f}, target: {target_delta:.3f}"
-        if current_candidate.ticker.lastGreeks:
+        if current_candidate.ticker.lastGreeks and current_candidate.ticker.lastGreeks.delta:
             log_message += f", last delta: {current_candidate.ticker.lastGreeks.delta:.3f}"
-        if current_candidate.ticker.modelGreeks:
+        if current_candidate.ticker.modelGreeks and current_candidate.ticker.modelGreeks.delta:
             log_message += f", model delta: {current_candidate.ticker.modelGreeks.delta:.3f}"
-        if current_candidate.ticker.bidGreeks:
+        if current_candidate.ticker.bidGreeks and current_candidate.ticker.bidGreeks.delta:
             log_message += f", bid delta: {current_candidate.ticker.bidGreeks.delta:.3f}"
-        log_message += f"bid: {current_candidate.ticker.bid}, ask: {current_candidate.ticker.ask}"
+        log_message += f", bid: {current_candidate.ticker.bid}, ask: {current_candidate.ticker.ask}"
         logger.info(log_message)
         return current_candidate
 

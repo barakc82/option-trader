@@ -95,11 +95,8 @@ class TargetDeltaCalculator:
     async def calculate_target_delta(self, right):
         self.load_config()
 
-        regular_hours_end_time_today = datetime.combine(datetime.today(), REGULAR_HOURS_END_TIME)
-        end_time_timestamp = regular_hours_end_time_today.timestamp()
-        current_time = time.time()
-        if  self.last_target_delta_calculation_time[right] <= end_time_timestamp < current_time:
-            self.last_target_delta_calculation_time[right] = 0
+        if self.last_target_delta_calculation_time[right] < self.market_data_fetcher.options_dump_time:
+            self.last_target_delta[right] = AVERAGE_TARGET_DELTA[right]
 
         if time.time() - self.last_target_delta_calculation_time[right] < 60:
             return self.last_target_delta[right]

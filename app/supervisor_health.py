@@ -119,6 +119,8 @@ def is_session_expired():
     log_files = glob.glob(log_pattern)
     log_files.sort(key=os.path.getmtime, reverse=True)
 
+    logger.info("Checking the state of IBGateway session")
+
     for file_path in log_files:
         if not os.path.exists(file_path):
             continue

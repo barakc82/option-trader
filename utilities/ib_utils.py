@@ -96,6 +96,6 @@ def get_delta_for_sell(ticker):
 def find_high_limit_buy_trade(option, open_buy_trades):
     for open_buy_trade in open_buy_trades:
         if (option.conId == open_buy_trade.contract.conId and open_buy_trade.order.action.upper() == 'BUY' and
-                open_buy_trade.order.orderType == 'LMT' and open_buy_trade.order.lmtPrice > 0.05):
+                open_buy_trade.order.orderType == 'LMT' and open_buy_trade.order.lmtPrice > 0.1):
             return open_buy_trade
     return None

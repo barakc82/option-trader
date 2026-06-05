@@ -128,6 +128,10 @@ class OptionTrader:
 
             option = open_sell_trade.contract
             delta = get_delta_for_sell(option.ticker)
+            if delta is None:
+                logger.error(f"Could not get the delta for sell for {get_option_name(option)}")
+                continue
+
             target_delta = target_deltas[option.right]
             if delta > target_delta:
                 logger.info(

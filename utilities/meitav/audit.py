@@ -46,10 +46,17 @@ def extract_completed_operations(driver):
             try:
                 cell = row.find_element(By.CLASS_NAME, header["class"])
                 raw_value = cell.text.strip()
+                if not raw_value:
+                    raw_value = cell.find_element(By.CSS_SELECTOR, ".ui-grid-cell-contents").text.strip()
+                    if header["text"] == 'ק/מ':
+                        print(raw_value)
 
                 # Cleaning the data (remove commas, percent signs, etc.)
                 clean_value = re.sub(r'[^\d.\-]', '', raw_value) if raw_value else "0"
-                clean_value = float(clean_value)
+                try:
+                    clean_value = float(clean_value)
+                except:
+                    pass
                 terminology_map = {
                     'מספר נייר': 'security_id',
                     'ק/מ': 'operation_type',
@@ -67,7 +74,9 @@ def extract_completed_operations(driver):
             print("No operation found, continuing")
             continue
         if operation.get('quantity', None):
+            assert operation['security_id']
             operations.append(operation)
 
     print(operations)
     assert operations
+    return operations

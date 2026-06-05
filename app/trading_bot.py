@@ -256,8 +256,8 @@ class TradingBot:
             return 0.1
         return MINIMAL_SELL_PRICE
 
-    def buy_low_cost(self, option, quantity):
-        order = LimitOrder('BUY', quantity, 0.05, account=MY_ACCOUNT, usePriceMgmtAlgo=False)
+    def buy_low_cost(self, option, quantity, limit=0.05):
+        order = LimitOrder('BUY', quantity, limit, account=MY_ACCOUNT, usePriceMgmtAlgo=False)
         order.outsideRth = True
         order.tif = 'GTC'
         trade = self.ib.placeOrder(option, order)
@@ -287,3 +287,12 @@ class TradingBot:
         limit_buy_trade.order.transmit = True
         trade = self.ib.placeOrder(limit_buy_trade.contract, limit_buy_trade.order)
         return trade
+
+    async def try_to_resolve_margin_lock(self, candidate_option):
+        result = await self.test_order(candidate_option, number_of_options=1, limit=0.1)
+        if not result.success:
+            logger.error("The test for resolving the margin lock failed")
+            return result
+
+        self.buy_low_cost(candidate_option, quantity=1, limit=0.1)
+        return result

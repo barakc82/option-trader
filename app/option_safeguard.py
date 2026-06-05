@@ -145,6 +145,8 @@ class OptionSafeguard:
         adjusted_spy_ask = spy_ticker.ask * 10.0
         deviation = (spx_ask - adjusted_spy_ask) / adjusted_spy_ask
 
+        if int(time.time() * 10) % 1000 == 0:
+            logger.info(f"Checking option {get_option_name(option)} for unfair ask using {spy_name}. SPX ask is {spx_ask} and the adjusted SPY ask is {adjusted_spy_ask}, the deviation is {deviation:.2f}")
 
         if deviation < MAX_DEVIATION:
             return False
@@ -211,14 +213,14 @@ class OptionSafeguard:
             self.handle_unfair_ask_value(high_limit_buy_trade, option, spy_option, stop_loss)
             return
 
+        if stop_loss * 0.5 <= current_price < stop_loss:
+            logger.info(f"Watching the current price of {get_option_name(option)}: {current_price:.2f}, stop loss is at {stop_loss:.2f}")
+            return
+
         if not high_limit_buy_trade:
             if current_price > stop_loss:
                 logger.info(f"Creating missing limit order for {get_option_name(option)}, limit: {stop_loss}")
                 await self.trading_bot.close_short_option_position(position, limit=stop_loss)
-            return
-
-        if stop_loss * 0.5 <= current_price < stop_loss:
-            logger.info(f"Watch ing the current price of {get_option_name(option)}: {current_price:.2f}, stop loss is at {stop_loss:.2f}")
             return
 
         await self.handle_high_limit_buy_trade(high_limit_buy_trade, position, stop_loss_per_option)

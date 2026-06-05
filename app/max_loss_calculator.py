@@ -77,7 +77,6 @@ class MaxLossCalculator:
 
         max_loss = DEFAULT_MAX_LOSS
         if max_number_of_options and len(self.quantity[right]) >= MIN_NUMBER_OF_RECORDED_OPTIONS_QUANTITIES:
-            write_heartbeat()
             total_cash_value = self.account_data.get_cash_balance_value()
             extra_cash_per_contract = (total_cash_value - 1000) / max_number_of_options
             extra_cash_per_contract = max(extra_cash_per_contract, 0)

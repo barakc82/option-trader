@@ -39,6 +39,7 @@ MY_ACCOUNT = 'U15897350'
 
 SUCCESS = 0
 ERROR = 1
+FAILED = 2
 
 SAFEGUARD_MAX_CADENCE = 1.0
 
@@ -58,11 +59,11 @@ def get_current_trading_day():
     now_in_nyc = datetime.now(new_york_timezone)
     
     # If we are in the 'overnight' window for the next day's trades
-    if NEW_OPTION_EXPLORATION_START_TIME < now_in_nyc.time() < AFTER_HOURS_END_TIME:
+    if now_in_nyc.time() > NEW_OPTION_EXPLORATION_START_TIME:
         # Move to next trading day
         next_session = cal.next_open(now_in_nyc)
         return next_session.strftime('%Y%m%d')
-    
+
     # If currently a trading day, return it, else return the next one
     if cal.is_session(now_in_nyc.date().strftime('%Y-%m-%d')):
         return now_in_nyc.strftime('%Y%m%d')

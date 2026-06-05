@@ -82,7 +82,8 @@ class PositionsManager:
                         f"Cancelling a buy trade for position of {get_option_name(option)}, trade quantity: {limit_buy_trade.remaining()}, position quantity: {position.position}")
                     self.trading_bot.cancel_trade(limit_buy_trade)
 
-            if not hasattr(option, "ticker"):
+            if not hasattr(option, "ticker") or option.ticker is None:
+                logger.info(f"Option {get_option_name(option)} has no ticker")
                 continue
 
             bid = option.ticker.bid

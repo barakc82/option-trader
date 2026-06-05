@@ -124,22 +124,23 @@ class MarketDataFetcher:
         
         gamma = get_gamma(ticker)
         price = ticker.last
+        option = ticker.contract
+
         # Slower updates for low-gamma options (further out of money or illiquid)
-        throttle_interval = 5.0 if (math.isnan(gamma) or gamma < 0.001) else 0.5
+        throttle_interval = 5.0 if (math.isnan(gamma) or gamma < 0.002) else 0.5
         if math.isnan(price):
             throttle_interval = 20.0
+        if option.symbol == 'SPY':
+            throttle_interval *= 2
         
         if now - last_time < throttle_interval:
             return
         ticker.last_processed_time = now
 
-        option = ticker.contract
         delta = get_delta(ticker)
-
-
         delta_str = f"{abs(delta):.3f}" if delta is not None else "N/A"
         gamma_str = f"{gamma:.3f}" if not math.isnan(gamma) else "N/A"
-        logger.info(f"Update: {get_option_name(option)} | Price: {price} | Delta: {delta_str} | Gamma: {gamma_str}")
+        logger.info(f"Update: {option.symbol} {get_option_name(option)} | Price: {price} | Delta: {delta_str} | Gamma: {gamma_str}")
 
         # Note: Subscription cleanup is handled separately or can be added here if highly selective.
         # Periodic cleanup is usually safer to avoid constant churning during volatile markets.
@@ -279,7 +280,7 @@ class MarketDataFetcher:
 
         if (expiration_date < now_nyc.date() or
                 (expiration_date == now_nyc.date() and now_nyc.time() > REGULAR_HOURS_END_TIME)):
-            logger.warning(f"Options in cache are expired ({expiration_date}). Returning last implied volatility for {right}: {self.last_implied_volatility[right]}")
+            logger.warning(f"Options in cache expire on {expiration_date}. Returning last implied volatility for {right}: {self.last_implied_volatility[right]}")
             return self.last_implied_volatility[right]
 
         # Find 5 closest ATM options for the requested side
@@ -293,6 +294,12 @@ class MarketDataFetcher:
 
         implied_volatility = math.nan
         for option in candidate_options:
+            if not hasattr(option, "ticker"):
+                logger.error(f"Option {get_option_name(option)} has no ticker field")
+                continue
+            if option.ticker is None:
+                logger.error(f"Option {get_option_name(option)} has an empty ticker field")
+                continue
             iv = get_implied_volatility(option.ticker)
             if not math.isnan(iv):
                 implied_volatility = iv
