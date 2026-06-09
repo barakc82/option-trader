@@ -14,10 +14,6 @@ from utilities.spreadsheet_operations import update_next_sell_in_spreadsheet, ex
 user = Barak
 program_type = Gemel
 
-"""
-person_data = user_data[user]
-"""
-
 today = datetime.now()
 start_date = None
 end_date = target_date = today + relativedelta(months=3, days=-1)

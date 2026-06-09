@@ -20,7 +20,7 @@ try:
         raise Exception("Username and program type mismatch")
 
     units = 15
-    purchase_price = 7114
+    purchase_price = 7046
 
     person_data = users_data[user]
     sheet_name = person_data['transactions_sheet_name']

@@ -14,7 +14,7 @@ from utilities.meitav.start import start
 from utilities.spreadsheet_operations import update_next_buy_in_spreadsheet
 
 user = Barak
-program_type = Gemel
+program_type = Hishtalmut
 
 person_data = users_data[user]
 
@@ -37,8 +37,12 @@ try:
 
     update_next_buy_in_spreadsheet(user, program_type, price, f"{target_date:%d/%m/%Y}")
 
+    """
     element = driver.find_element(By.XPATH, f"//*[text()='1144708']")
-    element.click()
+    try:
+        element.click()
+    except Exception as e:
+        print(e)
     time.sleep(1)
 
     buy_button = driver.find_element(By.CSS_SELECTOR, '.buy-btn.stock-info-header')
@@ -48,12 +52,13 @@ try:
     wait_object = WebDriverWait(driver, 40, 1, ([ElementNotVisibleException]))
     wait_object.until(lambda x: x.find_element(By.XPATH, f"//*[text()='מחיר באגורות']") is not None)
 
-    """
+    
     send_order_div = driver.find_element(By.CLASS_NAME, "sendOrder")
     buy_button = send_order_div.find_element(By.XPATH, f"//*[text()='קניה']")
     buy_button.click()
     """
 
+    """
     inputs = driver.find_elements(By.CSS_SELECTOR, ".send-order-control-item-body input")
 
     price_input = inputs[1]
@@ -86,6 +91,7 @@ try:
     day_buttons = date_picker_items[1].find_elements(By.XPATH,
                                                      f"(.//tbody//button[span[normalize-space()='{formatted_day}']])[last()]")
     day_buttons[0].click()
+    """
 
 finally:
     driver.quit()

@@ -268,7 +268,8 @@ class OpportunityExplorer:
                     position_puts = [position.contract for position in position_options if
                                      position.contract.right == 'P']
                     candidate = min(position_puts, key=lambda option: option.strike)
-                    await self.trading_bot.try_to_resolve_margin_lock(candidate)
+                    missing_sum = sell_option_result.required_initial_margin - sell_option_result.initial_margin_after
+                    await self.try_to_resolve_margin_lock(candidate, missing_sum)
             else:
                 self.try_to_publish_available_cheap_option('C')
 
@@ -371,7 +372,8 @@ class OpportunityExplorer:
                     position_calls = [position.contract for position in position_options if
                                       position.contract.right == 'C']
                     candidate = max(position_calls, key=lambda option: option.strike)
-                    await self.trading_bot.try_to_resolve_margin_lock(candidate)
+                    missing_sum = sell_option_result.required_initial_margin - sell_option_result.initial_margin_after
+                    await self.try_to_resolve_margin_lock(candidate, missing_sum)
             else:
                 self.try_to_publish_available_cheap_option('P')
 
@@ -485,3 +487,13 @@ class OpportunityExplorer:
         if math.isnan(option.ticker.bid) or math.isnan(option.ticker.ask):
             return option.ticker.last
         return await self.trading_bot.calculate_limit(option, option.ticker.bid, option.ticker.ask)
+
+    async def try_to_resolve_margin_lock(self, candidate_option, missing_sum):
+        initial_margin_change = await self.trading_bot.get_initial_margin_change(candidate_option, quantity=1, limit=0.1)
+
+        if abs(initial_margin_change) < missing_sum:
+            logger.info(f"Initial margin change for buying {get_option_name(candidate_option)} is {initial_margin_change}, "
+                        f"which is not enough to cover for the missing sum of {missing_sum}, will not buy it as part of margin lock resolution")
+            return
+
+        self.trading_bot.buy_low_cost(candidate_option, quantity=1, limit=0.1)

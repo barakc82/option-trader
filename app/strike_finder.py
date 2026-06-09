@@ -44,8 +44,9 @@ class StrikeFinder:
 
         for option in options_block:
             if not hasattr(option, "ticker"):
-                logger.error(f"Option {get_option_name(option)} has no ticker field")
-                continue
+                # logger.error(f"Option {get_option_name(option)} has no ticker field")
+                ticker = self.market_data_fetcher.get_ticker(option)
+                option.ticker = ticker
             if option.ticker is None:
                 logger.error(f"Option {get_option_name(option)} has an empty ticker field")
                 continue
@@ -82,8 +83,9 @@ class StrikeFinder:
         highest_delta_under_target = 0
         for option in options_block:
             if not hasattr(option, "ticker"):
-                logger.error(f"Option {get_option_name(option)} has no ticker field")
-                continue
+                # logger.error(f"Option {get_option_name(option)} has no ticker field")
+                ticker = self.market_data_fetcher.get_ticker(option)
+                option.ticker = ticker
             if option.ticker is None:
                 logger.error(f"Option {get_option_name(option)} has an empty ticker field")
                 continue
@@ -200,6 +202,12 @@ class StrikeFinder:
                 options_block = await self.fetch_options_block(h_idx + 1, num_strikes - 1, strike_to_option, relevant_strikes)
 
         for option in options_block:
+            if not hasattr(option, "ticker"):
+                logger.error(f"Option {get_option_name(option)} has no ticker field")
+                continue
+            if option.ticker is None:
+                logger.error(f"Option {get_option_name(option)} has an empty ticker field")
+                continue
             ask = extract_ask(option.ticker)
             if ask is None or ask > 0.05: continue
             if right == 'C':

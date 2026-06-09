@@ -72,11 +72,9 @@ class SubscriptionManager:
                 unique_contracts[trade.contract.conId] = trade.contract
 
         contracts_missing_tickers = []
-        subscribed_contract_ids = [contract.conId for contract in self.subscribed_contracts]
         for contract in unique_contracts.values():
-            if contract.conId in subscribed_contract_ids:
-                contract.ticker = self.ib.ticker(contract)
-            else:
+            if contract not in self.subscribed_contracts:
+                logger.info(f"Option {get_option_name(contract)} is missing a ticker")
                 contracts_missing_tickers.append(contract)
 
         if contracts_missing_tickers:
@@ -87,9 +85,9 @@ class SubscriptionManager:
             for contract in contracts_missing_tickers:
                 ticker = getattr(contract, 'ticker', None)
                 if ticker:
-                    self.market_data_fetcher._register_ticker(ticker)
+                    self.market_data_fetcher.register_ticker(ticker)
                     self.subscribed_contracts.add(contract)
-                    logger.debug(f"Ticker successfully attached to {get_option_name(contract)}")
+                    logger.info(f"Ticker successfully attached to {get_option_name(contract)}")
                 else:
                     logger.warning(f"Failed to attach ticker to {get_option_name(contract)}")
         else:
@@ -97,7 +95,12 @@ class SubscriptionManager:
 
         # Cleanup stale subscriptions
         for contract in list(self.subscribed_contracts):
-            if contract.conId not in unique_contracts:
+            selected_contract_for_subscription = unique_contracts.get(contract.conId, None)
+            if contract != selected_contract_for_subscription:
+                if selected_contract_for_subscription is None:
+                    logger.info(f"Unsubscribing option {get_option_name(contract)} since it is no longer in use")
+                else:
+                    logger.info(f"Unsubscribing option {get_option_name(contract)} since the contract changed position")
                 self.market_data_fetcher.cancel_market_data(contract)
                 self.subscribed_contracts.discard(contract)
 

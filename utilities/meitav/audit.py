@@ -46,13 +46,13 @@ def extract_completed_operations(driver):
             try:
                 cell = row.find_element(By.CLASS_NAME, header["class"])
                 raw_value = cell.text.strip()
-                if not raw_value:
-                    raw_value = cell.find_element(By.CSS_SELECTOR, ".ui-grid-cell-contents").text.strip()
-                    if header["text"] == 'ק/מ':
+                clean_value = re.sub(r'[^\d.\-]', '', raw_value) if raw_value else "0"
+                if header["text"] == 'ק/מ':
+                    print(f"Raw value of buy/sell: {raw_value}, clean value: {clean_value}")
+                    if not raw_value:
+                        raw_value = cell.find_element(By.CSS_SELECTOR, ".ui-grid-cell-contents").text.strip()
                         print(raw_value)
 
-                # Cleaning the data (remove commas, percent signs, etc.)
-                clean_value = re.sub(r'[^\d.\-]', '', raw_value) if raw_value else "0"
                 try:
                     clean_value = float(clean_value)
                 except:

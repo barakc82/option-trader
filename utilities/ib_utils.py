@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import time
 import numpy as np
 import logging
 import math
@@ -82,7 +83,8 @@ def get_delta(ticker):
     if ticker.lastGreeks and ticker.lastGreeks.delta:
         return abs(ticker.lastGreeks.delta)
     if ticker.modelGreeks and ticker.modelGreeks.delta:
-        logger.warning(f"Using model greeks to calculate delta for {get_option_name(ticker.contract)}")
+        if int(time.time()) % 100:
+            logger.warning(f"Using model greeks to calculate delta for {get_option_name(ticker.contract)}")
         return abs(ticker.modelGreeks.delta)
     return None
 

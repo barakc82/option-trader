@@ -42,7 +42,7 @@ class MarketDataFetcher:
         if not self._initialized:
             self.ib = ConnectionManager().ib
             self.market_data_state = LIVE_DATA
-            self.registered_con_ids = set()
+            self.registered_contracts = {}
             self.last_implied_volatility = {'C': 0.0, 'P': 0.0}
             self.last_implied_volatility_calculation_time = {'C': 0.0, 'P': 0.0}
             self.options_dump_time = 0
@@ -55,13 +55,13 @@ class MarketDataFetcher:
             logger.info("MarketDataFetcher initialized.")
             self._initialized = True
 
-    def _register_ticker(self, ticker):
+    def register_ticker(self, ticker):
         if not ticker:
             return
         con_id = ticker.contract.conId
-        if con_id not in self.registered_con_ids:
+        if con_id not in self.registered_contracts:
             ticker.updateEvent += self.on_option_ticker_update
-            self.registered_con_ids.add(con_id)
+            self.registered_contracts[con_id] = ticker
             logger.info(f"Registered update handler for {get_option_name(ticker.contract)}")
 
     async def get_spx_price(self):
@@ -127,12 +127,12 @@ class MarketDataFetcher:
         option = ticker.contract
 
         # Slower updates for low-gamma options (further out of money or illiquid)
-        throttle_interval = 5.0 if (math.isnan(gamma) or gamma < 0.002) else 0.5
+        throttle_interval = 0.5
+        if (math.isnan(gamma) or gamma < 0.002):
+            throttle_interval = 10.0 if option.symbol == 'SPY' else 5.0
         if math.isnan(price):
-            throttle_interval = 20.0
-        if option.symbol == 'SPY':
-            throttle_interval *= 2
-        
+            throttle_interval = 40.0 if option.symbol == 'SPY' else 20.0
+
         if now - last_time < throttle_interval:
             return
         ticker.last_processed_time = now
@@ -154,22 +154,21 @@ class MarketDataFetcher:
         await self.ensure_market_data_type()
 
         # Filter out what we already have active
-        missing = [c for c in contracts if self.ib.ticker(c) is None]
+        # missing = [c for c in contracts if self.ib.ticker(c) is None]
 
-        if missing:
-            write_heartbeat()
-            new_tickers = [self.ib.reqMktData(c) for c in contracts]
+        write_heartbeat()
+        new_tickers = [self.ib.reqMktData(c) for c in contracts]
 
-            timeout = 5 * math.pow(len(contracts), 0.2)
-            start = time.time()
-            while time.time() - start < timeout:
-                if all(t.last and not math.isnan(t.last) for t in new_tickers):
-                    break
-                await asyncio.sleep(0.1)
+        timeout = 5 * math.pow(len(contracts), 0.2)
+        start = time.time()
+        while time.time() - start < timeout:
+            if all(t.last and not math.isnan(t.last) for t in new_tickers):
+                break
+            await asyncio.sleep(0.1)
 
-            write_heartbeat()
-            for ticker in new_tickers:
-                self._register_ticker(ticker)
+        write_heartbeat()
+        for ticker in new_tickers:
+            self.register_ticker(ticker)
 
         # Ensure all contracts have their internal ticker reference updated (for convenience)
         for contract in contracts:
@@ -185,7 +184,7 @@ class MarketDataFetcher:
         await self.ensure_market_data_type()
 
         # Filter out what we already have active
-        missing = [c for c in contracts if c.conId not in self.registered_con_ids]
+        missing = [c for c in contracts if c.conId not in self.registered_contracts]
 
         if missing:
             write_heartbeat()
@@ -225,7 +224,7 @@ class MarketDataFetcher:
             await asyncio.sleep(0.1)
 
         if not math.isnan(ticker.last) or not math.isnan(ticker.close) or (not math.isnan(ticker.bid) and not math.isnan(ticker.ask)):
-            self._register_ticker(ticker)
+            self.register_ticker(ticker)
         else:
             logger.error(f"Could not fetch ticker for {get_option_name(contract)}")
         return ticker
@@ -235,13 +234,13 @@ class MarketDataFetcher:
         if not contract or not contract.conId:
             return
 
-        if contract.conId in self.registered_con_ids:
+        if contract.conId in self.registered_contracts:
             ticker = self.ib.ticker(contract)
             if ticker:
                 ticker.updateEvent -= self.on_option_ticker_update
                 self.ib.cancelMktData(contract)
 
-            self.registered_con_ids.remove(contract.conId)
+            self.registered_contracts.pop(contract.conId)
             logger.info(f"Unsubscribed from market data for {get_option_name(contract)}")
 
     def get_delta(self, option):

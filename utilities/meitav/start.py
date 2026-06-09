@@ -31,7 +31,7 @@ def is_chrome_debug_active(port):
 def launch_chrome_debug():
     """Launches Chrome in debug mode using your specific command."""
     # Using 'r' (raw strings) ensures the backslashes in Windows paths don't cause escape character errors
-    chrome_path = r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
+    chrome_path = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
     user_data_dir = r"C:\ChromeDebug"
     port = 9222
 
