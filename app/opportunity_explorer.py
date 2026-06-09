@@ -134,6 +134,8 @@ class OpportunityExplorer:
             self.last_call_option_price = 0
             self.call_margin_reduction = None
             self.put_margin_reduction = None
+            self.last_call_margin_reduction_record_time = 0
+            self.last_put_margin_reduction_record_time = 0
             
             # Dynamic config fields
             self.should_write_options_overnight = True
@@ -165,8 +167,12 @@ class OpportunityExplorer:
     async def explore_opportunities(self):
         # 1. Refresh dynamic config at the start of each iteration
         self.load_config()
-        self.call_margin_reduction = None
-        self.put_margin_reduction = None
+        
+        current_time = time.time()
+        if self.call_margin_reduction and current_time - self.last_call_margin_reduction_record_time > 120:
+            self.call_margin_reduction = None
+        if self.put_margin_reduction and current_time - self.last_put_margin_reduction_record_time > 120:
+            self.put_margin_reduction = None
 
         logger.info("Exploring new opportunities")
         date = get_current_trading_day()
@@ -287,8 +293,10 @@ class OpportunityExplorer:
             }
             if right == 'C':
                 self.call_margin_reduction = reduction_data
+                self.last_call_margin_reduction_record_time = time.time()
             else:
                 self.put_margin_reduction = reduction_data
+                self.last_put_margin_reduction_record_time = time.time()
 
     async def try_to_sell(self, option, quantity, target_delta):
         delta = get_delta_for_sell(option.ticker)
@@ -416,6 +424,7 @@ class OpportunityExplorer:
             'margin_change': round(abs(initial_margin_change)),
             'required_level': round(self.calculate_required_level(required_number_of_units), 2)
         }
+        self.last_call_margin_reduction_record_time = time.time()
 
         logger.info(f"try_to_reduce_initial_margin_for_call_options, required initial margin: {required_initial_margin}, initial margin after sell: {initial_margin_after_sell:.0f}, "
                     f"initial margin change due to buy: {initial_margin_change:.0f}, option to be sold: {get_option_name(call_option_to_be_sold)}, option to buy: {get_option_name(available_cheap_call_option)}, missing sum: {missing_sum:.0f}, required number of units = {required_number_of_units}, last call price: {self.last_call_option_price}")
@@ -464,6 +473,7 @@ class OpportunityExplorer:
             'margin_change': round(abs(initial_margin_change)),
             'required_level': round(self.calculate_required_level(required_number_of_units), 2)
         }
+        self.last_put_margin_reduction_record_time = time.time()
 
         logger.info(f"try_to_reduce_initial_margin_for_put_options, required initial margin: {required_initial_margin:.0f}, initial margin after sell: {initial_margin_after_sell:.0f}, "
                     f"initial margin change due to buy: {initial_margin_change:.0f}, option to be sold: {get_option_name(put_option_to_be_sold)}, option to buy: {get_option_name(available_cheap_put_option)}, missing sum: {missing_sum:.0f}, required number of units = {required_number_of_units}, last put price: {self.last_put_option_price}")

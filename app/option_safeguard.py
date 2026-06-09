@@ -146,7 +146,7 @@ class OptionSafeguard:
         deviation = (spx_ask - adjusted_spy_ask) / adjusted_spy_ask
 
         if int(time.time() * 10) % 1000 == 0:
-            logger.info(f"Checking option {get_option_name(option)} for unfair ask using {spy_name}. SPX ask is {spx_ask} and the adjusted SPY ask is {adjusted_spy_ask}, the deviation is {deviation:.2f}")
+            logger.info(f"Checking option {get_option_name(option)} for unfair ask using {spy_name}. SPX ask is {spx_ask} and the adjusted SPY ask is {adjusted_spy_ask:.2f}, the deviation is {deviation:.2f}")
 
         if deviation < MAX_DEVIATION:
             return False
@@ -166,29 +166,19 @@ class OptionSafeguard:
     async def _ensure_ticker(self, option) -> int:
         """Ensure the option has a valid, non-hollow ticker, fetching it if needed."""
         if getattr(option, 'ticker', None) is None:
-            ticker = self.market_data_fetcher.get_ticker(option)
-            if ticker is not None:
-                logger.debug(f"Ticker for {get_option_name(option)} found in cache, attaching to contract")
-            else:
-                logger.debug(f"Ticker for {get_option_name(option)} not in cache, requesting live data")
-            option.ticker = ticker
-
-        if not is_hollow(option.ticker) and not math.isnan(option.ticker.ask):
-            return SUCCESS
-
-        logger.debug(f"Ticker for {get_option_name(option)} is hollow (no data), refreshing")
-
-        ticker = await self.market_data_fetcher.request_ticker(option)
-        if ticker is None:
-            logger.error(f"Failed to retrieve ticker for {get_option_name(option)}")
+            if int(time.time()) % 1000 == 0:
+                logger.error(f"Failed to retrieve ticker for {get_option_name(option)}")
             return ERROR
 
-        option.ticker = ticker
+        if is_hollow(option.ticker):
+            if int(time.time()) % 1000 == 0:
+                logger.error(f"Ticker for {get_option_name(option)} is hollow (no data)")
+            return ERROR
 
-        # Check if ask is present and positive
         if math.isnan(option.ticker.ask) or option.ticker.ask <= 0:
-            logger.error(
-                f"Bad value of ask for option {get_option_name(option)}. Cannot determine whether ask value is fair")
+            if int(time.time()) % 1000 == 0:
+                logger.error(
+                    f"Bad value of ask for option {get_option_name(option)}. Cannot determine whether ask value is fair")
             return ERROR
 
         return SUCCESS

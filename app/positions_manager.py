@@ -102,4 +102,5 @@ class PositionsManager:
 
     def on_fill(self, trade):
         logger.info(f"Trade filled: {get_option_name(trade.contract)} {trade.order.action}")
-        self.done_contract_ids.add(trade.contract.conId)
+        if trade.order.action.upper() == 'BUY':
+            self.done_contract_ids.add(trade.contract.conId)

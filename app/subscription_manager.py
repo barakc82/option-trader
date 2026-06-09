@@ -26,9 +26,6 @@ class SubscriptionManager:
             self.trading_bot = TradingBot()
             self.market_data_fetcher = MarketDataFetcher()
             
-            # Tracks contracts for direct position/trade subscriptions
-            self.subscribed_contracts = set()
-            
             # Tracks SPX conId -> Matching SPY Contract for hedge subscriptions
             self.spx_to_spy_map = {} 
             
@@ -66,16 +63,27 @@ class SubscriptionManager:
         open_trades = self.trading_bot.get_open_trades()
 
         # Combine unique contracts from positions and open trades
-        unique_contracts = {p.contract.conId: p.contract for p in positions}
+        required_contracts = {p.contract.conId: p.contract for p in positions}
         for trade in open_trades:
-            if trade.contract.conId not in unique_contracts:
-                unique_contracts[trade.contract.conId] = trade.contract
+            if trade.contract.conId not in required_contracts:
+                required_contracts[trade.contract.conId] = trade.contract
 
         contracts_missing_tickers = []
-        for contract in unique_contracts.values():
-            if contract not in self.subscribed_contracts:
-                logger.info(f"Option {get_option_name(contract)} is missing a ticker")
-                contracts_missing_tickers.append(contract)
+        active_tickers = self.ib.wrapper.ticker2ReqId['mktData'].keys()
+        if time.time() % 10000:
+            for active_ticker in active_tickers:
+                contract = active_ticker.contract
+                logger.info(f"Subscribed to {contract.symbol} {contract.secType} {contract.right} {contract.strike}")
+        active_contracts = [ticker.contract for ticker in active_tickers if ticker.contract.symbol == 'SPX' and ticker.contract.secType == 'OPT']
+
+        for required_contract in required_contracts.values():
+            is_contract_subscribed = False
+            for active_contract in active_contracts:
+                if active_contract is required_contract:
+                    is_contract_subscribed = True
+            if not is_contract_subscribed:
+                logger.info(f"Option {get_option_name(required_contract)} is missing a ticker")
+                contracts_missing_tickers.append(required_contract)
 
         if contracts_missing_tickers:
             logger.info(f"Found {len(contracts_missing_tickers)} contracts missing tickers. Updating...")
@@ -86,7 +94,6 @@ class SubscriptionManager:
                 ticker = getattr(contract, 'ticker', None)
                 if ticker:
                     self.market_data_fetcher.register_ticker(ticker)
-                    self.subscribed_contracts.add(contract)
                     logger.info(f"Ticker successfully attached to {get_option_name(contract)}")
                 else:
                     logger.warning(f"Failed to attach ticker to {get_option_name(contract)}")
@@ -94,15 +101,15 @@ class SubscriptionManager:
             logger.debug("All current positions and open trades have tickers attached.")
 
         # Cleanup stale subscriptions
-        for contract in list(self.subscribed_contracts):
-            selected_contract_for_subscription = unique_contracts.get(contract.conId, None)
-            if contract != selected_contract_for_subscription:
-                if selected_contract_for_subscription is None:
-                    logger.info(f"Unsubscribing option {get_option_name(contract)} since it is no longer in use")
+        for active_contract in active_contracts:
+            required_contract = required_contracts.get(active_contract.conId, None)
+            if active_contract is not required_contract:
+                if required_contract is None:
+                    logger.info(f"Unsubscribing option {get_option_name(active_contract)} since it is no longer in use")
                 else:
-                    logger.info(f"Unsubscribing option {get_option_name(contract)} since the contract changed position")
-                self.market_data_fetcher.cancel_market_data(contract)
-                self.subscribed_contracts.discard(contract)
+                    logger.info(f"Unsubscribing option {get_option_name(active_contract)} since the required contract changed")
+                self.market_data_fetcher.cancel_market_data(active_contract)
+
 
     async def manage_spy_subscriptions(self):
         """Check current SPX positions and update SPY subscriptions."""
