@@ -13,7 +13,8 @@ from .state_updater import update_supervisor_state_async, post_current_state
 
 from .supervisor_utils import (
     send_telegram_message, count_text_in_file, 
-    find_latest_option_trader_log, store_platform_log, LOGS_DIR
+    find_latest_option_trader_log, store_platform_log, 
+    trim_supervisor_log, LOGS_DIR
 )
 from .supervisor_health import (
     analyze_option_trader_log, is_process_active, 
@@ -164,10 +165,31 @@ def check_sunday_expiration():
 def update_state(status):
     asyncio.run(update_supervisor_state_async({'status': status}))
 
+def check_log_size():
+    global file_handler
+    log_path = f'{LOGS_DIR}/supervisor.log'
+    if os.path.exists(log_path) and os.path.getsize(log_path) > 10 * 1024 * 1024:
+        logger.info("supervisor.log reached 10MB, trimming...")
+        
+        logger.removeHandler(file_handler)
+        file_handler.close()
+        
+        if trim_supervisor_log():
+            print("Successfully trimmed supervisor.log")
+        else:
+            print("Failed to trim supervisor.log")
+            
+        file_handler = logging.FileHandler(log_path)
+        file_handler.setLevel(logging.INFO)
+        file_handler.setFormatter(file_formatter)
+        logger.addHandler(file_handler)
+        logger.info("Log trimming process completed.")
+
 def monitor(interval=5):
     global state
     while True:
         try:
+            check_log_size()
             if state == MONITOR_STATE:
                 monitor_option_trader()
                 status = check_ib_gateway_health()

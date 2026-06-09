@@ -70,3 +70,23 @@ def store_platform_log():
         shutil.copy('/home/ibgateway/Jts/launcher.log', f'{LOGS_DIR}/launcher_{timestamp}.log')
     except Exception as e:
         logger.error(f"Failed to store platform logs: {e}")
+
+def trim_supervisor_log():
+    log_path = f'{LOGS_DIR}/supervisor.log'
+    if not os.path.exists(log_path):
+        return False
+
+    try:
+        with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+            lines = f.readlines()
+        
+        if not lines:
+            return False
+
+        half_point = len(lines) // 2
+        with open(log_path, 'w', encoding='utf-8') as f:
+            f.writelines(lines[half_point:])
+        return True
+    except Exception as e:
+        print(f"Error trimming log: {e}")
+        return False
