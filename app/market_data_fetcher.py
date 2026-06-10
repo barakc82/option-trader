@@ -47,6 +47,7 @@ class MarketDataFetcher:
             self.last_implied_volatility_calculation_time = {'C': 0.0, 'P': 0.0}
             self.options_dump_time = 0
             self.previous_spx_value = math.nan
+            self.spx = Index(symbol='SPX', exchange='CBOE', currency='USD')
 
             # Use a lock for market data type switching
 
@@ -65,12 +66,11 @@ class MarketDataFetcher:
             logger.info(f"Registered update handler for {get_option_name(ticker.contract)}")
 
     async def get_spx_price(self):
-        spx = Index(symbol='SPX', exchange='CBOE', currency='USD')
-        spx_ticker = self.ib.ticker(spx)
+        spx_ticker = self.ib.ticker(self.spx)
 
         if not spx_ticker:
             logger.info("Fetching SPX ticker")
-            spx_ticker = await self.request_ticker(spx)
+            spx_ticker = await self.request_ticker(self.spx)
 
         if math.isnan(spx_ticker.last):
             if is_regular_hours():
@@ -366,8 +366,7 @@ class MarketDataFetcher:
 
         if not options_obtained:
             logger.info(f"Fetching fresh options for {date}. SPX Last Price: {spx_price}")
-            spx = Index(symbol='SPX', exchange='CBOE', currency='USD')
-            chains = await self.get_chains(spx)
+            chains = await self.get_chains(self.spx)
             chain = next(c for c in chains if c.exchange == 'CBOE' and c.tradingClass == 'SPXW')
             
             put_options = []
