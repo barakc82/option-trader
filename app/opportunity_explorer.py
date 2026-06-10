@@ -261,30 +261,28 @@ class OpportunityExplorer:
         if not sell_option_result.success:
             logger.warning(f"Failed to sell 1 options of {get_option_name(call_option)}")
 
-            if sell_option_result.required_initial_margin and not is_switched_to_overnight_trading():
-                result = await self.try_to_reduce_initial_margin_for_call_options(call_option, sell_option_result.required_initial_margin, sell_option_result.initial_margin_after, call_options)
-                position_options = self.trading_bot.get_short_options()
-                number_of_position_calls = sum(
-                    [-position.position for position in position_options if position.contract.right == 'C'])
-                number_of_position_puts = sum(
-                    [-position.position for position in position_options if position.contract.right == 'P'])
-                if result == FAILED and number_of_position_calls * 2 < number_of_position_puts:
-                    logger.info(
-                        f"Margin lock detected, only {number_of_position_calls} call options versus {number_of_position_puts} put options")
-                    position_puts = [position.contract for position in position_options if
-                                     position.contract.right == 'P']
-                    candidate = min(position_puts, key=lambda option: option.strike)
-                    is_margin_lock_trade_already_open = any(trade.contract.right == 'P' and trade.contract.strike == candidate.strike and trade.order.action.upper() == 'BUY' and trade.order.limit > 0.05 for trade in open_trades)
-                    if is_margin_lock_trade_already_open:
-                        logger.info(f"Margin lock buy trade for {get_option_name(candidate)} is already open")
-                    else:
-                        missing_sum = sell_option_result.required_initial_margin - sell_option_result.initial_margin_after
-                        await self.try_to_resolve_margin_lock(candidate, missing_sum)
-            else:
-                self.try_to_publish_available_cheap_option('C')
-
+        await self.handle_call_sell_failure(call_option, sell_option_result, call_options, open_trades)
         self.no_call_options_above_minimal_sell_price = sell_option_result.no_option_above_minimal_sell_price
         return sell_option_result
+
+    async def handle_call_sell_failure(self, call_option, sell_option_result, call_options, open_trades):
+        if sell_option_result.required_initial_margin and not is_switched_to_overnight_trading():
+            result = await self.try_to_reduce_initial_margin_for_call_options(call_option, sell_option_result.required_initial_margin, sell_option_result.initial_margin_after, call_options)
+            position_options = self.trading_bot.get_short_options()
+            number_of_position_calls = sum([-position.position for position in position_options if position.contract.right == 'C'])
+            number_of_position_puts = sum([-position.position for position in position_options if position.contract.right == 'P'])
+            if result == FAILED and number_of_position_calls * 2 < number_of_position_puts:
+                logger.info(f"Margin lock detected, only {number_of_position_calls} call options versus {number_of_position_puts} put options")
+                position_puts = [position.contract for position in position_options if position.contract.right == 'P']
+                candidate = min(position_puts, key=lambda option: option.strike)
+                is_margin_lock_trade_already_open = any(trade.contract.right == 'P' and trade.contract.strike == candidate.strike and trade.order.action.upper() == 'BUY' and trade.order.limit > 0.05 for trade in open_trades)
+                if is_margin_lock_trade_already_open:
+                    logger.info(f"Margin lock buy trade for {get_option_name(candidate)} is already open")
+                else:
+                    missing_sum = sell_option_result.required_initial_margin - sell_option_result.initial_margin_after
+                    await self.try_to_resolve_margin_lock(candidate, missing_sum)
+        else:
+            self.try_to_publish_available_cheap_option('C')
 
     def try_to_publish_available_cheap_option(self, right):
         strike_finder = StrikeFinder()
@@ -374,27 +372,29 @@ class OpportunityExplorer:
         if not sell_option_result.success:
             logger.warning(f"Failed to sell 1 options of {get_option_name(put_option)}")
 
-            if sell_option_result.required_initial_margin and not is_switched_to_overnight_trading():
-                result = await self.try_to_reduce_initial_margin_for_put_options(put_option, sell_option_result.required_initial_margin, sell_option_result.initial_margin_after, put_options)
-                position_options = self.trading_bot.get_short_options()
-                number_of_position_calls = sum([-position.position for position in position_options if position.contract.right == 'C'])
-                number_of_position_puts = sum([-position.position for position in position_options if position.contract.right == 'P'])
-                if result == FAILED and number_of_position_puts * 2 < number_of_position_calls:
-                    logger.info(f"Margin lock detected, only {number_of_position_puts} put options versus {number_of_position_calls} call options")
-                    position_calls = [position.contract for position in position_options if
-                                      position.contract.right == 'C']
-                    candidate = max(position_calls, key=lambda option: option.strike)
-                    is_margin_lock_trade_already_open = any(trade.contract.right == 'C' and trade.contract.strike == candidate.strike and trade.order.action.upper() == 'BUY' and trade.order.limit > 0.05 for trade in open_trades)
-                    if is_margin_lock_trade_already_open:
-                        logger.info(f"Margin lock buy trade for {get_option_name(candidate)} is already open")
-                    else:
-                        missing_sum = sell_option_result.required_initial_margin - sell_option_result.initial_margin_after
-                        await self.try_to_resolve_margin_lock(candidate, missing_sum)
-            else:
-                self.try_to_publish_available_cheap_option('P')
-
+        await self.handle_put_sell_failure(put_option, sell_option_result, put_options, open_trades)
         self.no_put_options_above_minimal_sell_price = sell_option_result.no_option_above_minimal_sell_price
         return sell_option_result
+
+    async def handle_put_sell_failure(self, put_option, sell_option_result, put_options, open_trades):
+        if sell_option_result.required_initial_margin and not is_switched_to_overnight_trading():
+            result = await self.try_to_reduce_initial_margin_for_put_options(put_option, sell_option_result.required_initial_margin, sell_option_result.initial_margin_after, put_options)
+            position_options = self.trading_bot.get_short_options()
+            number_of_position_calls = sum([-position.position for position in position_options if position.contract.right == 'C'])
+            number_of_position_puts = sum([-position.position for position in position_options if position.contract.right == 'P'])
+            if result == FAILED and number_of_position_puts * 2 < number_of_position_calls:
+                logger.info(f"Margin lock detected, only {number_of_position_puts} put options versus {number_of_position_calls} call options")
+                position_calls = [position.contract for position in position_options if
+                                    position.contract.right == 'C']
+                candidate = max(position_calls, key=lambda option: option.strike)
+                is_margin_lock_trade_already_open = any(trade.contract.right == 'C' and trade.contract.strike == candidate.strike and trade.order.action.upper() == 'BUY' and trade.order.limit > 0.05 for trade in open_trades)
+                if is_margin_lock_trade_already_open:
+                    logger.info(f"Margin lock buy trade for {get_option_name(candidate)} is already open")
+                else:
+                    missing_sum = sell_option_result.required_initial_margin - sell_option_result.initial_margin_after
+                    await self.try_to_resolve_margin_lock(candidate, missing_sum)
+        else:
+            self.try_to_publish_available_cheap_option('P')
 
     def cancel_all_buy_trades(self, open_buy_trades, option):
         open_buy_trades_for_option = find_all_buy_trades(option, open_buy_trades)

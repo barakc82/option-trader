@@ -65,7 +65,7 @@ class MarketDataFetcher:
             logger.info(f"Registered update handler for {get_option_name(ticker.contract)}")
 
     async def get_spx_price(self):
-        spx = Index('SPX', 'CBOE', 'USD')
+        spx = Index(symbol='SPX', exchange='CBOE', currency='USD')
         spx_ticker = self.ib.ticker(spx)
 
         if not spx_ticker:
@@ -366,7 +366,7 @@ class MarketDataFetcher:
 
         if not options_obtained:
             logger.info(f"Fetching fresh options for {date}. SPX Last Price: {spx_price}")
-            spx = Index('SPX', 'CBOE', 'USD')
+            spx = Index(symbol='SPX', exchange='CBOE', currency='USD')
             chains = await self.get_chains(spx)
             chain = next(c for c in chains if c.exchange == 'CBOE' and c.tradingClass == 'SPXW')
             
