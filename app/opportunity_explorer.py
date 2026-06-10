@@ -274,8 +274,12 @@ class OpportunityExplorer:
                     position_puts = [position.contract for position in position_options if
                                      position.contract.right == 'P']
                     candidate = min(position_puts, key=lambda option: option.strike)
-                    missing_sum = sell_option_result.required_initial_margin - sell_option_result.initial_margin_after
-                    await self.try_to_resolve_margin_lock(candidate, missing_sum)
+                    is_margin_lock_trade_already_open = any(trade.contract.right == 'P' and trade.contract.strike == candidate.strike and trade.order.action.upper() == 'BUY' and trade.order.limit > 0.05 for trade in open_trades)
+                    if is_margin_lock_trade_already_open:
+                        logger.info(f"Margin lock buy trade for {get_option_name(candidate)} is already open")
+                    else:
+                        missing_sum = sell_option_result.required_initial_margin - sell_option_result.initial_margin_after
+                        await self.try_to_resolve_margin_lock(candidate, missing_sum)
             else:
                 self.try_to_publish_available_cheap_option('C')
 
@@ -380,8 +384,12 @@ class OpportunityExplorer:
                     position_calls = [position.contract for position in position_options if
                                       position.contract.right == 'C']
                     candidate = max(position_calls, key=lambda option: option.strike)
-                    missing_sum = sell_option_result.required_initial_margin - sell_option_result.initial_margin_after
-                    await self.try_to_resolve_margin_lock(candidate, missing_sum)
+                    is_margin_lock_trade_already_open = any(trade.contract.right == 'C' and trade.contract.strike == candidate.strike and trade.order.action.upper() == 'BUY' and trade.order.limit > 0.05 for trade in open_trades)
+                    if is_margin_lock_trade_already_open:
+                        logger.info(f"Margin lock buy trade for {get_option_name(candidate)} is already open")
+                    else:
+                        missing_sum = sell_option_result.required_initial_margin - sell_option_result.initial_margin_after
+                        await self.try_to_resolve_margin_lock(candidate, missing_sum)
             else:
                 self.try_to_publish_available_cheap_option('P')
 

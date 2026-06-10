@@ -205,6 +205,8 @@ class OptionSafeguard:
 
         if stop_loss * 0.5 <= current_price < stop_loss:
             logger.info(f"Watching the current price of {get_option_name(option)}: {current_price:.2f}, stop loss is at {stop_loss:.2f}")
+
+        if current_price < stop_loss or math.isnan(current_price):
             return
 
         if not high_limit_buy_trade:

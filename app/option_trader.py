@@ -162,23 +162,28 @@ class OptionTrader:
                             trade.order.orderType == 'LMT' and trade.order.action.upper() == 'BUY']
         for buy_limit_trade in buy_limit_trades:
             option = buy_limit_trade.contract
-            corresponding_position_found = any(option.conId == position.contract.conId for position in positions)
+            corresponding_position = next((position for position in positions if option.conId == position.contract.conId), None)
             option_ask_value = self.market_data_fetcher.get_ask(option)
             price_level = self.opportunity_explorer.last_call_option_price if option.right == 'C' else self.opportunity_explorer.last_put_option_price
             time_passed_since_submission = get_time_passed_since_submission(buy_limit_trade)
 
-            if corresponding_position_found and option_ask_value == 0.05:
-                if price_level < MINIMAL_SELL_PRICE_TO_CLOSE_POSITION and time_passed_since_submission > POSITION_BUYBACK_ORDER_EXPIRATION_TIME:
+            if corresponding_position and option_ask_value == 0.05:
+                position_quantity = abs(corresponding_position.position)
+                if position_quantity != buy_limit_trade.remaining():
+                    logger.info(f"Cancelling {get_option_name(option)} because the position has {position_quantity} units "
+                                f"while there are {buy_limit_trade.remaining()} remaining units in the trade")
+                    self.trading_bot.cancel_trade(buy_limit_trade)
+                elif price_level < MINIMAL_SELL_PRICE_TO_CLOSE_POSITION and time_passed_since_submission > POSITION_BUYBACK_ORDER_EXPIRATION_TIME:
                     logger.info(f"Cancelling {get_option_name(option)} because it has the current price level for "
                                 f"'{option.right}' is too low ({price_level}) for position buyback")
                     self.trading_bot.cancel_trade(buy_limit_trade)
 
-            if not corresponding_position_found and option_ask_value > 0.05:
+            if not corresponding_position and option_ask_value > 0.05:
                 logger.info(f"Cancelling {get_option_name(option)} because it has no corresponding "
                             f"position and it has an ask value of {option_ask_value}, so no reason to keep it")
                 self.trading_bot.cancel_trade(buy_limit_trade)
 
-            if not corresponding_position_found and option_ask_value == 0.05:
+            if not corresponding_position and option_ask_value == 0.05:
                 if price_level < MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION:
                     logger.info(f"Cancelling {get_option_name(option)} because it has the current price level for "
                                 f"'{option.right}' is too low ({price_level}) for general margin reduction")
