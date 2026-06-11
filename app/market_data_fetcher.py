@@ -153,10 +153,6 @@ class MarketDataFetcher:
         await self.qualify(contracts)
         await self.ensure_market_data_type()
 
-        # Filter out what we already have active
-        # missing = [c for c in contracts if self.ib.ticker(c) is None]
-
-        write_heartbeat()
         new_tickers = [self.ib.reqMktData(c) for c in contracts]
 
         timeout = 5 * math.pow(len(contracts), 0.2)

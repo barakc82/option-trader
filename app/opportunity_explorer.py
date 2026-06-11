@@ -218,37 +218,31 @@ class OpportunityExplorer:
 
     async def try_to_sell_call_options(self, open_trades, options):
         call_options = [option for option in options if option.right == 'C']
-        sell_option_result = SellOptionResult()
         if not call_options:
             logger.error("No call options found")
-            return sell_option_result
+            return SellOptionResult()
 
         target_delta_calculator = TargetDeltaCalculator()
         target_delta = await target_delta_calculator.calculate_target_delta('C')
-        strike_finder = StrikeFinder()
-        call_option = await strike_finder.get_low_delta_call_option(call_options, target_delta)
+        
+        call_option = await self.find_call_candidate(call_options, target_delta)
         if not call_option:
-            logger.error("Call option candidate for selling could not be found")
-            return sell_option_result
+            return SellOptionResult()
 
         estimated_sell_price = await self.estimate_sell_price(call_option)
-        if self.last_call_option_price != estimated_sell_price and not math.isnan(estimated_sell_price):
-            logger.info(f"The current price level for call options changed from {self.last_call_option_price} to {estimated_sell_price}")
-            self.last_call_option_price = estimated_sell_price
+        self._update_last_option_price(estimated_sell_price, 'C')
 
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss('C')
         if stop_loss_per_option < estimated_sell_price:
             logger.warning(f"Failed to sell {get_option_name(call_option)} since the acceptable loss ({stop_loss_per_option:2f})"
                            f" is smaller than the option price ({estimated_sell_price})")
-            return sell_option_result
+            return SellOptionResult()
 
-        logger.info(f"Testing sell 2 options of {get_option_name(call_option)}")
-        max_options_for_market_rise = await calculate_max_options_for_market_rise(call_option)
+        max_options_for_market_rise = await self.calculate_max_allowed_call_options(call_option)
         if not max_options_for_market_rise:
-            logger.warning(f"Failed to sell {get_option_name(call_option)} due to projected exposure fee")
-            return sell_option_result
+            return SellOptionResult()
 
-        self.cancel_all_buy_trades(open_trades, call_option)  # To allow a sell
+        self.cancel_all_buy_trades(open_trades, call_option)
         await asyncio.sleep(0.2)
 
         sell_option_result = await self.try_to_sell(call_option, 2, target_delta)
@@ -283,6 +277,33 @@ class OpportunityExplorer:
                     await self.try_to_resolve_margin_lock(candidate, missing_sum)
         else:
             self.try_to_publish_available_cheap_option('C')
+
+    async def find_call_candidate(self, call_options, target_delta):
+        strike_finder = StrikeFinder()
+        call_option = await strike_finder.get_low_delta_call_option(call_options, target_delta)
+        if not call_option:
+            logger.error("Call option candidate for selling could not be found")
+        return call_option
+
+    async def calculate_max_allowed_call_options(self, call_option):
+        logger.info(f"Testing sell capacity for {get_option_name(call_option)}")
+        max_options = await calculate_max_options_for_market_rise(call_option)
+        if not max_options:
+            logger.warning(f"Failed to sell {get_option_name(call_option)} due to projected exposure fee")
+        return max_options
+
+    def _update_last_option_price(self, price, right):
+        if math.isnan(price):
+            return
+
+        if right == 'C':
+            if self.last_call_option_price != price:
+                logger.info(f"The current price level for call options changed from {self.last_call_option_price} to {price}")
+                self.last_call_option_price = price
+        else:
+            if self.last_put_option_price != price:
+                logger.info(f"The current price level for put options changed from {self.last_put_option_price} to {price}")
+                self.last_put_option_price = price
 
     def try_to_publish_available_cheap_option(self, right):
         strike_finder = StrikeFinder()
@@ -328,37 +349,30 @@ class OpportunityExplorer:
 
     async def try_to_sell_put_options(self, open_trades, options):
         put_options = [option for option in options if option.right == 'P']
-        sell_option_result = SellOptionResult()
         if not put_options:
             logger.error("Np put options found")
-            return sell_option_result
+            return SellOptionResult()
+
         target_delta_calculator = TargetDeltaCalculator()
         target_delta = await target_delta_calculator.calculate_target_delta('P')
-        strike_finder = StrikeFinder()
 
-        logger.info("Searching for a suitable low-delta put option")
-        put_option = await strike_finder.get_low_delta_put_option(put_options, target_delta)
+        put_option = await self.find_put_candidate(put_options, target_delta)
         if not put_option:
-            logger.error("Put option candidate for selling could not be found")
-            return sell_option_result
+            return SellOptionResult()
 
         estimated_sell_price = await self.estimate_sell_price(put_option)
-        if self.last_put_option_price != estimated_sell_price and not math.isnan(estimated_sell_price):
-            logger.info(f"The current price level for put options changed from {self.last_put_option_price} to {estimated_sell_price}")
-            self.last_put_option_price = estimated_sell_price
+        self._update_last_option_price(estimated_sell_price, 'P')
 
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss('P')
         if stop_loss_per_option < estimated_sell_price:
             logger.warning(f"Failed to sell {get_option_name(put_option)} since the acceptable loss ({stop_loss_per_option}) is smaller than the option price ({estimated_sell_price})")
-            return sell_option_result
+            return SellOptionResult()
 
-        logger.info(f"Testing sell 2 options of {get_option_name(put_option)}")
-        max_options_for_market_drop = await calculate_max_options_for_market_drop(put_option)
+        max_options_for_market_drop = await self.calculate_max_allowed_put_options(put_option)
         if not max_options_for_market_drop:
-            logger.warning(f"Failed to sell {get_option_name(put_option)} due to projected exposure fee")
-            return sell_option_result
+            return SellOptionResult()
 
-        self.cancel_all_buy_trades(open_trades, put_option)  # To allow a sell
+        self.cancel_all_buy_trades(open_trades, put_option)
         await asyncio.sleep(0.2)
 
         quantity = min(max_options_for_market_drop, 2)
@@ -366,15 +380,32 @@ class OpportunityExplorer:
         if sell_option_result.success:
             return sell_option_result
 
-        logger.warning(f"Failed to sell 2 options of {get_option_name(put_option)}")
-        logger.info(f"Testing sell 1 option of {get_option_name(put_option)}")
-        sell_option_result = await self.try_to_sell(put_option, 1, target_delta)
-        if not sell_option_result.success:
+        logger.warning(f"Failed to sell {quantity} options of {get_option_name(put_option)}")
+        if quantity == 2:
+            logger.info(f"Testing sell 1 option of {get_option_name(put_option)}")
+            sell_option_result = await self.try_to_sell(put_option, 1, target_delta)
+            if sell_option_result.success:
+                return sell_option_result
             logger.warning(f"Failed to sell 1 options of {get_option_name(put_option)}")
 
         await self.handle_put_sell_failure(put_option, sell_option_result, put_options, open_trades)
         self.no_put_options_above_minimal_sell_price = sell_option_result.no_option_above_minimal_sell_price
         return sell_option_result
+
+    async def find_put_candidate(self, put_options, target_delta):
+        strike_finder = StrikeFinder()
+        logger.info("Searching for a suitable low-delta put option")
+        put_option = await strike_finder.get_low_delta_put_option(put_options, target_delta)
+        if not put_option:
+            logger.error("Put option candidate for selling could not be found")
+        return put_option
+
+    async def calculate_max_allowed_put_options(self, put_option):
+        logger.info(f"Testing sell capacity for {get_option_name(put_option)}")
+        max_options = await calculate_max_options_for_market_drop(put_option)
+        if not max_options:
+            logger.warning(f"Failed to sell {get_option_name(put_option)} due to projected exposure fee")
+        return max_options
 
     async def handle_put_sell_failure(self, put_option, sell_option_result, put_options, open_trades):
         if sell_option_result.required_initial_margin and not is_switched_to_overnight_trading():
