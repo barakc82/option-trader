@@ -18,7 +18,7 @@ from utilities.ib_utils import is_hollow, req_id_to_comment, find_high_limit_buy
 
 logger = logging.getLogger(__name__)
 
-MAX_DEVIATION = 0.1
+MAX_DEVIATION = 0.15
 MIN_PRICE_THRESHOLD = 1
 
 class OptionSafeguard:
@@ -124,14 +124,37 @@ class OptionSafeguard:
             logger.error(f"Error reading safeguard config: {e}")
 
     def is_unfair_ask_value(self, option, spy_option):
-        ticker = option.ticker
-        spx_ask = ticker.ask
+        spx_ask = option.ticker.ask
         if spx_ask < MIN_PRICE_THRESHOLD:
             return False
 
-        spy_ticker = self.market_data_fetcher.get_ticker(spy_option)
+        spy_option_ticker = self.market_data_fetcher.get_ticker(spy_option)
         spy_name = get_spy_option_name(spy_option)
 
+        if not self._validate_spy_ticker(option, spy_option, spy_option_ticker, spy_name):
+            return False
+
+        adjusted_spy_ask, indices_difference = self._calculate_adjusted_spy_ask(spy_option_ticker)
+        deviation = (spx_ask - adjusted_spy_ask) / adjusted_spy_ask
+
+        if int(time.time() * 10) % 1000 == 0:
+            logger.info(f"Checking option {get_option_name(option)} for unfair ask using {spy_name}. "
+                        f"SPX ask is {spx_ask} and the adjusted SPY ask is {adjusted_spy_ask:.2f}, "
+                        f"the deviation is {deviation:.2f}, SPX premium is {indices_difference:.2f}")
+
+        if deviation < MAX_DEVIATION:
+            return False
+
+        now = time.time()
+        if now - self.last_unfair_ask_warning_time >= 10:
+            logger.warning(
+                f"Unfair ask for {get_option_name(option)} against {spy_name}: "
+                f"SPX Ask: {spx_ask}, SPY Ask: {spy_option_ticker.ask} "
+                f"(Adjusted: {adjusted_spy_ask:.2f}, SPX premium : {indices_difference:.2f})")
+            self.last_unfair_ask_warning_time = now
+        return True
+
+    def _validate_spy_ticker(self, option, spy_option, spy_ticker, spy_name):
         if not spy_ticker:
             logger.info(f"Matching ticker for {get_option_name(option)} ({spy_name}, id: {id(spy_option)}) not found in tickers cache. "
                         f"Invalidating subscription in SubscriptionManager. Unfairness is not detected")
@@ -143,23 +166,27 @@ class OptionSafeguard:
                         f"{spy_ticker.ask}. Unfairness is not detected")
             return False
 
-        spx_premium = self.market_data_fetcher.calculate_spy_ask(spy_ticker)
-        adjusted_spy_ask = spy_ticker.ask * 10.0 + spx_premium
-        deviation = (spx_ask - adjusted_spy_ask) / adjusted_spy_ask
-
-        if int(time.time() * 10) % 1000 == 0:
-            logger.info(f"Checking option {get_option_name(option)} for unfair ask using {spy_name}. SPX ask is {spx_ask} and the adjusted SPY ask is {adjusted_spy_ask:.2f}, the deviation is {deviation:.2f}, SPX premium is {spx_premium:.2f}")
-
-        if deviation < MAX_DEVIATION:
+        greeks = spy_ticker.askGreeks or spy_ticker.modelGreeks
+        if not greeks:
+            logger.info(f"Matching ticker for {get_option_name(option)} ({spy_name}) has no ask greeks nor model greeks."
+                        f" Unfairness is not detected")
             return False
 
-        now = time.time()
-        if now - self.last_unfair_ask_warning_time >= 10:
-            logger.warning(
-                f"Unfair ask for {get_option_name(option)} against {spy_name}: SPX Ask: {spx_ask}, SPY Ask: {spy_ticker.ask} (Adjusted: {adjusted_spy_ask:.2f}, SPX premium : {spx_premium:.2f})")
-            self.last_unfair_ask_warning_time = now
+        if math.isnan(greeks.delta) or math.isnan(greeks.gamma):
+            logger.info(f"Matching ticker for {get_option_name(option)} ({spy_name}) has an invalid delta and gamma values: "
+                        f"delta: {greeks.delta}, gamma: {greeks.gamma}. Unfairness is not detected")
+            return False
+
         return True
 
+    def _calculate_adjusted_spy_ask(self, spy_ticker):
+        greeks = spy_ticker.askGreeks or spy_ticker.modelGreeks
+        indices_difference = self.market_data_fetcher.calculate_indices_difference()
+        error_spy = indices_difference / 10.0
+        delta_component = greeks.delta * error_spy
+        gamma_component = 0.5 * greeks.gamma * (error_spy ** 2)
+        adjusted_spy_baseline = spy_ticker.ask + delta_component + gamma_component
+        return 10.0 * adjusted_spy_baseline, indices_difference
 
     async def guard_current_positions(self):
         logger.debug("Checking current positions")
@@ -199,7 +226,7 @@ class OptionSafeguard:
         if ensure_ticker_result == ERROR:
             return
 
-        current_price = self.calculate_current_price(option)
+        current_price = option.ticker.marketPrice()
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss(option.right)
         stop_loss = position.avgCost / 100 + stop_loss_per_option
         high_limit_buy_trade = find_high_limit_buy_trade(option, open_trades)
@@ -223,12 +250,6 @@ class OptionSafeguard:
 
         await self.handle_high_limit_buy_trade(high_limit_buy_trade, position, stop_loss_per_option)
 
-    def calculate_current_price(self, option) -> Any:
-        current_price = (option.ticker.bid + option.ticker.ask) / 2
-        if math.isnan(option.ticker.bid):
-            current_price = option.ticker.last
-        return current_price
-
     async def handle_high_limit_buy_trade(self, high_limit_buy_trade: Trade, position,
                                           stop_loss_per_option: float):
         assert high_limit_buy_trade
@@ -240,7 +261,7 @@ class OptionSafeguard:
                 f"Skipping modification for {get_option_name(option)} as it was modified less than 2 seconds ago")
             return
 
-        current_price = self.calculate_current_price(option)
+        current_price = option.ticker.marketPrice()
         stop_loss = position.avgCost / 100 + stop_loss_per_option
         current_limit_price = high_limit_buy_trade.order.lmtPrice
         logger.warning(
@@ -272,9 +293,7 @@ class OptionSafeguard:
 
         spy_ticker = self.ib.ticker(spy_option)
         if spy_ticker:
-            spy_current_price = (spy_ticker.bid + spy_ticker.ask) / 2
-            if math.isnan(spy_ticker.bid):
-                spy_current_price = spy_ticker.last
+            spy_current_price = spy_ticker.marketPrice()
 
             if not math.isnan(spy_current_price):
                 spy_current_adjusted_price = spy_current_price * 10
