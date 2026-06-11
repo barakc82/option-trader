@@ -1,5 +1,9 @@
 import asyncio
 import math
+import time
+from collections import deque
+from dataclasses import dataclass
+from datetime import datetime
 from ib_insync import Index, Option
 from utilities.utils import *
 
@@ -29,6 +33,13 @@ def get_implied_volatility(ticker):
         return ticker.modelGreeks.impliedVol
     return math.nan
 
+@dataclass
+class IndexPricePair:
+    spx_price: float
+    spy_price: float
+    time: datetime
+
+
 class MarketDataFetcher:
     _instance = None
 
@@ -49,6 +60,7 @@ class MarketDataFetcher:
             self.previous_spx_value = math.nan
             self.spx = Index(symbol='SPX', exchange='CBOE', currency='USD')
             self.spy = Index(symbol='SPY', exchange='CBOE', currency='USD')
+            self.index_price_history = deque(maxlen=100)
 
             # Use a lock for market data type switching
 
@@ -85,6 +97,13 @@ class MarketDataFetcher:
             self.previous_spx_value = price
 
         return price
+
+    def calculate_indices_difference(self):
+        if not self.index_price_history:
+            return 0.0
+
+        total_diff = sum(entry.spx_price - 10 * entry.spy_price for entry in self.index_price_history)
+        return total_diff / len(self.index_price_history)
 
     def get_cached_spx_price(self):
         if math.isnan(self.previous_spx_value):
@@ -137,6 +156,20 @@ class MarketDataFetcher:
         if now - last_time < throttle_interval:
             return
         ticker.last_processed_time = now
+
+        spx_ticker = self.ib.ticker(self.spx)
+        spy_ticker = self.ib.ticker(self.spy)
+        if (spx_ticker and spy_ticker and spx_ticker.time and spy_ticker.time and
+                not math.isnan(spx_ticker.last) and not math.isnan(spy_ticker.last)):
+            if abs((spx_ticker.time - spy_ticker.time).total_seconds()) <= 30:
+                new_entry = IndexPricePair(
+                    spx_price=spx_ticker.last,
+                    spy_price=spy_ticker.last,
+                    time=datetime.now()
+                )
+                if (not self.index_price_history or
+                    (new_entry.time - self.index_price_history[-1].time).total_seconds() >= 15 * 60):
+                    self.index_price_history.append(new_entry)
 
         delta = get_delta(ticker)
         delta_str = f"{abs(delta):.3f}" if delta is not None else "N/A"

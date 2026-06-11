@@ -48,6 +48,7 @@ class OptionSafeguard:
             self.enable_spy_option_hedging = False
             self.last_modification_times = {}
             self.last_run_end_time = 0
+            self.last_unfair_ask_warning_time = 0
             self._initialized = True
 
     async def run(self):
@@ -142,18 +143,23 @@ class OptionSafeguard:
                         f"{spy_ticker.ask}. Unfairness is not detected")
             return False
 
-        adjusted_spy_ask = spy_ticker.ask * 10.0
+        spx_premium = self.market_data_fetcher.calculate_spy_ask(spy_ticker)
+        adjusted_spy_ask = spy_ticker.ask * 10.0 + spx_premium
         deviation = (spx_ask - adjusted_spy_ask) / adjusted_spy_ask
 
         if int(time.time() * 10) % 1000 == 0:
-            logger.info(f"Checking option {get_option_name(option)} for unfair ask using {spy_name}. SPX ask is {spx_ask} and the adjusted SPY ask is {adjusted_spy_ask:.2f}, the deviation is {deviation:.2f}")
+            logger.info(f"Checking option {get_option_name(option)} for unfair ask using {spy_name}. SPX ask is {spx_ask} and the adjusted SPY ask is {adjusted_spy_ask:.2f}, the deviation is {deviation:.2f}, SPX premium is {spx_premium:.2f}")
 
         if deviation < MAX_DEVIATION:
             return False
 
-        logger.warning(
-            f"Unfair ask for {get_option_name(option)} against {spy_name}: SPX Ask={spx_ask}, SPY Ask={spy_ticker.ask} (Adjusted={adjusted_spy_ask})")
+        now = time.time()
+        if now - self.last_unfair_ask_warning_time >= 10:
+            logger.warning(
+                f"Unfair ask for {get_option_name(option)} against {spy_name}: SPX Ask: {spx_ask}, SPY Ask: {spy_ticker.ask} (Adjusted: {adjusted_spy_ask:.2f}, SPX premium : {spx_premium:.2f})")
+            self.last_unfair_ask_warning_time = now
         return True
+
 
     async def guard_current_positions(self):
         logger.debug("Checking current positions")
