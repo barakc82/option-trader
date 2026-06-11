@@ -242,8 +242,7 @@ class OpportunityExplorer:
         if not max_options_for_market_rise:
             return SellOptionResult()
 
-        self.cancel_all_buy_trades(open_trades, call_option)
-        await asyncio.sleep(0.2)
+        await self.cancel_all_buy_trades(open_trades, call_option)
 
         sell_option_result = await self.try_to_sell(call_option, 2, target_delta)
         if sell_option_result.success:
@@ -372,8 +371,7 @@ class OpportunityExplorer:
         if not max_options_for_market_drop:
             return SellOptionResult()
 
-        self.cancel_all_buy_trades(open_trades, put_option)
-        await asyncio.sleep(0.2)
+        await self.cancel_all_buy_trades(open_trades, put_option)
 
         quantity = min(max_options_for_market_drop, 2)
         sell_option_result = await self.try_to_sell(put_option, quantity, target_delta)
@@ -427,14 +425,20 @@ class OpportunityExplorer:
         else:
             self.try_to_publish_available_cheap_option('P')
 
-    def cancel_all_buy_trades(self, open_buy_trades, option):
+    async def cancel_all_buy_trades(self, open_buy_trades, option):
         open_buy_trades_for_option = find_all_buy_trades(option, open_buy_trades)
+        if not open_buy_trades_for_option:
+            return
+
         for open_buy_trade in open_buy_trades_for_option:
-            logger.debug(
-                f"Checking if cancel needed for the buy order of {get_option_name(open_buy_trade.contract)}, comparing between {option.conId} and {open_buy_trade.contract.conId}")
-            if option.conId == open_buy_trade.contract.conId:
-                logger.info(f"Cancelling the buy order for {get_option_name(option)}")
-                self.trading_bot.cancel_trade(open_buy_trade)
+            logger.info(f"Cancelling the buy order for {get_option_name(option)}")
+            self.trading_bot.cancel_trade(open_buy_trade)
+
+        # Wait for all trades to reach a final status
+        for _ in range(50):
+            if all(trade.isDone() for trade in open_buy_trades_for_option):
+                break
+            await asyncio.sleep(0.1)
 
 
     async def try_to_reduce_initial_margin_for_call_options(self, call_option_to_be_sold, required_initial_margin, initial_margin_after_sell, call_options):
