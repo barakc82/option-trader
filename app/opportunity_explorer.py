@@ -268,7 +268,7 @@ class OpportunityExplorer:
                 logger.info(f"Margin lock detected, only {number_of_position_calls} call options versus {number_of_position_puts} put options")
                 position_puts = [position.contract for position in position_options if position.contract.right == 'P']
                 candidate = min(position_puts, key=lambda option: option.strike)
-                is_margin_lock_trade_already_open = any(trade.contract.right == 'P' and trade.contract.strike == candidate.strike and trade.order.action.upper() == 'BUY' and trade.order.limit > 0.05 for trade in open_trades)
+                is_margin_lock_trade_already_open = any(trade.contract.right == 'P' and trade.contract.strike == candidate.strike and trade.order.action.upper() == 'BUY' and trade.order.lmtPrice > 0.05 for trade in open_trades)
                 if is_margin_lock_trade_already_open:
                     logger.info(f"Margin lock buy trade for {get_option_name(candidate)} is already open")
                 else:
@@ -416,7 +416,7 @@ class OpportunityExplorer:
                 position_calls = [position.contract for position in position_options if
                                     position.contract.right == 'C']
                 candidate = max(position_calls, key=lambda option: option.strike)
-                is_margin_lock_trade_already_open = any(trade.contract.right == 'C' and trade.contract.strike == candidate.strike and trade.order.action.upper() == 'BUY' and trade.order.limit > 0.05 for trade in open_trades)
+                is_margin_lock_trade_already_open = any(trade.contract.right == 'C' and trade.contract.strike == candidate.strike and trade.order.action.upper() == 'BUY' and trade.order.lmtPrice > 0.05 for trade in open_trades)
                 if is_margin_lock_trade_already_open:
                     logger.info(f"Margin lock buy trade for {get_option_name(candidate)} is already open")
                 else:
