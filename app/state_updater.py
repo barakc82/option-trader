@@ -96,9 +96,7 @@ class StateUpdater:
         # 1. Gather account metrics
         state['cash'] = round(self.account_data.get_cash_balance_value())
         excess_liq = self.account_data.get_cached_excess_liquidity()
-        lookahead_excess_liq = await self.account_data.get_lookahead_excess_liquidity()
         state['excess_liquidity'] = '' if excess_liq == sys.float_info.max else round(excess_liq)
-        state['lookahead_excess_liquidity'] = '' if lookahead_excess_liq == sys.float_info.max else round(lookahead_excess_liq)
         state['cushion'] = round(self.account_data.get_cached_cushion(), 2)
         
         # Set last_updated in Israel time

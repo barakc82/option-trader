@@ -155,9 +155,6 @@
       <p *ngIf="state.excess_liquidity !== ''">
         <strong>Excess Liquidity:</strong> {{ state.excess_liquidity }}
       </p>
-      <p *ngIf="state.lookahead_excess_liquidity !== ''">
-        <strong>Lookahead Excess Liquidity:</strong> {{ state.lookahead_excess_liquidity }}
-      </p>
       <p><strong>Liquidation Alert Time:</strong> {{ state.liquidation_alert_time === 0 
         ? 'No alert' 
         : (state.liquidation_alert_time * 1000 | date:'dd/MM/yy HH:mm') }}

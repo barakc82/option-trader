@@ -42,7 +42,6 @@ export interface Position {
     last_updated: string;
     spx_price: number | null;
     excess_liquidity: string;
-    lookahead_excess_liquidity: string;
     cash: number;
     cushion: number;
     call_target_delta: number;
