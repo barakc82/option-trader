@@ -70,7 +70,7 @@ class SubscriptionManager:
 
         contracts_missing_tickers = []
         active_tickers = self.ib.wrapper.ticker2ReqId['mktData'].keys()
-        if time.time() % 10000:
+        if time.time() % 100000:
             for active_ticker in active_tickers:
                 contract = active_ticker.contract
                 logger.info(f"Subscribed to {contract.symbol} {contract.secType} {contract.right} {contract.strike}")
@@ -123,6 +123,7 @@ class SubscriptionManager:
         for position in spx_positions:
             spx_contract = position.contract
             if spx_contract.conId not in self.spx_to_spy_map:
+                logger.info(f"No SPY contract found for {get_option_name(spx_contract)}")
                 spy_contract = self.create_matching_spy_contract(spx_contract)
                 new_spy_contracts.append((spx_contract, spy_contract))
         
@@ -137,7 +138,7 @@ class SubscriptionManager:
                     self.spx_to_spy_map[spx_contract.conId] = spy_contract
                     logger.info(f"Subscribed to SPY hedge {get_spy_option_name(spy_contract)} for SPX position {get_option_name(spx_contract)}")
                 else:
-                    logger.error(f"Failed to qualify matching SPY option for {get_option_name(spx_contract)}")
+                    logger.error(f"Failed to subscribe matching SPY option for {get_option_name(spx_contract)}")
 
         # 2. Unsubscribe from SPY options for closed SPX positions
         closed_spx_con_ids = [con_id for con_id in list(self.spx_to_spy_map.keys()) if con_id not in current_spx_con_ids]

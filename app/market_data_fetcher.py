@@ -127,7 +127,7 @@ class MarketDataFetcher:
         option = ticker.contract
 
         # Slower updates for low-gamma options (further out of money or illiquid)
-        throttle_interval = 0.5
+        throttle_interval = 1.0 if option.symbol == 'SPY' else 0.5
         if (math.isnan(gamma) or gamma < 0.002):
             throttle_interval = 10.0 if option.symbol == 'SPY' else 5.0
         if math.isnan(price):
@@ -150,7 +150,7 @@ class MarketDataFetcher:
         if not contracts:
             return
 
-        await self.qualify(contracts)
+        contracts = await self.qualify(contracts)
         await self.ensure_market_data_type()
 
         new_tickers = [self.ib.reqMktData(c) for c in contracts]
@@ -162,7 +162,6 @@ class MarketDataFetcher:
                 break
             await asyncio.sleep(0.1)
 
-        write_heartbeat()
         for ticker in new_tickers:
             self.register_ticker(ticker)
 
