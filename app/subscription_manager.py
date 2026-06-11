@@ -74,11 +74,18 @@ class SubscriptionManager:
             for active_ticker in active_tickers:
                 contract = active_ticker.contract
                 logger.info(f"Subscribed to {contract.symbol} {contract.secType} {contract.right} {contract.strike}")
-        active_contracts = [ticker.contract for ticker in active_tickers if ticker.contract.symbol == 'SPX' and ticker.contract.secType == 'OPT']
+
+        active_indices = [ticker.contract for ticker in active_tickers if ticker.contract.secType == 'IND']
+        for required_index in [self.market_data_fetcher.spx, self.market_data_fetcher.spy]:
+            if required_index not in active_indices:
+                logger.info(f"Going to subscribe to Index {required_index.symbol}")
+                contracts_missing_tickers.append(required_index)
+
+        active_spx_options = [ticker.contract for ticker in active_tickers if ticker.contract.symbol == 'SPX' and ticker.contract.secType == 'OPT']
 
         for required_contract in required_contracts.values():
             is_contract_subscribed = False
-            for active_contract in active_contracts:
+            for active_contract in active_spx_options:
                 if active_contract is required_contract:
                     is_contract_subscribed = True
             if not is_contract_subscribed:
@@ -101,7 +108,7 @@ class SubscriptionManager:
             logger.debug("All current positions and open trades have tickers attached.")
 
         # Cleanup stale subscriptions
-        for active_contract in active_contracts:
+        for active_contract in active_spx_options:
             required_contract = required_contracts.get(active_contract.conId, None)
             if active_contract is not required_contract:
                 if required_contract is None:

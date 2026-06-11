@@ -48,6 +48,7 @@ class MarketDataFetcher:
             self.options_dump_time = 0
             self.previous_spx_value = math.nan
             self.spx = Index(symbol='SPX', exchange='CBOE', currency='USD')
+            self.spy = Index(symbol='SPY', exchange='CBOE', currency='USD')
 
             # Use a lock for market data type switching
 
@@ -69,8 +70,8 @@ class MarketDataFetcher:
         spx_ticker = self.ib.ticker(self.spx)
 
         if not spx_ticker:
-            logger.info("Fetching SPX ticker")
-            spx_ticker = await self.request_ticker(self.spx)
+            logger.info("SPX ticker is missing")
+            return self.previous_spx_value
 
         if math.isnan(spx_ticker.last):
             if is_regular_hours():
@@ -196,9 +197,9 @@ class MarketDataFetcher:
             if still_missing:
                 logger.info(f"The following contracts were requested but not fetched as snapshots: {[get_option_name(c) for c in still_missing]}")
 
-
+    """
     async def request_ticker(self, contract):
-        """Request market data for a single contract using reqTickersAsync."""
+        Request market data for a single contract using reqTickersAsync.
         await self.qualify([contract])
         await self.ensure_market_data_type()
         
@@ -223,6 +224,7 @@ class MarketDataFetcher:
         else:
             logger.error(f"Could not fetch ticker for {get_option_name(contract)}")
         return ticker
+    """
 
     def cancel_market_data(self, contract):
         """Unsubscribe from market data updates for a given contract."""
