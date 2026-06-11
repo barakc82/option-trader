@@ -115,12 +115,10 @@ def login(driver, name, account_type):
     password_field.send_keys("Cz9nqupx" + account_data["password"])
     enter_button = driver.find_element(By.ID, "btnSubmit")
     enter_button.click()
-    wait_object = WebDriverWait(driver, 40, 1, ([ElementNotVisibleException]))
+    wait_object = WebDriverWait(driver, 50, 1, ([ElementNotVisibleException]))
     print(f"Waiting for INDshadowRootWrap to be displayed")
     # time.sleep(40)
     iNDshadowRootWrap = driver.find_element(By.ID, "INDshadowRootWrap")
-    # print(iNDshadowRootWrap.is_displayed()) # False
-    # is_disappeared = wait_object.until(lambda x: x.find_element(By.ID, "INDshadowRootWrap") is not None)
     wait_object.until(lambda x: x.find_element(By.XPATH, '//*[text()="דף הבית"]') is not None)
     # homepage_text = driver.find_element(By.XPATH, '//*[text()="דף הבית"]')
     # print(f"Was the homepage text found? {homepage_text is not None}")

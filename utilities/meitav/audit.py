@@ -46,17 +46,21 @@ def extract_completed_operations(driver):
             try:
                 cell = row.find_element(By.CLASS_NAME, header["class"])
                 raw_value = cell.text.strip()
-                clean_value = re.sub(r'[^\d.\-]', '', raw_value) if raw_value else "0"
+
+                #clean_value = re.sub(r'[^\d.\-]', '', raw_value) if raw_value else "0"
                 if header["text"] == 'ק/מ':
-                    print(f"Raw value of buy/sell: {raw_value}, clean value: {clean_value}")
+                    print(f"Raw value of buy/sell: {raw_value}")
                     if not raw_value:
                         raw_value = cell.find_element(By.CSS_SELECTOR, ".ui-grid-cell-contents").text.strip()
                         print(raw_value)
-
                 try:
-                    clean_value = float(clean_value)
+                    clean_value = float(raw_value)
                 except:
-                    pass
+                    clean_value = raw_value
+                    if raw_value == 'קניה':
+                        clean_value = 'BUY'
+                    if raw_value == 'מכירה':
+                        clean_value = 'Sell'
                 terminology_map = {
                     'מספר נייר': 'security_id',
                     'ק/מ': 'operation_type',

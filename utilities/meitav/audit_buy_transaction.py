@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from utilities.database_access import get_worksheet
 from utilities.meitav.audit import extract_completed_operations
@@ -7,20 +7,24 @@ from utilities.meitav.start import start
 from utilities.meitav.get_status import extract_status
 
 user = Barak
-program_type = Hishtalmut
+program_type = Gemel
 
 person_data = users_data[user]
 
 driver = start(user, program_type)
 
+DATE = 0
+PRICE = 1
+UNITS = 2
+PROGRAM = 3
 
 try:
     status = extract_status(driver)
     if status['account_id'] != users_data[user][program_type]['account_id']:
         raise Exception("Username and program type mismatch")
 
-    units = 15
-    purchase_price = 7046
+    units = 14
+    purchase_price = 6938
 
     person_data = users_data[user]
     sheet_name = person_data['transactions_sheet_name']
@@ -36,18 +40,33 @@ try:
     buys_last_row_index = buys_sum_row_index-2
     audited_buys = sheet.get(f"A{buys_first_row_index}:D{buys_last_row_index}")
 
+    now = datetime.now()
+    date = now if now.hour >= 10 else now - timedelta(days=1)
+    current_date = date.strftime("%d.%m.%y")
+    hebrew_program_name = "השתלמות" if program_type == Hishtalmut else "גמל"
+
     for completed_operation in all_completed_operations:
         if completed_operation['security_id'] != 1144708.0:
             continue
         print(f"Completed leveraged operation: {completed_operation}")
+        if completed_operation['operation_type'] != 'BUY':
+            continue
+        is_operation_already_audited = False
+        for audited_buy in audited_buys:
+            if audited_buy[DATE] != current_date or audited_buy[PROGRAM] != hebrew_program_name:
+                continue
+
+            #if audited_buy[UNITS] != completed_operation['quantity'] or audited_buy[PRICE] != completed_operation['price']:
+            #    pass
+            print(f"checking against: {audited_buy}")
+
 
     sheet_values = sheet.get()
     new_row_index = len(sheet_values) - 1
 
-    current_date = datetime.now().strftime("%d.%m.%y")
-    program_name = "השתלמות" if program_type == Hishtalmut else "גמל"
 
-    new_row_values = [current_date, program_name, units, purchase_price]
+
+    new_row_values = [current_date, hebrew_program_name, units, purchase_price]
 
     sheet.insert_row(new_row_values, index=new_row_index)
 

@@ -14,7 +14,7 @@ from utilities.meitav.start import start
 from utilities.spreadsheet_operations import update_next_buy_in_spreadsheet
 
 user = Barak
-program_type = Hishtalmut
+program_type = Gemel
 
 person_data = users_data[user]
 
@@ -36,62 +36,6 @@ try:
     fill_in_operation(driver, operation_type='buy', security_id=1144708, units=units, price=price, target_date=target_date)
 
     update_next_buy_in_spreadsheet(user, program_type, price, f"{target_date:%d/%m/%Y}")
-
-    """
-    element = driver.find_element(By.XPATH, f"//*[text()='1144708']")
-    try:
-        element.click()
-    except Exception as e:
-        print(e)
-    time.sleep(1)
-
-    buy_button = driver.find_element(By.CSS_SELECTOR, '.buy-btn.stock-info-header')
-    print(buy_button)
-    buy_button.click()
-
-    wait_object = WebDriverWait(driver, 40, 1, ([ElementNotVisibleException]))
-    wait_object.until(lambda x: x.find_element(By.XPATH, f"//*[text()='מחיר באגורות']") is not None)
-
-    
-    send_order_div = driver.find_element(By.CLASS_NAME, "sendOrder")
-    buy_button = send_order_div.find_element(By.XPATH, f"//*[text()='קניה']")
-    buy_button.click()
-    """
-
-    """
-    inputs = driver.find_elements(By.CSS_SELECTOR, ".send-order-control-item-body input")
-
-    price_input = inputs[1]
-    price_input.clear()
-    price_input.send_keys(str(price))
-
-    sum_input = inputs[3]
-    sum_input.clear()
-    sum_input.send_keys(str(sum))
-
-    buttons = driver.find_elements(By.CSS_SELECTOR, "button[aria-label*='לחץ לבחירת תאריך']")
-    until_date_button = buttons[1]
-    until_date_button.click()
-
-    current_month = get_hebrew_month_year()
-    buttons = driver.find_elements(By.XPATH, f"//button[strong[normalize-space()='{current_month}']]")
-    until_date_button = buttons[1]
-    until_date_button.click()
-
-    hebrew_month = hebrew_months[target_date.month]
-    assert target_date.year == today.year
-
-    month_button = driver.find_element(By.XPATH, f"//button[span[normalize-space()='{hebrew_month}']]")
-    month_button.click()
-
-    formatted_day = f"{target_date.day:02d}"
-
-    date_picker_items = driver.find_elements(By.XPATH, "//div[@class='date-picker-item']")
-
-    day_buttons = date_picker_items[1].find_elements(By.XPATH,
-                                                     f"(.//tbody//button[span[normalize-space()='{formatted_day}']])[last()]")
-    day_buttons[0].click()
-    """
 
 finally:
     driver.quit()
