@@ -4,6 +4,7 @@ export interface Position {
     quantity: number;
     date: string;
     last_price: string;
+    spy_price?: string;
     delta: string;
     stop_loss: number;
   }

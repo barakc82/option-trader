@@ -67,6 +67,7 @@
             <th>Quantity</th>
             <th>Date</th>
             <th>Last Price</th>
+            <th *ngIf="has_spy_prices()">SPY Price</th>
             <th>Delta</th>
             <th>Stop Loss</th>
           </tr>
@@ -82,6 +83,7 @@
             <td>{{ pos.quantity }}</td>
             <td>{{ pos.date }}</td>
             <td>{{ pos.last_price }}</td>
+            <td *ngIf="has_spy_prices()">{{ pos.spy_price }}</td>
             <td>{{ pos.delta }}</td>
             <td>{{ pos.stop_loss }}</td>
           </tr>

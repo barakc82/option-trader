@@ -11,7 +11,7 @@ from datetime import datetime
 from statistics import mean
 
 from utilities.ib_utils import req_id_to_comment
-from utilities.utils import is_market_open, SAFEGUARD_MAX_CADENCE
+from utilities.utils import is_market_open, is_regular_hours, SAFEGUARD_MAX_CADENCE
 
 from .account_data import AccountData
 from .market_data_fetcher import MarketDataFetcher
@@ -19,6 +19,7 @@ from .max_loss_calculator import MaxLossCalculator
 from .target_delta_calculator import TargetDeltaCalculator
 from .trading_bot import TradingBot
 from .opportunity_explorer import OpportunityExplorer
+from .subscription_manager import SubscriptionManager
 
 
 TEMP_PATH = 'shared/state_temp.json'
@@ -129,6 +130,9 @@ class StateUpdater:
 
         state_positions = []
         contract_id_to_delta = {}
+        subscription_manager = SubscriptionManager()
+        is_reg_hours = is_regular_hours()
+
         for position in positions:
             option = position.contract
             delta = self.market_data_fetcher.get_delta(option)
@@ -138,12 +142,22 @@ class StateUpdater:
             raw_stop_loss = position.avgCost / 100 + stop_loss_per_option
             stop_loss = self.trading_bot.adjust_limit_to_market_rules(option, raw_stop_loss)
 
-            state_positions.append({
+            pos_data = {
                 'right': option.right, 'strike': option.strike, 'quantity': position.position,
                 'date': datetime.strptime(option.lastTradeDateOrContractMonth, "%Y%m%d").strftime("%d/%m/%y"),
                 'delta': delta, 'last_price': str(last_price) if not math.isnan(last_price) else '',
                 'stop_loss': stop_loss
-            })
+            }
+
+            if is_reg_hours:
+                spy_option = subscription_manager.spx_to_spy_map.get(option.conId)
+                if spy_option:
+                    spy_ticker = self.market_data_fetcher.get_ticker(spy_option)
+                    if spy_ticker:
+                        spy_price = spy_ticker.marketPrice()
+                        pos_data['spy_price'] = str(round(spy_price, 2)) if not math.isnan(spy_price) else ''
+
+            state_positions.append(pos_data)
             contract_id_to_delta[option.conId] = delta
 
         state['positions'] = sorted(state_positions, key=lambda x: (x['right'], x['date'], x['strike']))

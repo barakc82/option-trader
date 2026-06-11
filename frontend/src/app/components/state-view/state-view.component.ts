@@ -38,5 +38,9 @@ export class StateViewComponent implements OnInit {
 
     const now = Math.floor(Date.now() / 1000)
     return now - this.supervisor_state.time < 120;
-  }
-}
+    }
+
+    has_spy_prices(): boolean {
+    return !!this.state?.positions?.some(p => p.spy_price !== undefined);
+    }
+    }
