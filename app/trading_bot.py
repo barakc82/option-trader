@@ -104,11 +104,28 @@ class TradingBot:
         return await self.close_short_option(position.contract, abs(position.position), limit)
 
     async def fetch_price_increments(self, contract):
-        if not self.price_increments:
-            details = await self.ib.reqContractDetailsAsync(contract)
-            market_rule_id = int(details[0].marketRuleIds.split(',')[0])
-            rule = await self.ib.reqMarketRuleAsync(market_rule_id)
-            self.price_increments = sorted(rule, key=lambda i: i.lowEdge)
+        while not self.price_increments:
+            try:
+                details = await asyncio.wait_for(self.ib.reqContractDetailsAsync(contract), timeout=10)
+                if not details:
+                    logger.error(f"No contract details found for {contract}. Retrying...")
+                    await asyncio.sleep(5)
+                    continue
+
+                market_rule_id = int(details[0].marketRuleIds.split(',')[0])
+                rule = await asyncio.wait_for(self.ib.reqMarketRuleAsync(market_rule_id), timeout=10)
+                if rule:
+                    self.price_increments = sorted(rule, key=lambda i: i.lowEdge)
+                    logger.info(f"Successfully fetched {len(self.price_increments)} price increments")
+                else:
+                    logger.error(f"Market rule {market_rule_id} returned no increments. Retrying...")
+                    await asyncio.sleep(5)
+            except asyncio.TimeoutError:
+                logger.error(f"Timeout while fetching price increments for {contract}. Retrying...")
+                await asyncio.sleep(5)
+            except Exception as e:
+                logger.error(f"Error while fetching price increments for {contract}: {e}. Retrying...")
+                await asyncio.sleep(5)
 
     def adjust_limit_to_market_rules(self, contract, raw_limit):
         current_increment = self.price_increments[0].increment
