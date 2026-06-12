@@ -110,8 +110,8 @@ class StateUpdater:
             index_price = self.market_data_fetcher.get_cached_spx_price()
             state['index_label'] = 'SPX'
         else:
-            index_price = self.market_data_fetcher.get_cached_spy_price()
-            state['index_label'] = 'SPY'
+            index_price = self.market_data_fetcher.get_cached_spy_price() * 10
+            state['index_label'] = 'Adjusted SPY'
 
         state['spx_price'] = round(index_price, 2) if not math.isnan(index_price) else None
         
