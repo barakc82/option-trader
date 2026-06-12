@@ -20,3 +20,4 @@ echo Cleaning up...
 if exist scripts.tar.gz del scripts.tar.gz
 
 echo Update complete. The supervisor should restart the app shortly.
+echo The current time is: %TIME%
