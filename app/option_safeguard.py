@@ -123,22 +123,45 @@ class OptionSafeguard:
         except Exception as e:
             logger.error(f"Error reading safeguard config: {e}")
 
-    def is_unfair_ask_value(self, option, spy_option):
+    def is_unfair_ask_value(self, option, spy_options):
         spx_ask = option.ticker.ask
         if spx_ask < MIN_PRICE_THRESHOLD:
             return False
 
-        spy_option_ticker = self.market_data_fetcher.get_ticker(spy_option)
-        spy_name = get_spy_option_name(spy_option)
+        # spy_options is a list of [lower_strike_spy, upper_strike_spy] (or both same if exact match)
+        spy_tickers = [self.market_data_fetcher.get_ticker(s) for s in spy_options]
+        spy_names = [get_spy_option_name(s) for s in spy_options]
 
-        if not self._validate_spy_ticker(option, spy_option, spy_option_ticker, spy_name):
-            return False
+        for i in range(2):
+            if not self._validate_spy_ticker(option, spy_options[i], spy_tickers[i], spy_names[i]):
+                return False
 
-        adjusted_spy_ask, indices_difference = self._calculate_adjusted_spy_ask(spy_option_ticker)
+        # Calculate weighted average for ask and greeks
+        target_spy_strike = option.strike / 10.0
+        s1, s2 = spy_options[0].strike, spy_options[1].strike
+        
+        if s1 == s2:
+            weight2 = 0.5 # Doesn't matter, they are the same
+            weight1 = 0.5
+        else:
+            # Linear interpolation weights: weight2 = (target - s1) / (s2 - s1)
+            weight2 = (target_spy_strike - s1) / (s2 - s1)
+            weight1 = 1.0 - weight2
+
+        interpolated_spy_ask = spy_tickers[0].ask * weight1 + spy_tickers[1].ask * weight2
+        
+        # Interpolate Greeks
+        g1 = spy_tickers[0].askGreeks or spy_tickers[0].modelGreeks
+        g2 = spy_tickers[1].askGreeks or spy_tickers[1].modelGreeks
+        
+        interpolated_delta = g1.delta * weight1 + g2.delta * weight2
+        interpolated_gamma = g1.gamma * weight1 + g2.gamma * weight2
+
+        adjusted_spy_ask, indices_difference = self._calculate_adjusted_spy_ask(interpolated_spy_ask, interpolated_delta, interpolated_gamma)
         deviation = (spx_ask - adjusted_spy_ask) / adjusted_spy_ask
 
         if int(time.time() * 10) % 1000 == 0:
-            logger.info(f"Checking option {get_option_name(option)} for unfair ask using {spy_name}. "
+            logger.info(f"Checking option {get_option_name(option)} for unfair ask using {spy_names}. "
                         f"SPX ask is {spx_ask} and the adjusted SPY ask is {adjusted_spy_ask:.2f}, "
                         f"the deviation is {deviation:.2f}, SPX premium is {indices_difference:.2f}")
 
@@ -148,8 +171,8 @@ class OptionSafeguard:
         now = time.time()
         if now - self.last_unfair_ask_warning_time >= 10:
             logger.warning(
-                f"Unfair ask for {get_option_name(option)} against {spy_name}: "
-                f"SPX Ask: {spx_ask}, SPY Ask: {spy_option_ticker.ask} "
+                f"Unfair ask for {get_option_name(option)} against {spy_names}: "
+                f"SPX Ask: {spx_ask}, SPY Asks: [{spy_tickers[0].ask}, {spy_tickers[1].ask}] "
                 f"(Adjusted: {adjusted_spy_ask:.2f}, SPX premium : {indices_difference:.2f})")
             self.last_unfair_ask_warning_time = now
         return True
@@ -179,13 +202,12 @@ class OptionSafeguard:
 
         return True
 
-    def _calculate_adjusted_spy_ask(self, spy_ticker):
-        greeks = spy_ticker.askGreeks or spy_ticker.modelGreeks
+    def _calculate_adjusted_spy_ask(self, spy_ask, spy_delta, spy_gamma):
         indices_difference = self.market_data_fetcher.calculate_indices_difference()
         error_spy = indices_difference / 10.0
-        delta_component = greeks.delta * error_spy
-        gamma_component = 0.5 * greeks.gamma * (error_spy ** 2)
-        adjusted_spy_baseline = spy_ticker.ask + delta_component + gamma_component
+        delta_component = spy_delta * error_spy
+        gamma_component = 0.5 * spy_gamma * (error_spy ** 2)
+        adjusted_spy_baseline = spy_ask + delta_component + gamma_component
         return 10.0 * adjusted_spy_baseline, indices_difference
 
     async def guard_current_positions(self):

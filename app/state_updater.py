@@ -157,12 +157,26 @@ class StateUpdater:
             }
 
             if is_reg_hours:
-                spy_option = subscription_manager.spx_to_spy_map.get(option.conId)
-                if spy_option:
-                    spy_ticker = self.market_data_fetcher.get_ticker(spy_option)
-                    if spy_ticker:
-                        spy_price = spy_ticker.marketPrice()
-                        pos_data['spy_price'] = str(round(spy_price, 2)) if not math.isnan(spy_price) else ''
+                spy_options = subscription_manager.spx_to_spy_map.get(option.conId)
+                if spy_options:
+                    # spy_options is [lower_strike_spy, upper_strike_spy]
+                    spy_tickers = [self.market_data_fetcher.get_ticker(s) for s in spy_options]
+                    
+                    if all(t and not math.isnan(t.marketPrice()) for t in spy_tickers):
+                        # Weighted average calculation
+                        target_spy_strike = option.strike / 10.0
+                        s1, s2 = spy_options[0].strike, spy_options[1].strike
+                        
+                        p1, p2 = spy_tickers[0].marketPrice(), spy_tickers[1].marketPrice()
+                        
+                        if s1 == s2:
+                            spy_price = p1
+                        else:
+                            weight2 = (target_spy_strike - s1) / (s2 - s1)
+                            weight1 = 1.0 - weight2
+                            spy_price = p1 * weight1 + p2 * weight2
+                            
+                        pos_data['spy_price'] = str(round(spy_price, 2))
 
             state_positions.append(pos_data)
             contract_id_to_delta[option.conId] = delta

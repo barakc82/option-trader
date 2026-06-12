@@ -125,7 +125,7 @@ class SubscriptionManager:
         if not self.spy_strikes or now - self.spy_strikes_update_time > 24 * 3600:
             chains = await self.market_data_fetcher.get_chains(self.market_data_fetcher.spy)
             chain = next(c for c in chains if c.exchange == 'SMART')
-            self.spy_strikes = chain.strikes
+            self.spy_strikes = sorted(chain.strikes)
             self.spy_strikes_update_time = now
             logger.info(f"SubscriptionManager: Successfully updated {len(self.spy_strikes)} SPY strikes.")
 
@@ -135,55 +135,77 @@ class SubscriptionManager:
         spx_positions = [p for p in positions if p.contract.symbol in ('SPX', 'SPXW')]
         current_spx_con_ids = {p.contract.conId for p in spx_positions}
 
-        active_tickers = self.ib.wrapper.ticker2ReqId['mktData'].keys()
-        active_spy_options = [ticker.contract for ticker in active_tickers if ticker.contract.symbol == 'SPY' and ticker.contract.secType == 'OPT']
-
         # 1. Identify new matching SPY options to subscribe
-        new_spy_contracts = []
+        new_spy_contracts_batch = []
         for position in spx_positions:
             spx_contract = position.contract
             if spx_contract.conId not in self.spx_to_spy_map:
-                logger.info(f"No SPY contract found for {get_option_name(spx_contract)}")
-                spy_contract = self.create_matching_spy_contract(spx_contract)
-                new_spy_contracts.append((spx_contract, spy_contract))
+                logger.info(f"No SPY contracts found for {get_option_name(spx_contract)}")
+                spy_contracts = self.create_matching_spy_contracts(spx_contract)
+                new_spy_contracts_batch.append((spx_contract, spy_contracts))
 
-        if new_spy_contracts:
-            contracts_to_subscribe = [spy for spx, spy in new_spy_contracts]
-            logger.info(f"Subscribing to {len(contracts_to_subscribe)} new matching SPY options.")
+        if new_spy_contracts_batch:
+            # Deduplicate by (strike, right) to create a set of unique contracts to subscribe
+            unique_new_spy = {}
+            for _, spy_pair in new_spy_contracts_batch:
+                for spy in spy_pair:
+                    key = (spy.strike, spy.right)
+                    if key not in unique_new_spy:
+                        unique_new_spy[key] = spy
             
+            contracts_to_subscribe = list(unique_new_spy.values())
+            logger.info(f"Subscribing to {len(contracts_to_subscribe)} unique new matching SPY options.")
             await self.market_data_fetcher.request_subscriptions(contracts_to_subscribe)
             
-            for spx_contract, spy_contract in new_spy_contracts:
-                if spy_contract.conId and self.market_data_fetcher.get_ticker(spy_contract):
-                    self.spx_to_spy_map[spx_contract.conId] = spy_contract
-                    logger.info(f"Subscribed to SPY hedge {get_spy_option_name(spy_contract)} for SPX position {get_option_name(spx_contract)}")
+            for spx_contract, spy_pair in new_spy_contracts_batch:
+                # Use the qualified instances from the unique_new_spy map
+                qualified_pair = []
+                for spy in spy_pair:
+                    qualified_spy = unique_new_spy[(spy.strike, spy.right)]
+                    if qualified_spy.conId and self.market_data_fetcher.get_ticker(qualified_spy):
+                        qualified_pair.append(qualified_spy)
+                
+                if len(qualified_pair) == 2:
+                    self.spx_to_spy_map[spx_contract.conId] = qualified_pair
+                    logger.info(f"Subscribed to SPY hedge pair for SPX position {get_option_name(spx_contract)}")
                 else:
-                    logger.error(f"Failed to subscribe matching SPY option for {get_option_name(spx_contract)}")
+                    logger.error(f"Failed to subscribe complete matching SPY pair for {get_option_name(spx_contract)}")
 
         # 2. Unsubscribe from SPY options for closed SPX positions
         closed_spx_con_ids = [con_id for con_id in list(self.spx_to_spy_map.keys()) if con_id not in current_spx_con_ids]
         for con_id in closed_spx_con_ids:
-            spy_contract = self.spx_to_spy_map.pop(con_id)
-            logger.info(f"SPX position {con_id} closed. Unsubscribing from SPY hedge {get_spy_option_name(spy_contract)}.")
-            self.market_data_fetcher.cancel_market_data(spy_contract)
+            spy_pair = self.spx_to_spy_map.pop(con_id)
+            logger.info(f"SPX position {con_id} closed. Unsubscribing from SPY hedge pair.")
+            for spy_contract in spy_pair:
+                # Only cancel if no other SPX position is using this SPY contract
+                is_in_use = any(spy_contract in pair for pair in self.spx_to_spy_map.values())
+                if not is_in_use:
+                    self.market_data_fetcher.cancel_market_data(spy_contract)
 
-    def create_matching_spy_contract(self, spx_contract):
-        """Create a matching SPY option contract for a given SPX option contract."""
-        spy_strike_raw = spx_contract.strike / 10.0
-
-        if spy_strike_raw == int(spy_strike_raw):
-            spy_strike = spy_strike_raw
-        else:
-            if spx_contract.right == "P":
-                spy_strike = math.ceil(spy_strike_raw)
-            else:  # "C"
-                spy_strike = math.floor(spy_strike_raw)
+    def create_matching_spy_contracts(self, spx_contract):
+        """Create a pair of matching SPY option contracts for a given SPX option contract."""
+        target_strike = spx_contract.strike / 10.0
         
-        return Option(
-            symbol='SPY',
-            lastTradeDateOrContractMonth=spx_contract.lastTradeDateOrContractMonth,
-            strike=spy_strike,
-            right=spx_contract.right,
-            exchange='SMART',
-            currency='USD'
-        )
+        # Find exact match or surrounding strikes
+        if target_strike in self.spy_strikes:
+            strikes = [target_strike, target_strike]
+        else:
+            # Find the closest strike below and above
+            lower_strikes = [s for s in self.spy_strikes if s < target_strike]
+            upper_strikes = [s for s in self.spy_strikes if s > target_strike]
+            
+            strikes = [
+                max(lower_strikes) if lower_strikes else self.spy_strikes[0],
+                min(upper_strikes) if upper_strikes else self.spy_strikes[-1]
+            ]
+
+        return [
+            Option(
+                symbol='SPY',
+                lastTradeDateOrContractMonth=spx_contract.lastTradeDateOrContractMonth,
+                strike=s,
+                right=spx_contract.right,
+                exchange='SMART',
+                currency='USD'
+            ) for s in strikes
+        ]
