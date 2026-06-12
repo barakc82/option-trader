@@ -40,7 +40,7 @@
         </tbody>
       </table>
 
-      <p><strong>{{ state.index_label }}:</strong> {{ state.spx_price !== null ? state.spx_price : 'N/A' }}</p>
+      <p><strong>{{ state.index_label || 'S&P 500' }}:</strong> {{ state.spx_price !== null ? state.spx_price : 'N/A' }}</p>
 
       <div *ngIf="state.call_margin_reduction" class="margin-reduction-info">
         <h4>Call Margin Reduction</h4>
