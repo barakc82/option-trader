@@ -113,11 +113,6 @@ class MarketDataFetcher:
 
         return price
 
-    def get_cached_spy_price(self):
-        if math.isnan(self.previous_spy_value):
-            self.get_spy_price()
-        return self.previous_spy_value
-
     def calculate_indices_difference(self):
         if not self.index_price_history:
             return 0.0

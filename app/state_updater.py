@@ -107,10 +107,10 @@ class StateUpdater:
         # 2. Gather logic metrics
         is_reg_hours = is_regular_hours()
         if is_reg_hours:
-            index_price = self.market_data_fetcher.get_cached_spx_price()
+            index_price = self.market_data_fetcher.get_spx_price()
             state['index_label'] = 'SPX'
         else:
-            index_price = self.market_data_fetcher.get_cached_spy_price() * 10
+            index_price = self.market_data_fetcher.get_spy_price() * 10
             state['index_label'] = 'Adjusted SPY'
 
         state['spx_price'] = round(index_price, 2) if not math.isnan(index_price) else None
