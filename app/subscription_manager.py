@@ -27,7 +27,9 @@ class SubscriptionManager:
             self.market_data_fetcher = MarketDataFetcher()
             
             # Tracks SPX conId -> Matching SPY Contract for hedge subscriptions
-            self.spx_to_spy_map = {} 
+            self.spx_to_spy_map = {}
+            self.spy_strikes = None
+            self.spy_strikes_update_time = 0
             
             logger.info("SubscriptionManager initialized.")
             self._initialized = True
@@ -75,7 +77,7 @@ class SubscriptionManager:
                 contract = active_ticker.contract
                 logger.info(f"Subscribed to {contract.symbol} {contract.secType} {contract.right} {contract.strike}")
 
-        active_indices = [ticker.contract for ticker in active_tickers if ticker.contract.secType == 'IND']
+        active_indices = [ticker.contract for ticker in active_tickers if ticker.contract.secType in ['IND', 'STK']]
         for required_index in [self.market_data_fetcher.spx, self.market_data_fetcher.spy]:
             if required_index not in active_indices:
                 logger.info(f"Going to subscribe to Index {required_index.symbol}")
@@ -119,11 +121,22 @@ class SubscriptionManager:
 
 
     async def manage_spy_subscriptions(self):
+        now = time.time()
+        if not self.spy_strikes or now - self.spy_strikes_update_time > 24 * 3600:
+            chains = await self.market_data_fetcher.get_chains(self.market_data_fetcher.spy)
+            chain = next(c for c in chains if c.exchange == 'SMART')
+            self.spy_strikes = chain.strikes
+            self.spy_strikes_update_time = now
+            logger.info(f"SubscriptionManager: Successfully updated {len(self.spy_strikes)} SPY strikes.")
+
         """Check current SPX positions and update SPY subscriptions."""
         positions = self.trading_bot.get_short_options()
         # SPX options can have symbol 'SPX' or 'SPXW' (weekly)
         spx_positions = [p for p in positions if p.contract.symbol in ('SPX', 'SPXW')]
         current_spx_con_ids = {p.contract.conId for p in spx_positions}
+
+        active_tickers = self.ib.wrapper.ticker2ReqId['mktData'].keys()
+        active_spy_options = [ticker.contract for ticker in active_tickers if ticker.contract.symbol == 'SPY' and ticker.contract.secType == 'OPT']
 
         # 1. Identify new matching SPY options to subscribe
         new_spy_contracts = []
@@ -133,7 +146,7 @@ class SubscriptionManager:
                 logger.info(f"No SPY contract found for {get_option_name(spx_contract)}")
                 spy_contract = self.create_matching_spy_contract(spx_contract)
                 new_spy_contracts.append((spx_contract, spy_contract))
-        
+
         if new_spy_contracts:
             contracts_to_subscribe = [spy for spx, spy in new_spy_contracts]
             logger.info(f"Subscribing to {len(contracts_to_subscribe)} new matching SPY options.")
