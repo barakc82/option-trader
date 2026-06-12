@@ -105,8 +105,15 @@ class StateUpdater:
         state['last_updated'] = datetime.now(israel_tz).strftime("%d/%m/%y %H:%M")
 
         # 2. Gather logic metrics
-        spx_price = self.market_data_fetcher.get_cached_spx_price()
-        state['spx_price'] = round(spx_price, 2) if not math.isnan(spx_price) else None
+        is_reg_hours = is_regular_hours()
+        if is_reg_hours:
+            index_price = self.market_data_fetcher.get_cached_spx_price()
+            state['index_label'] = 'SPX'
+        else:
+            index_price = self.market_data_fetcher.get_cached_spy_price()
+            state['index_label'] = 'SPY'
+
+        state['spx_price'] = round(index_price, 2) if not math.isnan(index_price) else None
         
         call_target_delta = self.target_delta_calculator.get_cached_target_delta('C')
         put_target_delta = self.target_delta_calculator.get_cached_target_delta('P')

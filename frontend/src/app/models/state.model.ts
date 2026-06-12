@@ -41,6 +41,7 @@ export interface Position {
     status: string;
     time: number;
     last_updated: string;
+    index_label?: string;
     spx_price: number | null;
     excess_liquidity: string;
     cash: number;

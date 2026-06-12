@@ -58,6 +58,7 @@ class MarketDataFetcher:
             self.last_implied_volatility_calculation_time = {'C': 0.0, 'P': 0.0}
             self.options_dump_time = 0
             self.previous_spx_value = math.nan
+            self.previous_spy_value = math.nan
             self.spx = Index(symbol='SPX', exchange='CBOE', currency='USD')
             self.spy = Index(symbol='SPY', exchange='CBOE', currency='USD')
             self.index_price_history = deque(maxlen=100)
@@ -97,6 +98,25 @@ class MarketDataFetcher:
             self.previous_spx_value = price
 
         return price
+
+    async def get_spy_price(self):
+        spy_ticker = self.ib.ticker(self.spy)
+
+        if not spy_ticker:
+            logger.info("SPY ticker is missing")
+            return self.previous_spy_value
+
+        price = spy_ticker.marketPrice()
+
+        if not math.isnan(price):
+            self.previous_spy_value = price
+
+        return price
+
+    def get_cached_spy_price(self):
+        if math.isnan(self.previous_spy_value):
+            asyncio.ensure_future(self.get_spy_price())
+        return self.previous_spy_value
 
     def calculate_indices_difference(self):
         if not self.index_price_history:
