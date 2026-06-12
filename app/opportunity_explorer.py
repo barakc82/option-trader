@@ -461,11 +461,19 @@ class OpportunityExplorer:
 
         missing_sum = required_initial_margin - initial_margin_after_sell
         required_number_of_units = math.ceil(missing_sum / initial_margin_change)
+        
+        margin_change = round(abs(initial_margin_change))
+        required_level = round(self.calculate_required_level(required_number_of_units), 2)
+        if margin_change < 100:
+            margin_change = 0
+        if required_level > 100:
+            required_level = 0
+
         self.call_margin_reduction = {
             'option': get_option_name(available_cheap_call_option),
             'margin_deficiency': round(abs(missing_sum)),
-            'margin_change': round(abs(initial_margin_change)),
-            'required_level': round(self.calculate_required_level(required_number_of_units), 2)
+            'margin_change': margin_change,
+            'required_level': required_level
         }
         self.last_call_margin_reduction_record_time = time.time()
 
@@ -510,11 +518,19 @@ class OpportunityExplorer:
 
         missing_sum = required_initial_margin - initial_margin_after_sell
         required_number_of_units = math.ceil(missing_sum / initial_margin_change)
+        
+        margin_change = round(abs(initial_margin_change))
+        required_level = round(self.calculate_required_level(required_number_of_units), 2)
+        if margin_change < 100:
+            margin_change = 0
+        if required_level > 100:
+            required_level = 0
+
         self.put_margin_reduction = {
             'option': get_option_name(available_cheap_put_option),
             'margin_deficiency': round(abs(missing_sum)),
-            'margin_change': round(abs(initial_margin_change)),
-            'required_level': round(self.calculate_required_level(required_number_of_units), 2)
+            'margin_change': margin_change,
+            'required_level': required_level
         }
         self.last_put_margin_reduction_record_time = time.time()
 
