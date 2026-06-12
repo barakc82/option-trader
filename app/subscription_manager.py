@@ -145,6 +145,9 @@ class SubscriptionManager:
                 new_spy_contracts_batch.append((spx_contract, spy_contracts))
 
         if new_spy_contracts_batch:
+            active_tickers = self.ib.wrapper.ticker2ReqId['mktData'].keys()
+            active_spy_options = [ticker.contract for ticker in active_tickers if ticker.contract.symbol == 'SPY' and ticker.contract.secType == 'OPT']
+
             # Deduplicate by (strike, right) to create a set of unique contracts to subscribe
             unique_new_spy = {}
             for _, spy_pair in new_spy_contracts_batch:
@@ -153,9 +156,20 @@ class SubscriptionManager:
                     if key not in unique_new_spy:
                         unique_new_spy[key] = spy
             
-            contracts_to_subscribe = list(unique_new_spy.values())
-            logger.info(f"Subscribing to {len(contracts_to_subscribe)} unique new matching SPY options.")
-            await self.market_data_fetcher.request_subscriptions(contracts_to_subscribe)
+            contracts_to_subscribe = []
+            for required_spy_contract in unique_new_spy.values():
+                is_contract_subscribed = False
+                for active_contract in active_spy_options:
+                    if active_contract is required_spy_contract:
+                        is_contract_subscribed = True
+                        break
+                if not is_contract_subscribed:
+                    logger.info(f"Option {get_spy_option_name(required_spy_contract)} is missing a ticker")
+                    contracts_to_subscribe.append(required_spy_contract)
+
+            if contracts_to_subscribe:
+                logger.info(f"Subscribing to {len(contracts_to_subscribe)} unique new matching SPY options.")
+                await self.market_data_fetcher.request_subscriptions(contracts_to_subscribe)
             
             for spx_contract, spy_pair in new_spy_contracts_batch:
                 # Use the qualified instances from the unique_new_spy map
