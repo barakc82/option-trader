@@ -120,11 +120,6 @@ class MarketDataFetcher:
         total_diff = sum(entry.spx_price - 10 * entry.spy_price for entry in self.index_price_history)
         return total_diff / len(self.index_price_history)
 
-    def get_cached_spx_price(self):
-        if math.isnan(self.previous_spx_value):
-            self.get_spx_price()
-        return self.previous_spx_value
-
     def get_cached_spx_implied_volatility(self, right):
         return self.last_implied_volatility[right]
 
@@ -174,7 +169,7 @@ class MarketDataFetcher:
 
         spx_ticker = self.ib.ticker(self.spx)
         spy_ticker = self.ib.ticker(self.spy)
-        if (spx_ticker and spy_ticker and spx_ticker.time and spy_ticker.time and
+        if (is_regular_hours() and spx_ticker and spy_ticker and spx_ticker.time and spy_ticker.time and
                 not math.isnan(spx_ticker.last) and not math.isnan(spy_ticker.last)):
             if abs((spx_ticker.time - spy_ticker.time).total_seconds()) <= 30:
                 new_entry = IndexPricePair(
@@ -386,6 +381,8 @@ class MarketDataFetcher:
         
         options_obtained = False
         spx_price = self.get_spx_price()
+        spy_price = self.get_spy_price()
+        reference_price = spx_price if is_regular_hours() else spy_price * 10
 
         if options:
             options = [] if options[0].lastTradeDateOrContractMonth != date else options
@@ -398,26 +395,26 @@ class MarketDataFetcher:
                     minimal_call_strike = min(call_options)
                     previous_spx_index_value = (maximal_put_strike + minimal_call_strike) / 2
                     
-                    if math.isnan(spx_price):
-                        logger.warning(f"The ticker of SPX index is missing")
+                    if math.isnan(reference_price):
+                        logger.warning(f"The reference price for options categorization is missing")
                     else:
-                        change_from_previous_spx_index_value = abs(spx_price - previous_spx_index_value)
+                        change_from_previous_spx_index_value = abs(reference_price - previous_spx_index_value)
                         if change_from_previous_spx_index_value / previous_spx_index_value > 0.015:
-                            logger.info(f"Fetching option tickers as SPX index made a big change from {previous_spx_index_value} to {spx_price}")
+                            logger.info(f"Fetching option tickers as reference index price made a big change from {previous_spx_index_value} to {reference_price}")
                             options = []
                             options_obtained = False
                 else:
                     logger.error(f"Options could not be obtained from cache, number of options is {len(options)}")
 
         if not options_obtained:
-            logger.info(f"Fetching fresh options for {date}. SPX Last Price: {spx_price}")
+            logger.info(f"Fetching fresh options for {date}. Reference Price: {reference_price}")
             chains = await self.get_chains(self.spx)
             chain = next(c for c in chains if c.exchange == 'CBOE' and c.tradingClass == 'SPXW')
             
             put_options = []
             call_options = []
             for strike in chain.strikes:
-                if strike < spx_price:
+                if strike < reference_price:
                     option = Option(symbol='SPX', lastTradeDateOrContractMonth=date, strike=strike, right='P',
                                     exchange='CBOE', currency='USD', tradingClass='SPXW')
                     put_options.append(option)
