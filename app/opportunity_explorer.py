@@ -32,7 +32,7 @@ async def calculate_max_options_for_market_rise(call_option):
 
     fold_after_market_rise = 1 + 0.2
     market_data_fetcher = MarketDataFetcher()
-    current_price = await market_data_fetcher.get_spx_price()
+    current_price = market_data_fetcher.get_spx_price()
     if math.isnan(current_price):
         logger.error("Cannot calculate max number of options for market rise because the S&P 500 index value is NaN")
         return 0
@@ -74,7 +74,7 @@ async def calculate_max_options_for_market_drop(put_option):
 
     remaining_fraction_after_drop = 1 - 0.3
     market_data_fetcher = MarketDataFetcher()
-    current_price = await market_data_fetcher.get_spx_price()
+    current_price = market_data_fetcher.get_spx_price()
     if math.isnan(current_price):
         logger.error("Cannot calculate max number of options for market drop because the S&P 500 index value is NaN")
         return 0

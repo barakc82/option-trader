@@ -4,7 +4,7 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
-from ib_insync import Index, Option
+from ib_insync import Index, Option, Stock
 from utilities.utils import *
 
 from utilities.ib_utils import get_delta
@@ -60,7 +60,7 @@ class MarketDataFetcher:
             self.previous_spx_value = math.nan
             self.previous_spy_value = math.nan
             self.spx = Index(symbol='SPX', exchange='CBOE', currency='USD')
-            self.spy = Index(symbol='SPY', exchange='CBOE', currency='USD')
+            self.spy = Stock(symbol='SPY', exchange='SMART', currency='USD')
             self.index_price_history = deque(maxlen=100)
 
             # Use a lock for market data type switching
@@ -79,7 +79,7 @@ class MarketDataFetcher:
             self.registered_contracts[con_id] = ticker
             logger.info(f"Registered update handler for {get_option_name(ticker.contract)}")
 
-    async def get_spx_price(self):
+    def get_spx_price(self):
         spx_ticker = self.ib.ticker(self.spx)
 
         if not spx_ticker:
@@ -99,7 +99,7 @@ class MarketDataFetcher:
 
         return price
 
-    async def get_spy_price(self):
+    def get_spy_price(self):
         spy_ticker = self.ib.ticker(self.spy)
 
         if not spy_ticker:
@@ -115,7 +115,7 @@ class MarketDataFetcher:
 
     def get_cached_spy_price(self):
         if math.isnan(self.previous_spy_value):
-            asyncio.ensure_future(self.get_spy_price())
+            self.get_spy_price()
         return self.previous_spy_value
 
     def calculate_indices_difference(self):
@@ -127,7 +127,7 @@ class MarketDataFetcher:
 
     def get_cached_spx_price(self):
         if math.isnan(self.previous_spx_value):
-            asyncio.ensure_future(self.get_spx_price())
+            self.get_spx_price()
         return self.previous_spx_value
 
     def get_cached_spx_implied_volatility(self, right):
@@ -311,7 +311,7 @@ class MarketDataFetcher:
             self.last_implied_volatility[right] = 0.0
 
         """Calculate implied volatility for the requested side from ATM SPX options."""
-        spx_price = await self.get_spx_price()
+        spx_price = self.get_spx_price()
         if math.isnan(spx_price):
             logger.error("The SPX price is NaN")
             return self.last_implied_volatility[right]
@@ -390,7 +390,7 @@ class MarketDataFetcher:
         options = options_cache.load_cached_options()
         
         options_obtained = False
-        spx_price = await self.get_spx_price()
+        spx_price = self.get_spx_price()
 
         if options:
             options = [] if options[0].lastTradeDateOrContractMonth != date else options
