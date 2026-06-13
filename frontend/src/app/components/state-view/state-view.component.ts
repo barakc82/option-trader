@@ -41,6 +41,10 @@ export class StateViewComponent implements OnInit {
     }
 
     has_spy_prices(): boolean {
-    return !!this.state?.positions?.some(p => p.spy_price !== undefined);
+      return !!this.state?.positions?.some(p => p.spy_price !== undefined);
+    }
+
+    has_es_prices(): boolean {
+      return !!this.state?.positions?.some(p => p.es_price !== undefined);
     }
     }
