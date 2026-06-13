@@ -4,7 +4,7 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
-from ib_insync import Index, Option, Stock
+from ib_insync import Index, Option, Stock, Future, ContFuture
 from utilities.utils import *
 
 from utilities.ib_utils import get_delta
@@ -61,6 +61,7 @@ class MarketDataFetcher:
             self.previous_spy_value = math.nan
             self.spx = Index(symbol='SPX', exchange='CBOE', currency='USD')
             self.spy = Stock(symbol='SPY', exchange='SMART', currency='USD')
+            self.es = None
             self.index_price_history = deque(maxlen=100)
 
             # Use a lock for market data type switching
@@ -134,6 +135,24 @@ class MarketDataFetcher:
         if not ticker:
             return math.nan
         return ticker.marketPrice()
+
+    async def fetch_es_future(self):
+        if not self.es:
+            es_incomplete = Future('ES', exchange='CME')
+
+            # 2. Fetch all matching contract details from the exchange
+            es_details = await self.ib.reqContractDetailsAsync(es_incomplete)
+            contracts = [es_detail.contract for es_detail in es_details]
+
+            # 3. Sort the contracts chronologically by expiration date
+            contracts.sort(key=lambda c: c.lastTradeDateOrContractMonth)
+
+            # 4. Select the closest expiration (front-month)
+            closest_es_future = contracts[0]
+
+            # 5. Fully qualify the contract before requesting live data or trading
+            await self.ib.qualifyContractsAsync(closest_es_future)
+        return self.es
 
     async def ensure_market_data_type(self):
         """Ensures the correct market data type (Live vs Frozen) based on market hours."""

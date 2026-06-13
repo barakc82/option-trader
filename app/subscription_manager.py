@@ -28,8 +28,10 @@ class SubscriptionManager:
             self.trading_bot = TradingBot()
             self.market_data_fetcher = MarketDataFetcher()
             
-            # Tracks SPX conId -> Matching SPY Contract for hedge subscriptions
+            # Tracks SPX conId -> Matching SPY Contract list for hedge subscriptions
             self.spx_to_spy_map = {}
+            # Tracks SPX conId -> Matching ES Contract for hedge subscriptions
+            self.spx_to_es_map = {}
             self.spy_strikes = None
             self.spy_strikes_update_time = 0
             self.alternative_valuation = "SPY"
@@ -65,9 +67,11 @@ class SubscriptionManager:
                     logger.info("Running subscription maintenance")
                     # 1. Maintain tickers for positions and open trades
                     await self.maintain_tickers()
-                    
-                    # 2. Maintain matching SPY subscriptions for SPX positions
-                    await self.manage_spy_subscriptions()
+
+                    if self.alternative_valuation == "SPY":
+                        await self.manage_spy_subscriptions()
+                    elif self.alternative_valuation == "ES":
+                        await self.manage_es_subscriptions()
                     
             except Exception:
                 logger.exception("Error in SubscriptionManager loop:")
@@ -93,9 +97,14 @@ class SubscriptionManager:
                 contract = active_ticker.contract
                 logger.info(f"Subscribed to {contract.symbol} {contract.secType} {contract.right} {contract.strike}")
 
-        active_indices = [ticker.contract for ticker in active_tickers if ticker.contract.secType in ['IND', 'STK']]
-        for required_index in [self.market_data_fetcher.spx, self.market_data_fetcher.spy]:
-            if required_index not in active_indices:
+        active_indices = [ticker.contract for ticker in active_tickers if ticker.contract.secType in ['IND', 'STK', 'FUT']]
+        if self.alternative_valuation == "ES":
+            alt_index = await self.market_data_fetcher.fetch_es_future()
+        else:
+            alt_index = self.market_data_fetcher.spy
+
+        for required_index in [self.market_data_fetcher.spx, alt_index]:
+            if required_index and required_index not in active_indices:
                 logger.info(f"Going to subscribe to Index {required_index.symbol}")
                 contracts_missing_tickers.append(required_index)
 
@@ -239,3 +248,79 @@ class SubscriptionManager:
                 currency='USD'
             ) for s in strikes
         ]
+
+    async def manage_es_subscriptions(self):
+        """Check current SPX positions and update ES subscriptions."""
+        positions = self.trading_bot.get_short_options()
+        # SPX options can have symbol 'SPX' or 'SPXW' (weekly)
+        spx_positions = [p for p in positions if p.contract.symbol in ('SPX', 'SPXW')]
+        current_spx_con_ids = {p.contract.conId for p in spx_positions}
+
+        # 1. Identify new matching ES options to subscribe
+        new_es_contracts_batch = []
+        for position in spx_positions:
+            spx_contract = position.contract
+            if spx_contract.conId not in self.spx_to_es_map:
+                logger.info(f"No ES contract found for {get_option_name(spx_contract)}")
+                es_contract = self.create_matching_es_contract(spx_contract)
+                new_es_contracts_batch.append((spx_contract, es_contract))
+
+        if new_es_contracts_batch:
+            active_tickers = self.ib.wrapper.ticker2ReqId['mktData'].keys()
+            active_es_options = [ticker.contract for ticker in active_tickers if ticker.contract.symbol == 'ES' and ticker.contract.secType == 'FOP']
+
+            # Deduplicate by (strike, right, lastTradeDateOrContractMonth)
+            unique_new_es = {}
+            for _, es in new_es_contracts_batch:
+                key = (es.strike, es.right, es.lastTradeDateOrContractMonth)
+                if key not in unique_new_es:
+                    unique_new_es[key] = es
+            
+            contracts_to_subscribe = []
+            for required_es_contract in unique_new_es.values():
+                is_contract_subscribed = False
+                for active_contract in active_es_options:
+                    if (active_contract.symbol == required_es_contract.symbol and 
+                        active_contract.strike == required_es_contract.strike and
+                        active_contract.right == required_es_contract.right and
+                        active_contract.lastTradeDateOrContractMonth == required_es_contract.lastTradeDateOrContractMonth):
+                        is_contract_subscribed = True
+                        # Use the already qualified instance
+                        unique_new_es[(required_es_contract.strike, required_es_contract.right, required_es_contract.lastTradeDateOrContractMonth)] = active_contract
+                        break
+                if not is_contract_subscribed:
+                    logger.info(f"Option ES {required_es_contract.right} {required_es_contract.strike} is missing a ticker")
+                    contracts_to_subscribe.append(required_es_contract)
+
+            if contracts_to_subscribe:
+                logger.info(f"Subscribing to {len(contracts_to_subscribe)} unique new matching ES options.")
+                await self.market_data_fetcher.request_subscriptions(contracts_to_subscribe)
+            
+            for spx_contract, es_contract in new_es_contracts_batch:
+                qualified_es = unique_new_es[(es_contract.strike, es_contract.right, es_contract.lastTradeDateOrContractMonth)]
+                if qualified_es.conId and self.market_data_fetcher.get_ticker(qualified_es):
+                    self.spx_to_es_map[spx_contract.conId] = qualified_es
+                    logger.info(f"Subscribed to ES hedge for SPX position {get_option_name(spx_contract)}")
+                else:
+                    logger.error(f"Failed to subscribe matching ES option for {get_option_name(spx_contract)}")
+
+        # 2. Unsubscribe from ES options for closed SPX positions
+        closed_spx_con_ids = [con_id for con_id in list(self.spx_to_es_map.keys()) if con_id not in current_spx_con_ids]
+        for con_id in closed_spx_con_ids:
+            es_contract = self.spx_to_es_map.pop(con_id)
+            logger.info(f"SPX position {con_id} closed. Unsubscribing from ES hedge.")
+            is_in_use = any(es_contract == c for c in self.spx_to_es_map.values())
+            if not is_in_use:
+                self.market_data_fetcher.cancel_market_data(es_contract)
+
+    def create_matching_es_contract(self, spx_contract):
+        """Create a matching ES option contract for a given SPX option contract."""
+        return Option(
+            symbol='ES',
+            lastTradeDateOrContractMonth=spx_contract.lastTradeDateOrContractMonth,
+            strike=spx_contract.strike,
+            right=spx_contract.right,
+            exchange='GLOBEX',
+            currency='USD',
+            secType='FOP'
+        )

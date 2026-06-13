@@ -182,15 +182,7 @@ class OptionSafeguard:
         return True
 
     def _validate_spy_ticker(self, option, spy_option, spy_ticker, spy_name):
-        if not spy_ticker:
-            logger.info(f"Matching ticker for {get_option_name(option)} ({spy_name}, id: {id(spy_option)}) not found in tickers cache. "
-                        f"Invalidating subscription in SubscriptionManager. Unfairness is not detected")
-            self.subscription_manager.spx_to_spy_map.pop(option.conId, None)
-            return False
-
-        if math.isnan(spy_ticker.ask) or spy_ticker.ask <= 0:
-            logger.info(f"Matching ticker for {get_option_name(option)} ({spy_name}) has an invalid ask value: "
-                        f"{spy_ticker.ask}. Unfairness is not detected")
+        if not self._validate_alt_ticker(option, spy_option, spy_ticker, spy_name, "SPY"):
             return False
 
         greeks = spy_ticker.askGreeks or spy_ticker.modelGreeks
@@ -257,10 +249,17 @@ class OptionSafeguard:
         stop_loss = position.avgCost / 100 + stop_loss_per_option
         high_limit_buy_trade = find_high_limit_buy_trade(option, open_trades)
 
-        spy_options = self.subscription_manager.spx_to_spy_map.get(option.conId)
-        if is_regular_hours() and spy_options and self.is_unfair_ask_value(option, spy_options):
-            self.handle_unfair_ask_value(high_limit_buy_trade, option, spy_options, stop_loss)
-            return
+        if is_regular_hours():
+            if self.alternative_valuation == "SPY":
+                spy_options = self.subscription_manager.spx_to_spy_map.get(option.conId)
+                if spy_options and self.is_unfair_ask_value(option, spy_options):
+                    self.handle_unfair_ask_value(high_limit_buy_trade, option, spy_options, stop_loss)
+                    return
+            elif self.alternative_valuation == "ES":
+                es_option = self.subscription_manager.spx_to_es_map.get(option.conId)
+                if es_option and self.is_unfair_ask_value_es(option, es_option):
+                    self.handle_unfair_ask_value_es(high_limit_buy_trade, option, es_option, stop_loss)
+                    return
 
         if stop_loss * 0.5 <= current_price < stop_loss:
             logger.info(f"Watching the current price of {get_option_name(option)}: {current_price:.2f}, stop loss is at {stop_loss:.2f}")
@@ -309,12 +308,12 @@ class OptionSafeguard:
     def handle_unfair_ask_value(self, high_limit_buy_trade: Any | None, option, spy_options: list[Option],
                                       stop_loss: Any):
         logger.warning(
-            f"Ask value of {get_option_name(option)} is unfair (Ask: {option.ticker.ask}), "
+            f"Ask value of {get_option_name(option)} is unfair (Ask: {option.ticker.ask}) against SPY, "
             f"will not close position")
 
         if high_limit_buy_trade:
             logger.warning(
-                f"Cancelling buy order for {get_option_name(option)} since the ask value is unfair")
+                f"Cancelling buy order for {get_option_name(option)} since the ask value is unfair against SPY")
             self.trading_bot.cancel_order(high_limit_buy_trade.order)
 
         # Simplified for hedging recommendation - just use the first one or both
@@ -331,3 +330,89 @@ class OptionSafeguard:
 
                         if self.enable_spy_option_hedging:
                             pass
+
+    def is_unfair_ask_value_es(self, option, es_option):
+        spx_ask = option.ticker.ask
+        if spx_ask < MIN_PRICE_THRESHOLD:
+            return False
+
+        es_ticker = self.market_data_fetcher.get_ticker(es_option)
+        es_name = f"ES {es_option.right} {es_option.strike}"
+
+        if not self._validate_alt_ticker(option, es_option, es_ticker, es_name, "ES"):
+            return False
+
+        # For ES, we assume 1:1 mapping with no basis adjustment currently
+        adjusted_es_ask = es_ticker.ask
+        deviation = (spx_ask - adjusted_es_ask) / adjusted_es_ask
+
+        if int(time.time() * 10) % 1000 == 0:
+            logger.info(f"Checking option {get_option_name(option)} for unfair ask using {es_name}. "
+                        f"SPX ask is {spx_ask} and the ES ask is {adjusted_es_ask:.2f}, "
+                        f"the deviation is {deviation:.2f}")
+
+        if deviation < MAX_DEVIATION:
+            return False
+
+        now = time.time()
+        if now - self.last_unfair_ask_warning_time >= 10:
+            logger.warning(
+                f"Unfair ask for {get_option_name(option)} against {es_name}: "
+                f"SPX Ask: {spx_ask}, ES Ask: {es_ticker.ask} "
+                f"(Deviation: {deviation:.2%})")
+            self.last_unfair_ask_warning_time = now
+        return True
+
+    def handle_unfair_ask_value_es(self, high_limit_buy_trade: Any | None, option, es_option: Option,
+                                        stop_loss: Any):
+        logger.warning(
+            f"Ask value of {get_option_name(option)} is unfair (Ask: {option.ticker.ask}) against ES, "
+            f"will not close position")
+
+        if high_limit_buy_trade:
+            logger.warning(
+                f"Cancelling buy order for {get_option_name(option)} since the ask value is unfair against ES")
+            self.trading_bot.cancel_order(high_limit_buy_trade.order)
+
+        es_ticker = self.ib.ticker(es_option)
+        if es_ticker:
+            es_current_price = es_ticker.marketPrice()
+
+            if not math.isnan(es_current_price):
+                if es_current_price > stop_loss:
+                    logger.warning(f"Should consider buying ES hedge {es_option.strike}, since the ask value of "
+                                   f"{get_option_name(option)} is unfair, and the fair price is above the stop loss")
+
+    def _validate_alt_ticker(self, option, alt_option, alt_ticker, alt_name, alt_type):
+        if not alt_ticker:
+            logger.info(f"Matching {alt_type} ticker for {get_option_name(option)} ({alt_name}) not found in tickers cache. "
+                        f"Invalidating subscription in SubscriptionManager. Unfairness is not detected")
+            if alt_type == "SPY":
+                self.subscription_manager.spx_to_spy_map.pop(option.conId, None)
+            else:
+                self.subscription_manager.spx_to_es_map.pop(option.conId, None)
+            return False
+
+        if math.isnan(alt_ticker.ask) or alt_ticker.ask <= 0:
+            logger.info(f"Matching {alt_type} ticker for {get_option_name(option)} ({alt_name}) has an invalid ask value: "
+                        f"{alt_ticker.ask}. Unfairness is not detected")
+            return False
+        
+        return True
+
+    def _validate_spy_ticker(self, option, spy_option, spy_ticker, spy_name):
+        return self._validate_alt_ticker(option, spy_option, spy_ticker, spy_name, "SPY") and \
+               self._validate_greeks(spy_ticker, spy_name)
+
+    def _validate_greeks(self, ticker, name):
+        greeks = ticker.askGreeks or ticker.modelGreeks
+        if not greeks:
+            logger.info(f"Matching ticker for {name} has no ask greeks nor model greeks. Unfairness is not detected")
+            return False
+
+        if math.isnan(greeks.delta) or math.isnan(greeks.gamma):
+            logger.info(f"Matching ticker for {name} has an invalid delta and gamma values: "
+                        f"delta: {greeks.delta}, gamma: {greeks.gamma}. Unfairness is not detected")
+            return False
+
+        return True
