@@ -59,6 +59,7 @@ class MarketDataFetcher:
             self.options_dump_time = 0
             self.previous_spx_value = math.nan
             self.previous_spy_value = math.nan
+            self.previous_es_value = math.nan
             self.spx = Index(symbol='SPX', exchange='CBOE', currency='USD')
             self.spy = Stock(symbol='SPY', exchange='SMART', currency='USD')
             self.es = None
@@ -136,6 +137,23 @@ class MarketDataFetcher:
             return math.nan
         return ticker.marketPrice()
 
+    def get_es_price(self):
+        if not self.es:
+            return self.previous_es_value
+
+        es_ticker = self.ib.ticker(self.es)
+
+        if not es_ticker:
+            logger.info("ES ticker is missing")
+            return self.previous_es_value
+
+        price = es_ticker.marketPrice()
+
+        if not math.isnan(price):
+            self.previous_es_value = price
+
+        return price
+
     async def fetch_es_future(self):
         if not self.es:
             es_incomplete = Future('ES', exchange='CME')
@@ -152,6 +170,7 @@ class MarketDataFetcher:
 
             # 5. Fully qualify the contract before requesting live data or trading
             await self.ib.qualifyContractsAsync(closest_es_future)
+            self.es = closest_es_future
         return self.es
 
     async def ensure_market_data_type(self):
