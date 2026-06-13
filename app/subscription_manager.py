@@ -2,6 +2,8 @@ import asyncio
 import logging
 import time
 import math
+import json
+import os
 from ib_insync import Option
 from .connection_manager import ConnectionManager
 from .trading_bot import TradingBot
@@ -30,15 +32,29 @@ class SubscriptionManager:
             self.spx_to_spy_map = {}
             self.spy_strikes = None
             self.spy_strikes_update_time = 0
+            self.alternative_valuation = "SPY"
             
+            self.load_config()
             logger.info("SubscriptionManager initialized.")
             self._initialized = True
+
+    def load_config(self):
+        """Reads configuration from config/option_trader_config.json."""
+        config_path = "config/option_trader_config.json"
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, "r") as f:
+                    config = json.load(f)
+                    self.alternative_valuation = config.get("alternative_valuation", "SPY")
+        except Exception as e:
+            logger.error(f"SubscriptionManager: Error reading config: {e}")
 
     async def run(self):
         """Unified background loop for all market data subscriptions."""
         logger.info("SubscriptionManager: Starting background maintenance loop...")
         while True:
             try:
+                self.load_config()
                 from .option_safeguard import OptionSafeguard
                 safeguard = OptionSafeguard()
                 if time.time() - safeguard.last_run_end_time > SAFEGUARD_MAX_CADENCE:

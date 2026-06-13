@@ -1,6 +1,8 @@
 import math
 import asyncio
 import time
+import json
+import os
 from typing import Any
 
 from ib_insync import Option, Trade
@@ -49,6 +51,7 @@ class OptionSafeguard:
             self.last_modification_times = {}
             self.last_run_end_time = 0
             self.last_unfair_ask_warning_time = 0
+            self.alternative_valuation = "SPY"
             self._initialized = True
 
     async def run(self):
@@ -120,8 +123,9 @@ class OptionSafeguard:
                     self.config = json.load(f)
                     self.should_guard_positions = self.config.get("should_guard_positions", True)
                     self.enable_spy_option_hedging = self.config.get("enable_spy_option_hedging", False)
+                    self.alternative_valuation = self.config.get("alternative_valuation", "SPY")
         except Exception as e:
-            logger.error(f"Error reading safeguard config: {e}")
+            logger.error(f"OptionSafeguard: Error reading config: {e}")
 
     def is_unfair_ask_value(self, option, spy_options):
         spx_ask = option.ticker.ask
@@ -253,9 +257,9 @@ class OptionSafeguard:
         stop_loss = position.avgCost / 100 + stop_loss_per_option
         high_limit_buy_trade = find_high_limit_buy_trade(option, open_trades)
 
-        spy_option = self.subscription_manager.spx_to_spy_map.get(option.conId)
-        if is_regular_hours() and spy_option and self.is_unfair_ask_value(option, spy_option):
-            self.handle_unfair_ask_value(high_limit_buy_trade, option, spy_option, stop_loss)
+        spy_options = self.subscription_manager.spx_to_spy_map.get(option.conId)
+        if is_regular_hours() and spy_options and self.is_unfair_ask_value(option, spy_options):
+            self.handle_unfair_ask_value(high_limit_buy_trade, option, spy_options, stop_loss)
             return
 
         if stop_loss * 0.5 <= current_price < stop_loss:
@@ -302,7 +306,7 @@ class OptionSafeguard:
 
         await self.trading_bot.modify_limit_order(high_limit_buy_trade, required_limit_price)
 
-    def handle_unfair_ask_value(self, high_limit_buy_trade: Any | None, option, spy_option: Option,
+    def handle_unfair_ask_value(self, high_limit_buy_trade: Any | None, option, spy_options: list[Option],
                                       stop_loss: Any):
         logger.warning(
             f"Ask value of {get_option_name(option)} is unfair (Ask: {option.ticker.ask}), "
@@ -313,15 +317,17 @@ class OptionSafeguard:
                 f"Cancelling buy order for {get_option_name(option)} since the ask value is unfair")
             self.trading_bot.cancel_order(high_limit_buy_trade.order)
 
-        spy_ticker = self.ib.ticker(spy_option)
-        if spy_ticker:
-            spy_current_price = spy_ticker.marketPrice()
+        # Simplified for hedging recommendation - just use the first one or both
+        for spy_option in spy_options:
+            spy_ticker = self.ib.ticker(spy_option)
+            if spy_ticker:
+                spy_current_price = spy_ticker.marketPrice()
 
-            if not math.isnan(spy_current_price):
-                spy_current_adjusted_price = spy_current_price * 10
-                if spy_current_adjusted_price > stop_loss:
-                    logger.warning(f"Should consider buying {get_spy_option_name(spy_option)}, since the ask value of "
-                                   f"{get_option_name(option)} is unfair, and the fair price is above the stop loss")
+                if not math.isnan(spy_current_price):
+                    spy_current_adjusted_price = spy_current_price * 10
+                    if spy_current_adjusted_price > stop_loss:
+                        logger.warning(f"Should consider buying {get_spy_option_name(spy_option)}, since the ask value of "
+                                       f"{get_option_name(option)} is unfair, and the fair price is above the stop loss")
 
-                    if self.enable_spy_option_hedging:
-                        pass
+                        if self.enable_spy_option_hedging:
+                            pass
