@@ -178,18 +178,25 @@ class OptionSafeguard:
         if now - self.last_unfair_ask_warning_time >= 10:
             logger.warning(
                 f"Unfair ask for {get_option_name(option)} against {spy_names}: "
-                f"SPX Ask: {spx_ask}, SPY Asks: [{spy_tickers[0].ask}, {spy_tickers[1].ask}] "
+                f"SPX Ask: {spx_ask}, SPY Asks: [{spy_tickers[0].ask}, {spy_tickers[1].ask}], deviation: {deviation:.2f} "
                 f"(Adjusted: {adjusted_spy_ask:.2f}, SPX premium : {indices_difference:.2f})")
             self.last_unfair_ask_warning_time = now
         return True
 
     def _calculate_adjusted_spy_ask(self, spy_ask, spy_delta, spy_gamma):
-        indices_difference = self.market_data_fetcher.calculate_indices_difference()
+        indices_difference = self.market_data_fetcher.calculate_spx_spy_difference()
         error_spy = indices_difference / 10.0
         delta_component = spy_delta * error_spy
         gamma_component = 0.5 * spy_gamma * (error_spy ** 2)
         adjusted_spy_baseline = spy_ask + delta_component + gamma_component
         return 10.0 * adjusted_spy_baseline, indices_difference
+
+    def _calculate_adjusted_es_ask(self, es_ask, es_delta, es_gamma):
+        indices_difference = self.market_data_fetcher.calculate_spx_es_difference()
+        delta_component = es_delta * indices_difference
+        gamma_component = 0.5 * es_gamma * (indices_difference ** 2)
+        adjusted_spy_baseline = es_ask + delta_component + gamma_component
+        return adjusted_spy_baseline, indices_difference
 
     async def guard_current_positions(self):
         logger.debug("Checking current positions")
@@ -325,15 +332,17 @@ class OptionSafeguard:
 
         if not self._validate_alt_ticker(option, es_option, es_ticker, es_name, "ES"):
             return False
+        if not self._validate_greeks(es_ticker, es_name):
+            return False
 
-        # For ES, we assume 1:1 mapping with no basis adjustment currently
-        adjusted_es_ask = es_ticker.ask
+        greeks = es_ticker.askGreeks or es_ticker.modelGreeks
+        adjusted_es_ask, indices_difference = self._calculate_adjusted_es_ask(es_ticker.ask, greeks.delta, greeks.gamma)
         deviation = (spx_ask - adjusted_es_ask) / adjusted_es_ask
 
         if int(time.time() * 10) % 1000 == 0:
             logger.info(f"Checking option {get_option_name(option)} for unfair ask using {es_name}. "
-                        f"SPX ask is {spx_ask} and the ES ask is {adjusted_es_ask:.2f}, "
-                        f"the deviation is {deviation:.2f}")
+                        f"SPX ask is {spx_ask} and the Adjusted ES ask is {adjusted_es_ask:.2f}, "
+                        f"the deviation is {deviation:.2f}, SPX premium is {indices_difference:.2f}")
 
         if deviation < MAX_DEVIATION:
             return False
@@ -342,8 +351,8 @@ class OptionSafeguard:
         if now - self.last_unfair_ask_warning_time >= 10:
             logger.warning(
                 f"Unfair ask for {get_option_name(option)} against {es_name}: "
-                f"SPX Ask: {spx_ask}, ES Ask: {es_ticker.ask} "
-                f"(Deviation: {deviation:.2%})")
+                f"SPX Ask: {spx_ask}, ES Ask: {es_ticker.ask}, deviation: {deviation:.2f} "
+                f"(Adjusted: {adjusted_es_ask:.2f}, SPX premium : {indices_difference:.2f})")
             self.last_unfair_ask_warning_time = now
         return True
 

@@ -37,6 +37,7 @@ def get_implied_volatility(ticker):
 class IndexPricePair:
     spx_price: float
     spy_price: float
+    es_price: float
     time: datetime
 
 
@@ -115,11 +116,18 @@ class MarketDataFetcher:
 
         return price
 
-    def calculate_indices_difference(self):
+    def calculate_spx_spy_difference(self):
         if not self.index_price_history:
             return 0.0
 
         total_diff = sum(entry.spx_price - 10 * entry.spy_price for entry in self.index_price_history)
+        return total_diff / len(self.index_price_history)
+
+    def calculate_spx_es_difference(self):
+        if not self.index_price_history:
+            return 0.0
+
+        total_diff = sum(entry.spx_price - entry.es_price for entry in self.index_price_history)
         return total_diff / len(self.index_price_history)
 
     def get_cached_spx_implied_volatility(self, right):
@@ -207,12 +215,18 @@ class MarketDataFetcher:
 
         spx_ticker = self.ib.ticker(self.spx)
         spy_ticker = self.ib.ticker(self.spy)
-        if (is_regular_hours() and spx_ticker and spy_ticker and spx_ticker.time and spy_ticker.time and
-                not math.isnan(spx_ticker.last) and not math.isnan(spy_ticker.last)):
-            if abs((spx_ticker.time - spy_ticker.time).total_seconds()) <= 30:
+        es_ticker = self.ib.ticker(self.es) if self.es else None
+
+        if (is_regular_hours() and spx_ticker and spy_ticker and es_ticker and
+                spx_ticker.time and spy_ticker.time and es_ticker.time and
+                not math.isnan(spx_ticker.last) and not math.isnan(spy_ticker.last) and not math.isnan(es_ticker.last)):
+            
+            times = [spx_ticker.time, spy_ticker.time, es_ticker.time]
+            if (max(times) - min(times)).total_seconds() <= 30:
                 new_entry = IndexPricePair(
                     spx_price=spx_ticker.last,
                     spy_price=spy_ticker.last,
+                    es_price=es_ticker.last,
                     time=datetime.now()
                 )
                 if (not self.index_price_history or

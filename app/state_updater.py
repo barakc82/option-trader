@@ -242,7 +242,12 @@ class StateUpdater:
         state['last_call_option_price'] = round(opportunity_explorer.last_call_option_price, 2)
         state['call_margin_reduction'] = opportunity_explorer.call_margin_reduction
         state['put_margin_reduction'] = opportunity_explorer.put_margin_reduction
-        state['spx_premium'] = round(self.market_data_fetcher.calculate_indices_difference(), 2)
+        
+        if self.alternative_valuation == "ES":
+            premium = self.market_data_fetcher.calculate_spx_es_difference()
+        else:
+            premium = self.market_data_fetcher.calculate_spx_spy_difference()
+        state['spx_premium'] = round(premium, 2)
 
         # 6. Finalize
         self.store_state_locally(state)
