@@ -11,7 +11,7 @@ from datetime import datetime
 from statistics import mean
 
 from utilities.ib_utils import req_id_to_comment
-from utilities.utils import is_market_open, is_regular_hours, SAFEGUARD_MAX_CADENCE
+from utilities.utils import is_market_open, is_regular_hours, SAFEGUARD_MAX_CADENCE, get_option_name
 
 from .account_data import AccountData
 from .market_data_fetcher import MarketDataFetcher
@@ -108,7 +108,7 @@ class StateUpdater:
         is_reg_hours = is_regular_hours()
         if is_reg_hours:
             index_price = self.market_data_fetcher.get_spx_price()
-            state['index_label'] = 'SPX'
+            state['index_label'] = 'S&P 500'
         else:
             index_price = self.market_data_fetcher.get_spy_price() * 10
             state['index_label'] = 'Adjusted SPY'
@@ -143,7 +143,7 @@ class StateUpdater:
         for position in positions:
             option = position.contract
             delta = self.market_data_fetcher.get_delta(option)
-            last_price = self.market_data_fetcher.get_last_price(option)
+            market_price = round(self.market_data_fetcher.get_market_price(option), 2)
 
             stop_loss_per_option = self.max_loss_calculator.calculate_max_loss(option.right)
             raw_stop_loss = position.avgCost / 100 + stop_loss_per_option
@@ -152,7 +152,7 @@ class StateUpdater:
             pos_data = {
                 'right': option.right, 'strike': option.strike, 'quantity': position.position,
                 'date': datetime.strptime(option.lastTradeDateOrContractMonth, "%Y%m%d").strftime("%d/%m/%y"),
-                'delta': delta, 'last_price': str(last_price) if not math.isnan(last_price) else '',
+                'delta': delta, 'market_price': str(market_price) if not math.isnan(market_price) else '',
                 'stop_loss': stop_loss
             }
 
@@ -161,7 +161,7 @@ class StateUpdater:
                 if spy_options:
                     # spy_options is [lower_strike_spy, upper_strike_spy]
                     spy_tickers = [self.market_data_fetcher.get_ticker(s) for s in spy_options]
-                    
+
                     if all(t and not math.isnan(t.marketPrice()) for t in spy_tickers):
                         # Weighted average calculation
                         target_spy_strike = option.strike / 10.0
@@ -175,7 +175,7 @@ class StateUpdater:
                             weight2 = (target_spy_strike - s1) / (s2 - s1)
                             weight1 = 1.0 - weight2
                             spy_price = p1 * weight1 + p2 * weight2
-                            
+
                         pos_data['spy_price'] = str(round(spy_price, 2))
 
             state_positions.append(pos_data)
@@ -215,6 +215,7 @@ class StateUpdater:
         state['last_call_option_price'] = round(opportunity_explorer.last_call_option_price, 2)
         state['call_margin_reduction'] = opportunity_explorer.call_margin_reduction
         state['put_margin_reduction'] = opportunity_explorer.put_margin_reduction
+        state['spx_premium'] = round(self.market_data_fetcher.calculate_indices_difference(), 2)
 
         # 6. Finalize
         self.store_state_locally(state)

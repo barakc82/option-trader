@@ -124,7 +124,7 @@ class SubscriptionManager:
         now = time.time()
         if not self.spy_strikes or now - self.spy_strikes_update_time > 24 * 3600:
             chains = await self.market_data_fetcher.get_chains(self.market_data_fetcher.spy)
-            chain = next(c for c in chains if c.exchange == 'SMART')
+            chain = next(c for c in chains if len(c.strikes) > 1)
             self.spy_strikes = sorted(chain.strikes)
             self.spy_strikes_update_time = now
             logger.info(f"SubscriptionManager: Successfully updated {len(self.spy_strikes)} SPY strikes.")

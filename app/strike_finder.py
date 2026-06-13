@@ -144,6 +144,7 @@ class StrikeFinder:
             if not block:
                 continue
 
+            logger.info(f"Scanning block for first cheap option: {block[-1]} --> {block[0]}")
             # In _get_low_delta_option:
             # Calls are sorted Higher -> Lower
             # Puts are sorted Lower -> Higher

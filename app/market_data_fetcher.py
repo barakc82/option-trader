@@ -129,11 +129,11 @@ class MarketDataFetcher:
             return ticker
         return getattr(option, 'ticker', None)
 
-    def get_last_price(self, option):
+    def get_market_price(self, option):
         ticker = self.get_ticker(option)
-        if not ticker or math.isnan(ticker.last):
+        if not ticker:
             return math.nan
-        return ticker.last
+        return ticker.marketPrice()
 
     async def ensure_market_data_type(self):
         """Ensures the correct market data type (Live vs Frozen) based on market hours."""
@@ -301,9 +301,9 @@ class MarketDataFetcher:
             self.last_implied_volatility[right] = 0.0
 
         """Calculate implied volatility for the requested side from ATM SPX options."""
-        spx_price = self.get_spx_price()
-        if math.isnan(spx_price):
-            logger.error("The SPX price is NaN")
+        reference_price = self.get_spx_price() if is_regular_hours() else self.get_spy_price() * 10
+        if math.isnan(reference_price):
+            logger.error(f"The {"SPX" if is_regular_hours() else "SPY"} price is NaN")
             return self.last_implied_volatility[right]
 
         options_cache = OptionCache()
@@ -323,7 +323,7 @@ class MarketDataFetcher:
             return self.last_implied_volatility[right]
 
         # Find 5 closest ATM options for the requested side
-        candidate_options = sorted((o for o in options if o.right == right), key=lambda o: abs(o.strike - spx_price))[:5]
+        candidate_options = sorted((o for o in options if o.right == right), key=lambda o: abs(o.strike - reference_price))[:5]
 
         if not candidate_options:
             logger.error(f"At the money level could not be found for {right}")
@@ -345,7 +345,7 @@ class MarketDataFetcher:
                 break
 
         if math.isnan(implied_volatility):
-            logger.warning(f"Implied volatility missing for ATM {right} option. SPX: {spx_price}. Using last known: {self.last_implied_volatility[right]}")
+            logger.warning(f"Implied volatility missing for ATM {right} option. SPX: {reference_price}. Using last known: {self.last_implied_volatility[right]}")
             return self.last_implied_volatility[right]
 
         # Sanity checks
@@ -358,7 +358,7 @@ class MarketDataFetcher:
             return self.last_implied_volatility[right]
 
         if implied_volatility > 0.6:
-            logger.info(f"High IV detected for {right}: {implied_volatility:.3f} at SPX: {spx_price}")
+            logger.info(f"High IV detected for {right}: {implied_volatility:.3f} at SPX: {reference_price}")
 
         self.last_implied_volatility[right] = implied_volatility
         self.last_implied_volatility_calculation_time[right] = current_time_of_the_day()
