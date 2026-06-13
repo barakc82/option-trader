@@ -137,7 +137,9 @@ class OptionSafeguard:
         spy_names = [get_spy_option_name(s) for s in spy_options]
 
         for i in range(2):
-            if not self._validate_spy_ticker(option, spy_options[i], spy_tickers[i], spy_names[i]):
+            if not self._validate_alt_ticker(option, spy_options[i], spy_tickers[i], spy_names[i], "SPY"):
+                return False
+            if not self._validate_greeks(spy_tickers[i], spy_names[i]):
                 return False
 
         # Calculate weighted average for ask and greeks
@@ -179,23 +181,6 @@ class OptionSafeguard:
                 f"SPX Ask: {spx_ask}, SPY Asks: [{spy_tickers[0].ask}, {spy_tickers[1].ask}] "
                 f"(Adjusted: {adjusted_spy_ask:.2f}, SPX premium : {indices_difference:.2f})")
             self.last_unfair_ask_warning_time = now
-        return True
-
-    def _validate_spy_ticker(self, option, spy_option, spy_ticker, spy_name):
-        if not self._validate_alt_ticker(option, spy_option, spy_ticker, spy_name, "SPY"):
-            return False
-
-        greeks = spy_ticker.askGreeks or spy_ticker.modelGreeks
-        if not greeks:
-            logger.info(f"Matching ticker for {get_option_name(option)} ({spy_name}) has no ask greeks nor model greeks."
-                        f" Unfairness is not detected")
-            return False
-
-        if math.isnan(greeks.delta) or math.isnan(greeks.gamma):
-            logger.info(f"Matching ticker for {get_option_name(option)} ({spy_name}) has an invalid delta and gamma values: "
-                        f"delta: {greeks.delta}, gamma: {greeks.gamma}. Unfairness is not detected")
-            return False
-
         return True
 
     def _calculate_adjusted_spy_ask(self, spy_ask, spy_delta, spy_gamma):
@@ -399,10 +384,6 @@ class OptionSafeguard:
             return False
         
         return True
-
-    def _validate_spy_ticker(self, option, spy_option, spy_ticker, spy_name):
-        return self._validate_alt_ticker(option, spy_option, spy_ticker, spy_name, "SPY") and \
-               self._validate_greeks(spy_ticker, spy_name)
 
     def _validate_greeks(self, ticker, name):
         greeks = ticker.askGreeks or ticker.modelGreeks
