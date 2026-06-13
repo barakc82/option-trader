@@ -234,17 +234,16 @@ class OptionSafeguard:
         stop_loss = position.avgCost / 100 + stop_loss_per_option
         high_limit_buy_trade = find_high_limit_buy_trade(option, open_trades)
 
-        if is_regular_hours():
-            if self.alternative_valuation == "SPY":
-                spy_options = self.subscription_manager.spx_to_spy_map.get(option.conId)
-                if spy_options and self.is_unfair_ask_value(option, spy_options):
-                    self.handle_unfair_ask_value(high_limit_buy_trade, option, spy_options, stop_loss)
-                    return
-            elif self.alternative_valuation == "ES":
-                es_option = self.subscription_manager.spx_to_es_map.get(option.conId)
-                if es_option and self.is_unfair_ask_value_es(option, es_option):
-                    self.handle_unfair_ask_value_es(high_limit_buy_trade, option, es_option, stop_loss)
-                    return
+        if self.alternative_valuation == "SPY" and is_regular_hours():
+            spy_options = self.subscription_manager.spx_to_spy_map.get(option.conId)
+            if spy_options and self.is_unfair_ask_value(option, spy_options):
+                self.handle_unfair_ask_value(high_limit_buy_trade, option, spy_options, stop_loss)
+                return
+        elif self.alternative_valuation == "ES":
+            es_option = self.subscription_manager.spx_to_es_map.get(option.conId)
+            if es_option and self.is_unfair_ask_value_es(option, es_option):
+                self.handle_unfair_ask_value_es(high_limit_buy_trade, option, es_option, stop_loss)
+                return
 
         if stop_loss * 0.5 <= current_price < stop_loss:
             logger.info(f"Watching the current price of {get_option_name(option)}: {current_price:.2f}, stop loss is at {stop_loss:.2f}")
