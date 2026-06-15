@@ -11,7 +11,7 @@ from datetime import datetime
 from statistics import mean
 
 from utilities.ib_utils import req_id_to_comment
-from utilities.utils import is_market_open, is_regular_hours, SAFEGUARD_MAX_CADENCE, get_option_name
+from utilities.utils import is_market_open, is_regular_hours, SAFEGUARD_MAX_CADENCE, get_option_name, JSON_PATH, SUPERVISOR_JSON_PATH
 
 from .account_data import AccountData
 from .market_data_fetcher import MarketDataFetcher
@@ -23,9 +23,7 @@ from .subscription_manager import SubscriptionManager
 
 
 TEMP_PATH = 'shared/state_temp.json'
-JSON_PATH = 'shared/state.json'
 SUPERVISOR_TEMP_PATH = 'shared/supervisor_state_temp.json'
-SUPERVISOR_JSON_PATH = 'shared/supervisor_state.json'
 API_URL = "https://option-trader.onrender.com/api"
 UPDATE_STATE_URL = API_URL + "/update-state"
 UPDATE_SUPERVISOR_STATE_URL = API_URL + "/update-supervisor-state"
@@ -120,20 +118,7 @@ class StateUpdater:
         state['last_updated'] = datetime.now(israel_tz).strftime("%d/%m/%y %H:%M")
 
         # 2. Gather logic metrics
-        is_reg_hours = is_regular_hours()
-        if is_reg_hours:
-            index_price = self.market_data_fetcher.get_spx_price()
-            state['index_label'] = 'S&P 500'
-        else:
-            if self.alternative_valuation == "ES":
-                index_price = self.market_data_fetcher.get_es_price()
-                state['index_label'] = 'ES'
-            else: # SPY
-                index_price = self.market_data_fetcher.get_spy_price() * 10
-                state['index_label'] = 'Adjusted SPY'
 
-        state['spx_price'] = round(index_price, 2) if not math.isnan(index_price) else None
-        
         call_target_delta = self.target_delta_calculator.get_cached_target_delta('C')
         put_target_delta = self.target_delta_calculator.get_cached_target_delta('P')
         
@@ -248,6 +233,21 @@ class StateUpdater:
         else:
             premium = self.market_data_fetcher.calculate_spx_spy_difference()
         state['spx_premium'] = round(premium, 2)
+
+        is_reg_hours = is_regular_hours()
+        if is_reg_hours:
+            index_price = self.market_data_fetcher.get_spx_price()
+            state['index_label'] = 'S&P 500'
+        else:
+            if self.alternative_valuation == "ES":
+                index_price = self.market_data_fetcher.get_es_price() + premium
+                state['index_label'] = 'Adjusted ES'
+            else: # SPY
+                index_price = self.market_data_fetcher.get_spy_price() * 10 + premium
+                state['index_label'] = 'Adjusted SPY'
+
+        state['spx_price'] = round(index_price, 2) if not math.isnan(index_price) else None
+
 
         # 6. Finalize
         self.store_state_locally(state)

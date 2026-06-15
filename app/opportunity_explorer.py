@@ -442,7 +442,7 @@ class OpportunityExplorer:
 
 
     async def try_to_reduce_initial_margin_for_call_options(self, call_option_to_be_sold, required_initial_margin, initial_margin_after_sell, call_options):
-        if self.last_call_option_price <= MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION:
+        if self.last_call_option_price < MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION:
             logger.info(
                 f"Will not try to reduce initial margin for call options since the price level of call options is {self.last_call_option_price} while the minimal sell price to close is {MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION}")
             return FAILED
@@ -455,11 +455,18 @@ class OpportunityExplorer:
         logger.info(f"try_to_reduce_initial_margin_for_call_options, required initial margin: {required_initial_margin}, initial margin after sell: {initial_margin_after_sell},"
                     f"initial margin change due to buy: {initial_margin_change}, option to be sold: {get_option_name(call_option_to_be_sold)}, option to buy: {get_option_name(available_cheap_call_option)}")
 
+        missing_sum = required_initial_margin - initial_margin_after_sell
         if initial_margin_change == 0:
             logger.info(f"Initial margin change for buying {get_option_name(available_cheap_call_option)} is 0, will not buy it")
+            self.call_margin_reduction = {
+                'option': get_option_name(available_cheap_call_option),
+                'margin_deficiency': round(abs(missing_sum)),
+                'margin_change': 0,
+                'required_level': 0
+            }
+            self.last_call_margin_reduction_record_time = time.time()
             return FAILED
 
-        missing_sum = required_initial_margin - initial_margin_after_sell
         required_number_of_units = math.ceil(missing_sum / initial_margin_change)
         
         margin_change = round(abs(initial_margin_change))
@@ -500,7 +507,7 @@ class OpportunityExplorer:
         return math.ceil((0.07 * required_number_of_units + 0.02) / 0.02) * 0.05
 
     async def try_to_reduce_initial_margin_for_put_options(self, put_option_to_be_sold, required_initial_margin, initial_margin_after_sell, put_options):
-        if self.last_put_option_price <= MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION:
+        if self.last_put_option_price < MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION:
             logger.info(f"Will not try to reduce initial margin for put options since the price level of put options is {self.last_put_option_price} while the minimal sell price to close is {MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION}")
             return FAILED
 
@@ -509,16 +516,22 @@ class OpportunityExplorer:
         max_strike = max(position.contract.strike for position in positions)
         available_cheap_put_option = await strike_finder.get_available_cheap_put_option(put_options, max_strike)
         initial_margin_change = await self.trading_bot.get_initial_margin_change(available_cheap_put_option, 1)
+        missing_sum = required_initial_margin - initial_margin_after_sell
         if initial_margin_change == 0:
             logger.info(f"Initial margin change for buying {get_option_name(available_cheap_put_option)} is 0, will not buy it")
             initial_margin_change = await self.trading_bot.get_initial_margin_change(available_cheap_put_option, 2)
             logger.info(
                 f"Initial margin change for 2 units is {initial_margin_change}")
+            self.put_margin_reduction = {
+                'option': get_option_name(available_cheap_put_option),
+                'margin_deficiency': round(abs(missing_sum)),
+                'margin_change': 0,
+                'required_level': 0
+            }
+            self.last_put_margin_reduction_record_time = time.time()
             return FAILED
 
-        missing_sum = required_initial_margin - initial_margin_after_sell
         required_number_of_units = math.ceil(missing_sum / initial_margin_change)
-        
         margin_change = round(abs(initial_margin_change))
         required_level = round(self.calculate_required_level(required_number_of_units), 2)
         if margin_change < 100:

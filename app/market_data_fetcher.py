@@ -21,9 +21,6 @@ LIVE_DATA = 1
 FROZEN_DATA = 2
 
 
-JSON_PATH = 'shared/state.json'
-
-
 def get_gamma(ticker):
     if ticker.lastGreeks and ticker.lastGreeks.gamma is not None:
         return ticker.lastGreeks.gamma
@@ -70,6 +67,8 @@ class MarketDataFetcher:
             self.spy = Stock(symbol='SPY', exchange='SMART', currency='USD')
             self.es = None
             self.index_price_history = deque(maxlen=100)
+            self.alternative_valuation = "SPY"
+            self.load_config()
 
             # Use a lock for market data type switching
 
@@ -77,6 +76,17 @@ class MarketDataFetcher:
             
             logger.info("MarketDataFetcher initialized.")
             self._initialized = True
+
+    def load_config(self):
+        """Reads configuration from config/option_trader_config.json."""
+        config_path = "config/option_trader_config.json"
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, "r") as f:
+                    config = json.load(f)
+                    self.alternative_valuation = config.get("alternative_valuation", "SPY")
+        except Exception as e:
+            logger.error(f"MarketDataFetcher: Error reading config: {e}")
 
     def register_ticker(self, ticker):
         if not ticker:
@@ -123,7 +133,15 @@ class MarketDataFetcher:
 
     def calculate_spx_spy_difference(self):
         if not self.index_price_history:
-            return 0.0
+            if os.path.exists(JSON_PATH):
+                try:
+                    with open(JSON_PATH, "r") as f:
+                        state = json.load(f)
+                        if 'ES' not in state.get('index_label', ''):
+                            return state.get('spx_premium', 0)
+                except Exception as e:
+                    logger.error(f"MarketDataFetcher: Error reading premium fallback from {JSON_PATH}: {e}")
+            return 0
 
         total_diff = sum(entry.spx_price - 10 * entry.spy_price for entry in self.index_price_history)
         return total_diff / len(self.index_price_history)
@@ -135,10 +153,10 @@ class MarketDataFetcher:
                     with open(JSON_PATH, "r") as f:
                         state = json.load(f)
                         if 'ES' in state.get('index_label', ''):
-                            return state.get('spx_premium', math.nan)
+                            return state.get('spx_premium', 0)
                 except Exception as e:
                     logger.error(f"MarketDataFetcher: Error reading premium fallback from {JSON_PATH}: {e}")
-            return math.nan
+            return 0
 
         total_diff = sum(entry.spx_price - entry.es_price for entry in self.index_price_history)
         return total_diff / len(self.index_price_history)
@@ -365,14 +383,24 @@ class MarketDataFetcher:
             return sys.float_info.max
         return ticker.ask
 
+    def get_reference_price(self):
+        self.load_config()
+        if is_regular_hours():
+            return self.get_spx_price()
+        else:
+            if self.alternative_valuation == "ES":
+                return self.get_es_price()
+            else: # SPY
+                return self.get_spy_price() * 10
+
     async def get_spx_implied_volatility(self, right):
         if self.last_implied_volatility_calculation_time[right] < self.options_dump_time:
             self.last_implied_volatility[right] = 0.0
 
         """Calculate implied volatility for the requested side from ATM SPX options."""
-        reference_price = self.get_spx_price() if is_regular_hours() else self.get_spy_price() * 10
+        reference_price = self.get_reference_price()
         if math.isnan(reference_price):
-            logger.error(f"The {"SPX" if is_regular_hours() else "SPY"} price is NaN")
+            logger.error(f"The reference price is NaN")
             return self.last_implied_volatility[right]
 
         options_cache = OptionCache()
@@ -449,9 +477,7 @@ class MarketDataFetcher:
         options = options_cache.load_cached_options()
         
         options_obtained = False
-        spx_price = self.get_spx_price()
-        spy_price = self.get_spy_price()
-        reference_price = spx_price if is_regular_hours() else spy_price * 10
+        reference_price = self.get_reference_price()
 
         if options:
             options = [] if options[0].lastTradeDateOrContractMonth != date else options

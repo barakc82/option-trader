@@ -67,9 +67,11 @@ class StrikeFinder:
             current_candidate = options_block[0] if right == 'P' else options_block[-1]
             logger.info(f"Initial block deltas too high for {right}. Lowest: {lowest_delta:.3f}")
             if right == 'P':
+                logger.info(f"Fetching {right} option block: {strikes[0]} -> {strikes[lower_idx-1]}")
                 options_block = await self.fetch_options_block(0, lower_idx - 1, strike_to_option, strikes)
             else:
                 if higher_idx + 1 < number_of_strikes:
+                    logger.info(f"Fetching {right} option block: {strikes[higher_idx+1]} -> {strikes[number_of_strikes-1]}")
                     options_block = await self.fetch_options_block(higher_idx + 1, number_of_strikes - 1, strike_to_option, strikes)
             self.edge_fetched_block[right] = options_block
         
@@ -182,25 +184,34 @@ class StrikeFinder:
         mid = num_strikes // 2
         l_idx = max(mid - OPTIONS_BLOCK_LOWER_PART_SIZE, 0)
         h_idx = min(mid + OPTIONS_BLOCK_HIGHER_PART_SIZE, num_strikes - 1)
-        
+
+        logger.info(f"Fetching {right} option block (middle): {relevant_strikes[l_idx]} -> {relevant_strikes[h_idx]}, indices: {l_idx} -> {h_idx}")
         options_block = await self.fetch_options_block(l_idx, h_idx, strike_to_option, relevant_strikes)
         if not options_block: return None
 
+        self.middle_fetched_block[right] = options_block
         available_cheap = None
         
         # Check if we need to fetch more blocks based on liquidity/price
         if right == 'C':
             if extract_ask(options_block[-1].ticker) == 0.05 and h_idx + 1 < num_strikes:
                 available_cheap = options_block[-1]
+                logger.info(f"Fetching {right} option block (edge): {relevant_strikes[h_idx+1]} -> {relevant_strikes[num_strikes-1]}, indices: {h_idx+1} -> {num_strikes-1}")
                 options_block = await self.fetch_options_block(h_idx + 1, num_strikes - 1, strike_to_option, relevant_strikes)
+                self.edge_fetched_block[right] = options_block
         else:
             if extract_ask(options_block[0].ticker) > 0.05:
                 if l_idx > 0:
+                    logger.info(
+                        f"Fetching {right} option block (edge): {relevant_strikes[0]} -> {relevant_strikes[l_idx-1]}, indices: 0 -> {l_idx-1}")
                     options_block = await self.fetch_options_block(0, l_idx - 1, strike_to_option, relevant_strikes)
+                    self.edge_fetched_block[right] = options_block
             
             if options_block and extract_ask(options_block[-1].ticker) == 0.05 and h_idx + 1 < num_strikes:
                 available_cheap = options_block[-1]
+                logger.info(f"Fetching {right} option block (edge): {relevant_strikes[h_idx+1]} -> {relevant_strikes[num_strikes-1]}, indices: {h_idx+1} -> {num_strikes-1}")
                 options_block = await self.fetch_options_block(h_idx + 1, num_strikes - 1, strike_to_option, relevant_strikes)
+                self.edge_fetched_block[right] = options_block
 
         for option in options_block:
             if not hasattr(option, "ticker"):

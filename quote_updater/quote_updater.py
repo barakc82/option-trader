@@ -37,13 +37,6 @@ def update_google_quotes_sheet_sync(worksheet, updates_payload):
     if not updates_payload:
         return
 
-    if "USDILS" in latest_quotes:
-        usd_ils_rate = latest_quotes["USDILS"][1]
-        updates_payload.append({
-            'range': 'F19',
-            'values': [[usd_ils_rate]]
-        })
-
     try:
         worksheet.batch_update(updates_payload)
         print(f"[{datetime.now().strftime('%X')}] Batch updated {len(updates_payload)} symbols with new prices.")
@@ -70,6 +63,14 @@ def periodic_sheet_updater(quotes_worksheet, leverage_worksheet):
                 })
                 last_sent_prices[symbol] = current_price
 
+
+    if "USDILS" in latest_quotes:
+        usd_ils_rate = latest_quotes["USDILS"][1]
+        updates_payload.append({
+            'range': 'F19',
+            'values': [[usd_ils_rate]]
+        })
+
     update_google_quotes_sheet_sync(quotes_worksheet, updates_payload)
     update_google_leverage_sheet_sync(leverage_worksheet, changed_quotes)
 
@@ -95,7 +96,11 @@ def setup_subscriptions(ib, contracts):
     ib.qualifyContracts(*contracts)
     for contract in contracts:
         ib.reqMktData(contract, '', False, False)
-    ib.pendingTickersEvent += on_pending_tickers    
+    ib.pendingTickersEvent += on_pending_tickers
+
+
+def periodic_database_updater():
+    pass
 
 
 def main():
@@ -122,6 +127,8 @@ def main():
         contracts[sp5y_index].primaryExchange = 'LSEETF'
 
     contracts.append(Forex('USDILS'))
+    es_future = fetch_es_future(ib)
+    contracts.append(es_future)
 
     if ib.isConnected():
         setup_subscriptions(ib, contracts)
@@ -153,6 +160,7 @@ def main():
                 if time.time() - last_update_time >= UPDATE_INTERVAL_SECONDS:
                     try:
                         periodic_sheet_updater(quotes_worksheet, leverage_worksheet)
+                        periodic_database_updater()
                     except Exception as e:
                         print(f"Error during periodic update: {e}")
                     last_update_time = time.time()
@@ -168,6 +176,19 @@ def main():
     finally:
         ib.disconnect()
 
+def fetch_es_future(ib: IB):
+    es_incomplete = Future('ES', exchange='CME')
+
+    # 2. Fetch all matching contract details from the exchange
+    es_details = ib.reqContractDetails(es_incomplete)
+    contracts = [es_detail.contract for es_detail in es_details]
+
+    # 3. Sort the contracts chronologically by expiration date
+    contracts.sort(key=lambda c: c.lastTradeDateOrContractMonth)
+
+    # 4. Select the closest expiration (front-month)
+    closest_es_future = contracts[0]
+    return closest_es_future
 
 if __name__ == '__main__':
     main()

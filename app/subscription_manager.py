@@ -4,7 +4,7 @@ import time
 import math
 import json
 import os
-from ib_insync import Option
+from ib_insync import Option, FuturesOption
 from .connection_manager import ConnectionManager
 from .trading_bot import TradingBot
 from .market_data_fetcher import MarketDataFetcher
@@ -315,12 +315,11 @@ class SubscriptionManager:
 
     def create_matching_es_contract(self, spx_contract):
         """Create a matching ES option contract for a given SPX option contract."""
-        return Option(
+        return FuturesOption(
             symbol='ES',
             lastTradeDateOrContractMonth=spx_contract.lastTradeDateOrContractMonth,
             strike=spx_contract.strike,
             right=spx_contract.right,
             exchange='GLOBEX',
             currency='USD',
-            secType='FOP'
         )

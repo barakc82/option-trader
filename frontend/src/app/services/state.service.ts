@@ -19,6 +19,8 @@ export class StateService {
       switchMap(() => this.http.get<State>('/state.json').pipe(
         catchError(err => {
           console.error('Error fetching state:', err);
+          console.error('Status:', err.status);
+          console.error('Error body:', err.error);  // This will show what actually came back
           return of(null);
         })
       ))

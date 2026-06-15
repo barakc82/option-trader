@@ -42,7 +42,7 @@
 
       <p><strong>{{ state.index_label || 'S&P 500' }}:</strong> {{ state.spx_price !== null ? state.spx_price : 'N/A' }}</p>
 
-      <div *ngIf="state.call_margin_reduction && state.call_margin_reduction.margin_change !== 0 && state.call_margin_reduction.required_level !== 0" class="margin-reduction-info">
+      <div *ngIf="state.call_margin_reduction" class="margin-reduction-info">
         <h4>Call Margin Reduction</h4>
         <p><strong>Option:</strong> {{ state.call_margin_reduction.option }}</p>
         <p><strong>Margin Deficiency:</strong> {{ state.call_margin_reduction.margin_deficiency }}</p>
@@ -50,7 +50,7 @@
         <p><strong>Required Level:</strong> {{ state.call_margin_reduction.required_level }}</p>
       </div>
 
-      <div *ngIf="state.put_margin_reduction && state.put_margin_reduction.margin_change !== 0 && state.put_margin_reduction.required_level !== 0" class="margin-reduction-info">
+      <div *ngIf="state.put_margin_reduction" class="margin-reduction-info">
         <h4>Put Margin Reduction</h4>
         <p><strong>Option:</strong> {{ state.put_margin_reduction.option }}</p>
         <p><strong>Margin Deficiency:</strong> {{ state.put_margin_reduction.margin_deficiency }}</p>
@@ -159,7 +159,7 @@
         <strong>Excess Liquidity:</strong> {{ state.excess_liquidity }}
       </p>
       <p>
-        <strong>SPX Premium:</strong> {{ state.spx_premium }}
+        <strong>SPX Premium:</strong> {{ state.spx_premium !== state.spx_premium ? 'N/A' : state.spx_premium }}
       </p>
       <p><strong>Liquidation Alert Time:</strong> {{ state.liquidation_alert_time === 0
         ? 'No alert' 

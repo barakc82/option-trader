@@ -164,6 +164,10 @@ class OptionSafeguard:
         interpolated_gamma = g1.gamma * weight1 + g2.gamma * weight2
 
         adjusted_spy_ask, indices_difference = self._calculate_adjusted_spy_ask(interpolated_spy_ask, interpolated_delta, interpolated_gamma)
+
+        if not self._validate_indices_difference(indices_difference):
+            return False
+
         deviation = (spx_ask - adjusted_spy_ask) / adjusted_spy_ask
 
         if int(time.time() * 10) % 1000 == 0:
@@ -337,6 +341,10 @@ class OptionSafeguard:
 
         greeks = es_ticker.askGreeks or es_ticker.modelGreeks
         adjusted_es_ask, indices_difference = self._calculate_adjusted_es_ask(es_ticker.ask, greeks.delta, greeks.gamma)
+
+        if not self._validate_indices_difference(indices_difference):
+            return False
+
         deviation = (spx_ask - adjusted_es_ask) / adjusted_es_ask
 
         if int(time.time() * 10) % 1000 == 0:
@@ -404,4 +412,10 @@ class OptionSafeguard:
                         f"delta: {greeks.delta}, gamma: {greeks.gamma}. Unfairness is not detected")
             return False
 
+        return True
+
+    def _validate_indices_difference(self, indices_difference):
+        if math.isnan(indices_difference):
+            logger.info(f"Indices difference is NaN. Unfairness is not detected")
+            return False
         return True
