@@ -36,9 +36,15 @@ def get_implied_volatility(ticker):
     return math.nan
 
 @dataclass
-class IndexPricePair:
+class SPXSpyPair:
     spx_price: float
     spy_price: float
+    time: datetime
+
+
+@dataclass
+class SPXESPair:
+    spx_price: float
     es_price: float
     time: datetime
 
@@ -66,7 +72,8 @@ class MarketDataFetcher:
             self.spx = Index(symbol='SPX', exchange='CBOE', currency='USD')
             self.spy = Stock(symbol='SPY', exchange='SMART', currency='USD')
             self.es = None
-            self.index_price_history = deque(maxlen=100)
+            self.spx_spy_history = deque(maxlen=100)
+            self.spx_es_history = deque(maxlen=100)
             self.alternative_valuation = "SPY"
             self.load_config()
 
@@ -132,22 +139,22 @@ class MarketDataFetcher:
         return price
 
     def calculate_spx_spy_difference(self):
-        if not self.index_price_history:
+        if not self.spx_spy_history:
             if os.path.exists(JSON_PATH):
                 try:
                     with open(JSON_PATH, "r") as f:
                         state = json.load(f)
-                        if 'ES' not in state.get('index_label', ''):
+                        if 'SPY' in state.get('index_label', ''):
                             return state.get('spx_premium', 0)
                 except Exception as e:
                     logger.error(f"MarketDataFetcher: Error reading premium fallback from {JSON_PATH}: {e}")
             return 0
 
-        total_diff = sum(entry.spx_price - 10 * entry.spy_price for entry in self.index_price_history)
-        return total_diff / len(self.index_price_history)
+        total_diff = sum(entry.spx_price - 10 * entry.spy_price for entry in self.spx_spy_history)
+        return total_diff / len(self.spx_spy_history)
 
     def calculate_spx_es_difference(self):
-        if not self.index_price_history:
+        if not self.spx_es_history:
             if os.path.exists(JSON_PATH):
                 try:
                     with open(JSON_PATH, "r") as f:
@@ -158,8 +165,8 @@ class MarketDataFetcher:
                     logger.error(f"MarketDataFetcher: Error reading premium fallback from {JSON_PATH}: {e}")
             return 0
 
-        total_diff = sum(entry.spx_price - entry.es_price for entry in self.index_price_history)
-        return total_diff / len(self.index_price_history)
+        total_diff = sum(entry.spx_price - entry.es_price for entry in self.spx_es_history)
+        return total_diff / len(self.spx_es_history)
 
     def get_cached_spx_implied_volatility(self, right):
         return self.last_implied_volatility[right]
@@ -229,21 +236,34 @@ class MarketDataFetcher:
         spy_ticker = self.ib.ticker(self.spy)
         es_ticker = self.ib.ticker(self.es) if self.es else None
 
-        if (is_regular_hours() and spx_ticker and spy_ticker and es_ticker and
-                spx_ticker.time and spy_ticker.time and es_ticker.time and
-                not math.isnan(spx_ticker.last) and not math.isnan(spy_ticker.last) and not math.isnan(es_ticker.last)):
+        if not is_regular_hours() or not spx_ticker or math.isnan(spx_ticker.last):
+            return
 
-            times = [spx_ticker.time, spy_ticker.time, es_ticker.time]
-            if (max(times) - min(times)).total_seconds() <= 30:
-                new_entry = IndexPricePair(
+        # Update SPX-SPY history
+        if spy_ticker and not math.isnan(spy_ticker.last):
+            if (spx_ticker.time and spy_ticker.time and
+                    (spx_ticker.time - spy_ticker.time).total_seconds() <= 30):
+                new_spy_entry = SPXSpyPair(
                     spx_price=spx_ticker.last,
                     spy_price=spy_ticker.last,
+                    time=datetime.now()
+                )
+                if (not self.spx_spy_history or
+                        (new_spy_entry.time - self.spx_spy_history[-1].time).total_seconds() >= 15 * 60):
+                    self.spx_spy_history.append(new_spy_entry)
+
+        # Update SPX-ES history
+        if es_ticker and not math.isnan(es_ticker.last):
+            if (spx_ticker.time and es_ticker.time and
+                    (spx_ticker.time - es_ticker.time).total_seconds() <= 30):
+                new_es_entry = SPXESPair(
+                    spx_price=spx_ticker.last,
                     es_price=es_ticker.last,
                     time=datetime.now()
                 )
-                if (not self.index_price_history or
-                        (new_entry.time - self.index_price_history[-1].time).total_seconds() >= 15 * 60):
-                    self.index_price_history.append(new_entry)
+                if (not self.spx_es_history or
+                        (new_es_entry.time - self.spx_es_history[-1].time).total_seconds() >= 15 * 60):
+                    self.spx_es_history.append(new_es_entry)
 
     def on_ticker_update(self, ticker):
         """Handle real-time updates for options, with throttling."""
