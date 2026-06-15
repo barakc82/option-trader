@@ -1,6 +1,8 @@
 import asyncio
 import math
 import time
+import json
+import os
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
@@ -17,6 +19,9 @@ logger = logging.getLogger(__name__)
 # Market Data Types
 LIVE_DATA = 1
 FROZEN_DATA = 2
+
+
+JSON_PATH = 'shared/state.json'
 
 
 def get_gamma(ticker):
@@ -78,7 +83,7 @@ class MarketDataFetcher:
             return
         con_id = ticker.contract.conId
         if con_id not in self.registered_contracts:
-            ticker.updateEvent += self.on_option_ticker_update
+            ticker.updateEvent += self.on_ticker_update
             self.registered_contracts[con_id] = ticker
             logger.info(f"Registered update handler for {get_option_name(ticker.contract)}")
 
@@ -125,7 +130,15 @@ class MarketDataFetcher:
 
     def calculate_spx_es_difference(self):
         if not self.index_price_history:
-            return 0.0
+            if os.path.exists(JSON_PATH):
+                try:
+                    with open(JSON_PATH, "r") as f:
+                        state = json.load(f)
+                        if 'ES' in state.get('index_label', ''):
+                            return state.get('spx_premium', math.nan)
+                except Exception as e:
+                    logger.error(f"MarketDataFetcher: Error reading premium fallback from {JSON_PATH}: {e}")
+            return math.nan
 
         total_diff = sum(entry.spx_price - entry.es_price for entry in self.index_price_history)
         return total_diff / len(self.index_price_history)
@@ -193,26 +206,7 @@ class MarketDataFetcher:
                 self.ib.reqMarketDataType(target_state)
                 self.market_data_state = target_state
 
-    def on_option_ticker_update(self, ticker):
-        """Handle real-time updates for options, with throttling."""
-        now = time.time()
-        last_time = getattr(ticker, 'last_processed_time', 0)
-        
-        gamma = get_gamma(ticker)
-        price = ticker.last
-        option = ticker.contract
-
-        # Slower updates for low-gamma options (further out of money or illiquid)
-        throttle_interval = 1.0 if option.symbol == 'SPY' else 0.5
-        if (math.isnan(gamma) or gamma < 0.002):
-            throttle_interval = 10.0 if option.symbol == 'SPY' else 5.0
-        if math.isnan(price):
-            throttle_interval = 40.0 if option.symbol == 'SPY' else 20.0
-
-        if now - last_time < throttle_interval:
-            return
-        ticker.last_processed_time = now
-
+    def on_index_ticker_update(self):
         spx_ticker = self.ib.ticker(self.spx)
         spy_ticker = self.ib.ticker(self.spy)
         es_ticker = self.ib.ticker(self.es) if self.es else None
@@ -220,7 +214,7 @@ class MarketDataFetcher:
         if (is_regular_hours() and spx_ticker and spy_ticker and es_ticker and
                 spx_ticker.time and spy_ticker.time and es_ticker.time and
                 not math.isnan(spx_ticker.last) and not math.isnan(spy_ticker.last) and not math.isnan(es_ticker.last)):
-            
+
             times = [spx_ticker.time, spy_ticker.time, es_ticker.time]
             if (max(times) - min(times)).total_seconds() <= 30:
                 new_entry = IndexPricePair(
@@ -230,13 +224,36 @@ class MarketDataFetcher:
                     time=datetime.now()
                 )
                 if (not self.index_price_history or
-                    (new_entry.time - self.index_price_history[-1].time).total_seconds() >= 15 * 60):
+                        (new_entry.time - self.index_price_history[-1].time).total_seconds() >= 15 * 60):
                     self.index_price_history.append(new_entry)
+
+    def on_ticker_update(self, ticker):
+        """Handle real-time updates for options, with throttling."""
+        now = time.time()
+        last_time = getattr(ticker, 'last_processed_time', 0)
+        
+        gamma = get_gamma(ticker)
+        price = ticker.last
+        contract = ticker.contract
+
+        # Slower updates for low-gamma options (further out of money or illiquid)
+        throttle_interval = 0.5 if contract.symbol == 'SPX' else 1.0
+        if (math.isnan(gamma) or gamma < 0.002):
+            throttle_interval = 5.0 if contract.symbol == 'SPX' else 10.0
+        if math.isnan(price):
+            throttle_interval = 20.0 if contract.symbol == 'SPX' else 40.0
+
+        if now - last_time < throttle_interval:
+            return
+        ticker.last_processed_time = now
+
+        if ticker.contract in [self.spx, self.spy, self.es]:
+            self.on_index_ticker_update()
 
         delta = get_delta(ticker)
         delta_str = f"{abs(delta):.3f}" if delta is not None else "N/A"
         gamma_str = f"{gamma:.3f}" if not math.isnan(gamma) else "N/A"
-        logger.info(f"Update: {option.symbol} {get_option_name(option)} | Price: {price} | Delta: {delta_str} | Gamma: {gamma_str}")
+        logger.info(f"Update: {contract.symbol} {get_option_name(contract)} | Price: {price} | Delta: {delta_str} | Gamma: {gamma_str}")
 
         # Note: Subscription cleanup is handled separately or can be added here if highly selective.
         # Periodic cleanup is usually safer to avoid constant churning during volatile markets.
@@ -329,7 +346,7 @@ class MarketDataFetcher:
         if contract.conId in self.registered_contracts:
             ticker = self.ib.ticker(contract)
             if ticker:
-                ticker.updateEvent -= self.on_option_ticker_update
+                ticker.updateEvent -= self.on_ticker_update
                 self.ib.cancelMktData(contract)
 
             self.registered_contracts.pop(contract.conId)
