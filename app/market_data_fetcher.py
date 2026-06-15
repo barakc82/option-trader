@@ -242,27 +242,27 @@ class MarketDataFetcher:
         # Update SPX-SPY history
         if spy_ticker and not math.isnan(spy_ticker.last):
             if (spx_ticker.time and spy_ticker.time and
-                    (spx_ticker.time - spy_ticker.time).total_seconds() <= 30):
+                    (spx_ticker.time - spy_ticker.time).total_seconds() <= 2):
                 new_spy_entry = SPXSpyPair(
                     spx_price=spx_ticker.last,
                     spy_price=spy_ticker.last,
                     time=datetime.now()
                 )
                 if (not self.spx_spy_history or
-                        (new_spy_entry.time - self.spx_spy_history[-1].time).total_seconds() >= 15 * 60):
+                        (new_spy_entry.time - self.spx_spy_history[-1].time).total_seconds() >= 5 * 60):
                     self.spx_spy_history.append(new_spy_entry)
 
         # Update SPX-ES history
         if es_ticker and not math.isnan(es_ticker.last):
             if (spx_ticker.time and es_ticker.time and
-                    (spx_ticker.time - es_ticker.time).total_seconds() <= 30):
+                    (spx_ticker.time - es_ticker.time).total_seconds() <= 2):
                 new_es_entry = SPXESPair(
                     spx_price=spx_ticker.last,
                     es_price=es_ticker.last,
                     time=datetime.now()
                 )
                 if (not self.spx_es_history or
-                        (new_es_entry.time - self.spx_es_history[-1].time).total_seconds() >= 15 * 60):
+                        (new_es_entry.time - self.spx_es_history[-1].time).total_seconds() >= 5 * 60):
                     self.spx_es_history.append(new_es_entry)
 
     def on_ticker_update(self, ticker):
