@@ -124,8 +124,7 @@ class ESTickLogger:
                 for file in os.listdir(raw_dir):
                     if file.endswith(".parquet") and file != current_raw_file:
                         raw_path = os.path.join(raw_dir, file)
-                        processed_filename = file.replace(".parquet", "_processed.parquet")
-                        processed_path = os.path.join(processed_dir, processed_filename)
+                        processed_path = os.path.join(processed_dir, file)
 
                         if not os.path.exists(processed_path):
                             print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Processing {file}...")
@@ -179,24 +178,44 @@ class ESTickLogger:
             print(f"Failed to process {raw_path}: {e}")
 
     def run(self):
-        """Starts the event loop."""
-        self.setup_contracts()
-        self.start_data_streams()
-
+        """Starts the event loop with reconnection logic."""
         # Schedule the background tasks
         loop = asyncio.get_event_loop()
         loop.create_task(self.buffer_flush_loop(interval_seconds=300))
         loop.create_task(self.data_processing_loop())
 
         print("Tick Logger Live. Streaming data...")
+        
         try:
-            self.ib.run()
+            while True:
+                try:
+                    if self.ib is None or not self.ib.isConnected():
+                        if self.ib:
+                            print("Disconnected from IB. Attempting to reconnect...")
+                            self.ib.disconnect()
+                        
+                        self.setup_contracts()
+                        self.start_data_streams()
+                        print("Reconnected and re-subscribed.")
+                    
+                    self.ib.waitOnUpdate(timeout=1.0)
+                    
+                except (ConnectionError, BrokenPipeError, ConnectionRefusedError) as e:
+                    print(f"Connection issue: {e}. Reconnecting in 10 seconds...")
+                    import time
+                    time.sleep(10)
+                except Exception as e:
+                    print(f"Unexpected error in main loop: {e}. Continuing...")
+                    import time
+                    time.sleep(1)
+
         except KeyboardInterrupt:
             print("\nShutting down. Executing emergency flush...")
             if self.tick_buffer:
                 df = pd.DataFrame(self.tick_buffer)
                 df.to_parquet("emergency_flush.parquet", engine='fastparquet')
-            self.ib.disconnect()
+            if self.ib:
+                self.ib.disconnect()
 
 
 # Execution
