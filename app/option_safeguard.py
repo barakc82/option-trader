@@ -2,7 +2,7 @@ import math
 import asyncio
 from typing import Any
 
-from ib_insync import Option, Trade
+from ib_insync import Option, Trade, FuturesOption
 
 from utilities.utils import *
 from .max_loss_calculator import MaxLossCalculator
@@ -356,10 +356,10 @@ class OptionSafeguard:
             self.last_unfair_ask_warning_time = now
         return True
 
-    def handle_unfair_ask_value_es(self, high_limit_buy_trade: Any | None, option, es_option: Option,
+    def handle_unfair_ask_value_es(self, high_limit_buy_trade: Any | None, option, es_option: FuturesOption,
                                         stop_loss: Any):
         logger.warning(
-            f"Ask value of {get_option_name(option)} is unfair (Ask: {option.ticker.ask}) against ES, "
+            f"Ask value of {get_option_name(option)} ({option.ticker.ask}) is unfair against ES option ask value (Ask: {es_option.ticker.ask}), "
             f"will not close position")
 
         if high_limit_buy_trade:
