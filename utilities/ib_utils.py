@@ -95,6 +95,22 @@ def get_delta_for_sell(ticker):
     return None
 
 
+def get_gamma(ticker):
+    if ticker.lastGreeks and ticker.lastGreeks.gamma is not None:
+        return ticker.lastGreeks.gamma
+    if ticker.modelGreeks and ticker.modelGreeks.gamma is not None:
+        return ticker.modelGreeks.gamma
+    return math.nan
+
+
+def get_implied_volatility(ticker):
+    if ticker.lastGreeks and ticker.lastGreeks.impliedVol is not None:
+        return ticker.lastGreeks.impliedVol
+    if ticker.modelGreeks and ticker.modelGreeks.impliedVol is not None:
+        return ticker.modelGreeks.impliedVol
+    return math.nan
+
+
 def find_high_limit_buy_trade(option, open_buy_trades):
     for open_buy_trade in open_buy_trades:
         if (option.conId == open_buy_trade.contract.conId and open_buy_trade.order.action.upper() == 'BUY' and
