@@ -45,11 +45,9 @@ class OptionSafeguard:
             self.last_alive_log_time = 0
             self.config = {}
             self.should_guard_positions = True
-            self.enable_spy_option_hedging = False
             self.last_modification_times = {}
             self.last_run_end_time = 0
             self.last_unfair_ask_warning_time = 0
-            self.alternative_valuation = "SPY"
             self._initialized = True
 
     async def run(self):
@@ -120,78 +118,10 @@ class OptionSafeguard:
                 with open(config_path, "r") as f:
                     self.config = json.load(f)
                     self.should_guard_positions = self.config.get("should_guard_positions", True)
-                    self.enable_spy_option_hedging = self.config.get("enable_spy_option_hedging", False)
-                    self.alternative_valuation = self.config.get("alternative_valuation", "SPY")
+                    self.enable_es_option_hedging = self.config.get("enable_es_option_hedging", False)
         except Exception as e:
             logger.error(f"OptionSafeguard: Error reading config: {e}")
 
-    def is_unfair_ask_value(self, option, spy_options):
-        spx_ask = option.ticker.ask
-        if spx_ask < MIN_PRICE_THRESHOLD:
-            return False
-
-        # spy_options is a list of [lower_strike_spy, upper_strike_spy] (or both same if exact match)
-        spy_tickers = [self.market_data_fetcher.get_ticker(s) for s in spy_options]
-        spy_names = [get_spy_option_name(s) for s in spy_options]
-
-        for i in range(2):
-            if not self._validate_alt_ticker(option, spy_options[i], spy_tickers[i], spy_names[i], "SPY"):
-                return False
-            if not self._validate_greeks(spy_tickers[i], spy_names[i]):
-                return False
-
-        # Calculate weighted average for ask and greeks
-        target_spy_strike = option.strike / 10.0
-        s1, s2 = spy_options[0].strike, spy_options[1].strike
-        
-        if s1 == s2:
-            weight2 = 0.5 # Doesn't matter, they are the same
-            weight1 = 0.5
-        else:
-            # Linear interpolation weights: weight2 = (target - s1) / (s2 - s1)
-            weight2 = (target_spy_strike - s1) / (s2 - s1)
-            weight1 = 1.0 - weight2
-
-        interpolated_spy_ask = spy_tickers[0].ask * weight1 + spy_tickers[1].ask * weight2
-        
-        # Interpolate Greeks
-        g1 = spy_tickers[0].askGreeks or spy_tickers[0].modelGreeks
-        g2 = spy_tickers[1].askGreeks or spy_tickers[1].modelGreeks
-        
-        interpolated_delta = g1.delta * weight1 + g2.delta * weight2
-        interpolated_gamma = g1.gamma * weight1 + g2.gamma * weight2
-
-        adjusted_spy_ask, indices_difference = self._calculate_adjusted_spy_ask(interpolated_spy_ask, interpolated_delta, interpolated_gamma)
-
-        if not self._validate_indices_difference(indices_difference):
-            return False
-
-        deviation = (spx_ask - adjusted_spy_ask) / adjusted_spy_ask
-
-        if int(time.time() * 10) % 1000 == 0:
-            logger.info(f"Checking option {get_option_name(option)} for unfair ask using {spy_names}. "
-                        f"SPX ask is {spx_ask} and the adjusted SPY ask is {adjusted_spy_ask:.2f}, "
-                        f"the deviation is {deviation:.2f}, SPX premium is {indices_difference:.2f}")
-
-        if deviation < MAX_DEVIATION:
-            return False
-
-        now = time.time()
-        if now - self.last_unfair_ask_warning_time >= 10:
-            logger.warning(
-                f"Unfair ask for {get_option_name(option)} against {spy_names}: "
-                f"SPX Ask: {spx_ask}, SPY Asks: [{spy_tickers[0].ask}, {spy_tickers[1].ask}], deviation: {deviation:.2f} "
-                f"(Adjusted: {adjusted_spy_ask:.2f}, SPX premium : {indices_difference:.2f})")
-            self.last_unfair_ask_warning_time = now
-        return True
-
-    def _calculate_adjusted_spy_ask(self, spy_ask, spy_delta, spy_gamma):
-        indices_difference = self.market_data_fetcher.calculate_spx_spy_difference()
-        error_spy = indices_difference / 10.0
-        delta_component = spy_delta * error_spy
-        gamma_component = 0.5 * spy_gamma * (error_spy ** 2)
-        adjusted_spy_baseline = spy_ask + delta_component + gamma_component
-        return 10.0 * adjusted_spy_baseline, indices_difference
 
     async def guard_current_positions(self):
         logger.debug("Checking current positions")
@@ -236,16 +166,10 @@ class OptionSafeguard:
         stop_loss = position.avgCost / 100 + stop_loss_per_option
         high_limit_buy_trade = find_high_limit_buy_trade(option, open_trades)
 
-        if self.alternative_valuation == "SPY" and is_regular_hours():
-            spy_options = self.subscription_manager.spx_to_spy_map.get(option.conId)
-            if spy_options and self.is_unfair_ask_value(option, spy_options):
-                self.handle_unfair_ask_value(high_limit_buy_trade, option, spy_options, stop_loss)
-                return
-        elif self.alternative_valuation == "ES":
-            es_option = self.subscription_manager.spx_to_es_map.get(option.conId)
-            if es_option and self.is_unfair_ask_value_es(option, es_option):
-                self.handle_unfair_ask_value_es(high_limit_buy_trade, option, es_option, stop_loss)
-                return
+        es_option = self.subscription_manager.spx_to_es_map.get(option.conId)
+        if es_option and self.is_unfair_ask_value(option, es_option):
+            self.handle_unfair_ask_value(high_limit_buy_trade, option, es_option, stop_loss)
+            return
 
         if stop_loss * 0.5 <= current_price < stop_loss:
             logger.info(f"Watching the current price of {get_option_name(option)}: {current_price:.2f}, stop loss is at {stop_loss:.2f}")
@@ -291,33 +215,8 @@ class OptionSafeguard:
 
         await self.trading_bot.modify_limit_order(high_limit_buy_trade, required_limit_price)
 
-    def handle_unfair_ask_value(self, high_limit_buy_trade: Any | None, option, spy_options: list[Option],
-                                      stop_loss: Any):
-        logger.warning(
-            f"Ask value of {get_option_name(option)} is unfair (Ask: {option.ticker.ask}) against SPY, "
-            f"will not close position")
 
-        if high_limit_buy_trade:
-            logger.warning(
-                f"Cancelling buy order for {get_option_name(option)} since the ask value is unfair against SPY")
-            self.trading_bot.cancel_order(high_limit_buy_trade.order)
-
-        # Simplified for hedging recommendation - just use the first one or both
-        for spy_option in spy_options:
-            spy_ticker = self.ib.ticker(spy_option)
-            if spy_ticker:
-                spy_current_price = spy_ticker.marketPrice()
-
-                if not math.isnan(spy_current_price):
-                    spy_current_adjusted_price = spy_current_price * 10
-                    if spy_current_adjusted_price > stop_loss:
-                        logger.warning(f"Should consider buying {get_spy_option_name(spy_option)}, since the ask value of "
-                                       f"{get_option_name(option)} is unfair, and the fair price is above the stop loss")
-
-                        if self.enable_spy_option_hedging:
-                            pass
-
-    def is_unfair_ask_value_es(self, option, es_option):
+    def is_unfair_ask_value(self, option, es_option):
         spx_ask = option.ticker.ask
         if spx_ask < MIN_PRICE_THRESHOLD:
             return False
@@ -356,7 +255,7 @@ class OptionSafeguard:
             self.last_unfair_ask_warning_time = now
         return True
 
-    def handle_unfair_ask_value_es(self, high_limit_buy_trade: Any | None, option, es_option: FuturesOption,
+    def handle_unfair_ask_value(self, high_limit_buy_trade: Any | None, option, es_option: FuturesOption,
                                         stop_loss: Any):
         logger.warning(
             f"Ask value of {get_option_name(option)} ({option.ticker.ask}) is unfair against ES option ask value (Ask: {es_option.ticker.ask}), "
@@ -380,10 +279,7 @@ class OptionSafeguard:
         if not alt_ticker:
             logger.info(f"Matching {alt_type} ticker for {get_option_name(option)} ({alt_name}) not found in tickers cache. "
                         f"Invalidating subscription in SubscriptionManager. Unfairness is not detected")
-            if alt_type == "SPY":
-                self.subscription_manager.spx_to_spy_map.pop(option.conId, None)
-            else:
-                self.subscription_manager.spx_to_es_map.pop(option.conId, None)
+            self.subscription_manager.spx_to_es_map.pop(option.conId, None)
             return False
 
         if math.isnan(alt_ticker.ask) or alt_ticker.ask <= 0:
@@ -399,7 +295,7 @@ class OptionSafeguard:
             logger.info(f"Matching ticker for {name} has no ask greeks nor model greeks. Unfairness is not detected")
             return False
 
-        if math.isnan(greeks.delta) or math.isnan(greeks.gamma):
+        if not greeks.delta or math.isnan(greeks.delta) or not greeks.gamma or math.isnan(greeks.gamma):
             logger.info(f"Matching ticker for {name} has an invalid delta and gamma values: "
                         f"delta: {greeks.delta}, gamma: {greeks.gamma}. Unfairness is not detected")
             return False

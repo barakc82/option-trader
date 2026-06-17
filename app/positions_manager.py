@@ -86,3 +86,6 @@ class PositionsManager:
         logger.info(f"Trade filled: {get_option_name(trade.contract)} {trade.order.action}")
         if trade.order.action.upper() == 'BUY':
             self.done_contract_ids.add(trade.contract.conId)
+        if trade.order.orderId in req_id_to_comment and "Margin" in req_id_to_comment[trade.order.orderId]:
+            opportunity_explorer = OpportunityExplorer()
+            opportunity_explorer.notify_margin_lock_resolution_attempted()

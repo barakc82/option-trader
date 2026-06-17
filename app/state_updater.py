@@ -46,21 +46,9 @@ class StateUpdater:
             self.trading_bot = TradingBot()
             self.target_delta_calculator = TargetDeltaCalculator()
             self.max_loss_calculator = MaxLossCalculator()
-            self.alternative_valuation = "SPY"
-            
-            self.load_config()
+
             self._initialized = True
 
-    def load_config(self):
-        """Reads configuration from config/option_trader_config.json."""
-        config_path = "config/option_trader_config.json"
-        try:
-            if os.path.exists(config_path):
-                with open(config_path, "r") as f:
-                    config = json.load(f)
-                    self.alternative_valuation = config.get("alternative_valuation", "SPY")
-        except Exception as e:
-            logger.error(f"StateUpdater: Error reading config: {e}")
 
     async def run(self):
         """Background task to periodically update the system state."""
@@ -104,7 +92,6 @@ class StateUpdater:
 
     async def update_state(self, base_state):
         """Orchestrates the asynchronous collection and reporting of bot state."""
-        self.load_config()
         state = base_state.copy()
         
         # 1. Gather account metrics
@@ -161,36 +148,14 @@ class StateUpdater:
                 'stop_loss': stop_loss
             }
 
-            if self.alternative_valuation == "SPY" and is_reg_hours:
-                spy_options = subscription_manager.spx_to_spy_map.get(option.conId)
-                if spy_options:
-                    # spy_options is [lower_strike_spy, upper_strike_spy]
-                    spy_tickers = [self.market_data_fetcher.get_ticker(s) for s in spy_options]
-
-                    if all(t and not math.isnan(t.marketPrice()) for t in spy_tickers):
-                        # Weighted average calculation
-                        target_spy_strike = option.strike / 10.0
-                        s1, s2 = spy_options[0].strike, spy_options[1].strike
-                        
-                        p1, p2 = spy_tickers[0].marketPrice(), spy_tickers[1].marketPrice()
-                        
-                        if s1 == s2:
-                            spy_price = p1
-                        else:
-                            weight2 = (target_spy_strike - s1) / (s2 - s1)
-                            weight1 = 1.0 - weight2
-                            spy_price = p1 * weight1 + p2 * weight2
-
-                        pos_data['spy_price'] = str(round(spy_price, 2))
-            elif self.alternative_valuation == "ES":
-                es_option = subscription_manager.spx_to_es_map.get(option.conId)
-                if es_option:
-                    es_ticker = self.market_data_fetcher.get_ticker(es_option)
-                    if es_ticker:
-                        es_price = es_ticker.marketPrice()
-                        adjusted_es_ask = calculate_adjusted_es_price(es_price, es_ticker.modelGreeks.delta, es_ticker.modelGreeks.gamma, indices_difference)
-                        if not math.isnan(es_price):
-                            pos_data['es_price'] = str(round(adjusted_es_ask, 2))
+            es_option = subscription_manager.spx_to_es_map.get(option.conId)
+            if es_option:
+                es_ticker = self.market_data_fetcher.get_ticker(es_option)
+                if es_ticker:
+                    es_price = es_ticker.marketPrice()
+                    adjusted_es_ask = calculate_adjusted_es_price(es_price, es_ticker.modelGreeks.delta, es_ticker.modelGreeks.gamma, indices_difference)
+                    if not math.isnan(es_price):
+                        pos_data['es_price'] = str(round(adjusted_es_ask, 2))
 
             state_positions.append(pos_data)
             contract_id_to_delta[option.conId] = delta
@@ -230,10 +195,7 @@ class StateUpdater:
         state['call_margin_reduction'] = opportunity_explorer.call_margin_reduction
         state['put_margin_reduction'] = opportunity_explorer.put_margin_reduction
         
-        if self.alternative_valuation == "ES":
-            premium = self.market_data_fetcher.calculate_spx_es_difference()
-        else:
-            premium = self.market_data_fetcher.calculate_spx_spy_difference()
+        premium = self.market_data_fetcher.calculate_spx_es_difference()
         state['spx_premium'] = round(premium, 2)
 
         is_reg_hours = is_regular_hours()
@@ -241,12 +203,8 @@ class StateUpdater:
             index_price = self.market_data_fetcher.get_spx_price()
             state['index_label'] = 'S&P 500'
         else:
-            if self.alternative_valuation == "ES":
-                index_price = self.market_data_fetcher.get_es_price() + premium
-                state['index_label'] = 'Adjusted ES'
-            else: # SPY
-                index_price = self.market_data_fetcher.get_spy_price() * 10 + premium
-                state['index_label'] = 'Adjusted SPY'
+            index_price = self.market_data_fetcher.get_es_price() + premium
+            state['index_label'] = 'Adjusted ES'
 
         state['spx_price'] = round(index_price, 2) if not math.isnan(index_price) else None
 

@@ -136,7 +136,8 @@ class OpportunityExplorer:
             self.put_margin_reduction = None
             self.last_call_margin_reduction_record_time = 0
             self.last_put_margin_reduction_record_time = 0
-            
+            self.last_margin_lock_resolution_attempt_time = 0
+
             # Dynamic config fields
             self.should_write_options_overnight = True
             self.should_monitor_only = False
@@ -567,11 +568,21 @@ class OpportunityExplorer:
         return await self.trading_bot.calculate_limit(option, option.ticker.bid, option.ticker.ask)
 
     async def try_to_resolve_margin_lock(self, candidate_option, missing_sum):
-        initial_margin_change = await self.trading_bot.get_initial_margin_change(candidate_option, quantity=1, limit=0.1)
+        if time.time() - self.last_margin_lock_resolution_attempt_time < 15 * 60:
+            logger.warning(f"An attempt to resolve the margin lock has been carried out recently, more time is required for the next attempt")
+            return
 
-        if abs(initial_margin_change) < missing_sum:
+        initial_margin_change = await self.trading_bot.get_initial_margin_change(candidate_option, quantity=1, limit=0.1)
+        if abs(initial_margin_change) < abs(missing_sum):
             logger.info(f"Initial margin change for buying {get_option_name(candidate_option)} is {initial_margin_change}, "
                         f"which is not enough to cover for the missing sum of {missing_sum}, will not buy it as part of margin lock resolution")
             return
 
-        self.trading_bot.buy_low_cost(candidate_option, quantity=1, limit=0.1)
+        logger.info(f"Initial margin change for buying {get_option_name(candidate_option)} is {initial_margin_change}, "
+                    f"which is enough to cover for the missing sum of {missing_sum}, going to buy it as part of margin lock resolution")
+        trade = self.trading_bot.buy_low_cost(candidate_option, quantity=1, limit=0.1)
+        comment = f"Margin lock resolution"
+        req_id_to_comment[trade.order.orderId] = comment
+
+    def notify_margin_lock_resolution_attempted(self):
+        self.last_margin_lock_resolution_attempt_time = time.time()

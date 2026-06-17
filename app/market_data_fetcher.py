@@ -35,12 +35,6 @@ def get_implied_volatility(ticker):
         return ticker.modelGreeks.impliedVol
     return math.nan
 
-@dataclass
-class SPXSpyPair:
-    spx_price: float
-    spy_price: float
-    time: datetime
-
 
 @dataclass
 class SPXESPair:
@@ -67,14 +61,10 @@ class MarketDataFetcher:
             self.last_implied_volatility_calculation_time = {'C': 0.0, 'P': 0.0}
             self.options_dump_time = 0
             self.previous_spx_value = math.nan
-            self.previous_spy_value = math.nan
             self.previous_es_value = math.nan
             self.spx = Index(symbol='SPX', exchange='CBOE', currency='USD')
-            self.spy = Stock(symbol='SPY', exchange='SMART', currency='USD')
             self.es = None
-            self.spx_spy_history = deque(maxlen=100)
             self.spx_es_history = deque(maxlen=100)
-            self.alternative_valuation = "SPY"
             self.load_config()
 
             # Use a lock for market data type switching
@@ -83,17 +73,6 @@ class MarketDataFetcher:
             
             logger.info("MarketDataFetcher initialized.")
             self._initialized = True
-
-    def load_config(self):
-        """Reads configuration from config/option_trader_config.json."""
-        config_path = "config/option_trader_config.json"
-        try:
-            if os.path.exists(config_path):
-                with open(config_path, "r") as f:
-                    config = json.load(f)
-                    self.alternative_valuation = config.get("alternative_valuation", "SPY")
-        except Exception as e:
-            logger.error(f"MarketDataFetcher: Error reading config: {e}")
 
     def register_ticker(self, ticker):
         if not ticker:
@@ -124,33 +103,6 @@ class MarketDataFetcher:
 
         return price
 
-    def get_spy_price(self):
-        spy_ticker = self.ib.ticker(self.spy)
-
-        if not spy_ticker:
-            logger.info("SPY ticker is missing")
-            return self.previous_spy_value
-
-        price = spy_ticker.marketPrice()
-
-        if not math.isnan(price):
-            self.previous_spy_value = price
-
-        return price
-
-    def calculate_spx_spy_difference(self):
-        if not self.spx_spy_history:
-            if os.path.exists(JSON_PATH):
-                try:
-                    with open(JSON_PATH, "r") as f:
-                        state = json.load(f)
-                        return state.get('spx_premium', 0)
-                except Exception as e:
-                    logger.error(f"MarketDataFetcher: Error reading premium fallback from {JSON_PATH}: {e}")
-            return 0
-
-        total_diff = sum(entry.spx_price - 10 * entry.spy_price for entry in self.spx_spy_history)
-        return total_diff / len(self.spx_spy_history)
 
     def calculate_spx_es_difference(self):
         if not self.spx_es_history:
@@ -231,24 +183,10 @@ class MarketDataFetcher:
 
     def on_index_ticker_update(self):
         spx_ticker = self.ib.ticker(self.spx)
-        spy_ticker = self.ib.ticker(self.spy)
         es_ticker = self.ib.ticker(self.es) if self.es else None
 
         if not is_regular_hours() or not spx_ticker or math.isnan(spx_ticker.last):
             return
-
-        # Update SPX-SPY history
-        if spy_ticker and not math.isnan(spy_ticker.last):
-            if (spx_ticker.time and spy_ticker.time and
-                    (spx_ticker.time - spy_ticker.time).total_seconds() <= 2):
-                new_spy_entry = SPXSpyPair(
-                    spx_price=spx_ticker.last,
-                    spy_price=spy_ticker.last,
-                    time=datetime.now()
-                )
-                if (not self.spx_spy_history or
-                        (new_spy_entry.time - self.spx_spy_history[-1].time).total_seconds() >= 5 * 60):
-                    self.spx_spy_history.append(new_spy_entry)
 
         # Update SPX-ES history
         if es_ticker and not math.isnan(es_ticker.last):
@@ -283,7 +221,7 @@ class MarketDataFetcher:
             return
         ticker.last_processed_time = now
 
-        if ticker.contract in [self.spx, self.spy, self.es]:
+        if ticker.contract in [self.spx, self.es]:
             self.on_index_ticker_update()
 
         delta = get_delta(ticker)
@@ -402,14 +340,10 @@ class MarketDataFetcher:
         return ticker.ask
 
     def get_reference_price(self):
-        self.load_config()
         if is_regular_hours():
             return self.get_spx_price()
         else:
-            if self.alternative_valuation == "ES":
-                return self.get_es_price()
-            else: # SPY
-                return self.get_spy_price() * 10
+            return self.get_es_price()
 
     async def get_spx_implied_volatility(self, right):
         if self.last_implied_volatility_calculation_time[right] < self.options_dump_time:

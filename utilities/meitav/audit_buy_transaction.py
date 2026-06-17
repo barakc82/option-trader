@@ -50,6 +50,7 @@ try:
             continue
         is_operation_already_audited = False
         for audited_buy in audited_buys:
+            print(f"checking: {audited_buy}")
             if audited_buy[DATE] != current_date or audited_buy[PROGRAM] != hebrew_program_name:
                 continue
 

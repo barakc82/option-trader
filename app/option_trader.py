@@ -127,6 +127,9 @@ class OptionTrader:
                 continue
 
             option = open_sell_trade.contract
+            if not hasattr(option, "ticker") or option.ticker is None:
+                logger.error(f"Option {get_option_name(option)} has a missing or an empty ticker field")
+                continue
             delta = get_delta_for_sell(option.ticker)
             if delta is None:
                 logger.error(f"Could not get the delta for sell for {get_option_name(option)}")

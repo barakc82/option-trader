@@ -3,7 +3,7 @@ import argparse
 import os
 
 
-def convert_parquet_to_csv(target_date: str, session: str):
+def convert_parquet_to_csv(target_date: str, session: str, type: str):
     """
     Loads a daily tick Parquet file and exports it as a readable text CSV.
     """
@@ -11,7 +11,7 @@ def convert_parquet_to_csv(target_date: str, session: str):
     session = session.upper()
 
     # Construct the exact filenames
-    parquet_file = f"data/ES_Ticks_{target_date}_{session}.parquet"
+    parquet_file = f"{type}_data/ES_Ticks_{target_date}_{session}.parquet"
     csv_file = f"ES_Ticks_{target_date}_{session}.csv"
 
     # Verify the file exists before attempting to load
@@ -38,4 +38,4 @@ def convert_parquet_to_csv(target_date: str, session: str):
 
 if __name__ == "__main__":
     # Execute the conversion
-    convert_parquet_to_csv(target_date='20260614', session='ETH')
+    convert_parquet_to_csv(target_date='20260615', session='RTH', type='processed')
