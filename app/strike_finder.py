@@ -11,10 +11,20 @@ OPTIONS_BLOCK_LOWER_PART_SIZE = OPTIONS_BLOCK_SIZE // 2
 OPTIONS_BLOCK_HIGHER_PART_SIZE = OPTIONS_BLOCK_SIZE - OPTIONS_BLOCK_LOWER_PART_SIZE
 
 class StrikeFinder:
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(StrikeFinder, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
     def __init__(self):
-        self.market_data_fetcher = MarketDataFetcher()
-        self.middle_fetched_block = {'C': [], 'P': []}
-        self.edge_fetched_block = {'C': [], 'P': []}
+        if not self._initialized:
+            self.market_data_fetcher = MarketDataFetcher()
+            self.middle_fetched_block = {'C': [], 'P': []}
+            self.edge_fetched_block = {'C': [], 'P': []}
+            self._initialized = True
 
     async def get_low_delta_put_option(self, put_options, target_delta):
         return await self._get_low_delta_option(put_options, target_delta, 'P')
@@ -172,6 +182,8 @@ class StrikeFinder:
         return await self._get_available_cheap_option(put_options, max_strike, 'P')
 
     async def _get_available_cheap_option(self, options, strike_limit, right):
+        self.middle_fetched_block[right] = []
+        self.edge_fetched_block[right] = []
         strike_to_option = {o.strike: o for o in options}
         if right == 'C':
             relevant_strikes = sorted([s for s in strike_to_option.keys() if s > strike_limit])

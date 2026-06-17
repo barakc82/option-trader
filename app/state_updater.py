@@ -10,7 +10,7 @@ import pytz
 from datetime import datetime
 from statistics import mean
 
-from utilities.ib_utils import req_id_to_comment
+from utilities.ib_utils import req_id_to_comment, calculate_adjusted_es_price
 from utilities.utils import is_market_open, is_regular_hours, SAFEGUARD_MAX_CADENCE, get_option_name, JSON_PATH, SUPERVISOR_JSON_PATH
 
 from .account_data import AccountData
@@ -143,6 +143,7 @@ class StateUpdater:
         contract_id_to_delta = {}
         subscription_manager = SubscriptionManager()
         is_reg_hours = is_regular_hours()
+        indices_difference = self.market_data_fetcher.calculate_spx_es_difference()
 
         for position in positions:
             option = position.contract
@@ -187,8 +188,9 @@ class StateUpdater:
                     es_ticker = self.market_data_fetcher.get_ticker(es_option)
                     if es_ticker:
                         es_price = es_ticker.marketPrice()
+                        adjusted_es_ask = calculate_adjusted_es_price(es_price, es_ticker.modelGreeks.delta, es_ticker.modelGreeks.gamma, indices_difference)
                         if not math.isnan(es_price):
-                            pos_data['es_price'] = str(round(es_price, 2))
+                            pos_data['es_price'] = str(round(adjusted_es_ask, 2))
 
             state_positions.append(pos_data)
             contract_id_to_delta[option.conId] = delta

@@ -5,11 +5,15 @@ from app.strike_finder import StrikeFinder
 class TestStrikeFinder(unittest.IsolatedAsyncioTestCase):
 
     def setUp(self):
+        # Reset StrikeFinder singleton for each test
+        StrikeFinder._instance = None
+        
         # Patch MarketDataFetcher singleton
         self.patcher = patch('app.strike_finder.MarketDataFetcher')
         self.mock_mkt_class = self.patcher.start()
         self.mock_mkt = self.mock_mkt_class.return_value
         self.mock_mkt.update_ticker_data = AsyncMock()
+        self.mock_mkt.request_snapshots = AsyncMock()
         
         self.strike_finder = StrikeFinder()
 
@@ -31,6 +35,7 @@ class TestStrikeFinder(unittest.IsolatedAsyncioTestCase):
         ticker.lastGreeks = greeks
         ticker.askGreeks = greeks
         ticker.modelGreeks = None
+        ticker.bidGreeks = None
         
         ticker.ask = ask
         option.ticker = ticker

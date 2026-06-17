@@ -274,8 +274,9 @@ class OpportunityExplorer:
                 else:
                     missing_sum = sell_option_result.required_initial_margin - sell_option_result.initial_margin_after
                     await self.try_to_resolve_margin_lock(candidate, missing_sum)
-        else:
-            self.try_to_publish_available_cheap_option('C')
+                    return
+
+        self.try_to_publish_available_cheap_option('C')
 
     async def find_call_candidate(self, call_options, target_delta):
         strike_finder = StrikeFinder()
@@ -309,14 +310,12 @@ class OpportunityExplorer:
         available_cheap_option = strike_finder.find_first_cheap_option(right)
         if available_cheap_option:
             reduction_data = {
-                'option': get_option_name(available_cheap_option),
-                'margin_change': 0,
-                'required_level': 0
+                'option': get_option_name(available_cheap_option)
             }
-            if right == 'C':
+            if right == 'C' and not self.call_margin_reduction:
                 self.call_margin_reduction = reduction_data
                 self.last_call_margin_reduction_record_time = time.time()
-            else:
+            elif right == 'P' and not self.put_margin_reduction:
                 self.put_margin_reduction = reduction_data
                 self.last_put_margin_reduction_record_time = time.time()
 
@@ -422,8 +421,9 @@ class OpportunityExplorer:
                 else:
                     missing_sum = sell_option_result.required_initial_margin - sell_option_result.initial_margin_after
                     await self.try_to_resolve_margin_lock(candidate, missing_sum)
-        else:
-            self.try_to_publish_available_cheap_option('P')
+                    return
+
+        self.try_to_publish_available_cheap_option('P')
 
     async def cancel_all_buy_trades(self, open_buy_trades, option):
         open_buy_trades_for_option = find_all_buy_trades(option, open_buy_trades)
@@ -460,9 +460,7 @@ class OpportunityExplorer:
             logger.info(f"Initial margin change for buying {get_option_name(available_cheap_call_option)} is 0, will not buy it")
             self.call_margin_reduction = {
                 'option': get_option_name(available_cheap_call_option),
-                'margin_deficiency': round(abs(missing_sum)),
-                'margin_change': 0,
-                'required_level': 0
+                'margin_deficiency': round(abs(missing_sum))
             }
             self.last_call_margin_reduction_record_time = time.time()
             return FAILED
@@ -524,9 +522,7 @@ class OpportunityExplorer:
                 f"Initial margin change for 2 units is {initial_margin_change}")
             self.put_margin_reduction = {
                 'option': get_option_name(available_cheap_put_option),
-                'margin_deficiency': round(abs(missing_sum)),
-                'margin_change': 0,
-                'required_level': 0
+                'margin_deficiency': round(abs(missing_sum))
             }
             self.last_put_margin_reduction_record_time = time.time()
             return FAILED

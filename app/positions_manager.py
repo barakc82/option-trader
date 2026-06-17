@@ -54,38 +54,15 @@ class PositionsManager:
             write_heartbeat()
             option = position.contract
 
-            limit_buy_trade = self.find_low_limit_buy_trade(option, open_buy_trades)
             opportunity_explorer = OpportunityExplorer()
             current_price_level = opportunity_explorer.last_call_option_price if option.right == 'C' else opportunity_explorer.last_put_option_price
 
             if current_price_level < MINIMAL_SELL_PRICE_TO_CLOSE_POSITION:
-                """
-                options_type = 'Put' if option.right == 'P' else 'Call'
-                if limit_buy_trade:
-                    time_passed_since_submission = get_time_passed_since_submission(limit_buy_trade)
-                    if time_passed_since_submission > POSITION_BUYBACK_ORDER_EXPIRATION_TIME:
-                        logger.info(
-                            f"Cancelling a buy trade for position of {get_option_name(option)} since sell price for {options_type} options is too low ({current_price_level})")
-                        self.trading_bot.cancel_trade(limit_buy_trade)
-                    else:
-                        logger.info(
-                            f"The current price level for {options_type} options is {current_price_level}, but keeping buy trade for position {get_option_name(option)} as it was recently submitted")
-                   
-                else:
-                    logger.info(
-                        f"The current price level for {options_type} options is {current_price_level}, thus no point in buying back position {get_option_name(option)}")
-                """
                 continue
 
+            limit_buy_trade = self.find_low_limit_buy_trade(option, open_buy_trades)
             if limit_buy_trade:
-                if limit_buy_trade.remaining() == abs(position.position):
-                    continue
-                else:
-                     """
-                    logger.info(
-                        f"Cancelling a buy trade for position of {get_option_name(option)}, trade quantity: {limit_buy_trade.remaining()}, position quantity: {position.position}")
-                    self.trading_bot.cancel_trade(limit_buy_trade)
-                    """
+                continue
 
             if not hasattr(option, "ticker") or option.ticker is None:
                 logger.info(f"Option {get_option_name(option)} has no ticker")

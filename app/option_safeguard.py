@@ -1,8 +1,5 @@
 import math
 import asyncio
-import time
-import json
-import os
 from typing import Any
 
 from ib_insync import Option, Trade
@@ -16,12 +13,13 @@ from .market_data_fetcher import MarketDataFetcher
 from .connection_manager import ConnectionManager
 from .subscription_manager import SubscriptionManager
 
-from utilities.ib_utils import is_hollow, req_id_to_comment, find_high_limit_buy_trade, get_spy_option_name
+from utilities.ib_utils import *
 
 logger = logging.getLogger(__name__)
 
 MAX_DEVIATION = 0.15
 MIN_PRICE_THRESHOLD = 1
+
 
 class OptionSafeguard:
     _instance = None
@@ -195,13 +193,6 @@ class OptionSafeguard:
         adjusted_spy_baseline = spy_ask + delta_component + gamma_component
         return 10.0 * adjusted_spy_baseline, indices_difference
 
-    def _calculate_adjusted_es_ask(self, es_ask, es_delta, es_gamma):
-        indices_difference = self.market_data_fetcher.calculate_spx_es_difference()
-        delta_component = es_delta * indices_difference
-        gamma_component = 0.5 * es_gamma * (indices_difference ** 2)
-        adjusted_spy_baseline = es_ask + delta_component + gamma_component
-        return adjusted_spy_baseline, indices_difference
-
     async def guard_current_positions(self):
         logger.debug("Checking current positions")
         positions = self.trading_bot.get_short_options()
@@ -340,7 +331,8 @@ class OptionSafeguard:
             return False
 
         greeks = es_ticker.askGreeks or es_ticker.modelGreeks
-        adjusted_es_ask, indices_difference = self._calculate_adjusted_es_ask(es_ticker.ask, greeks.delta, greeks.gamma)
+        indices_difference = self.market_data_fetcher.calculate_spx_es_difference()
+        adjusted_es_ask = calculate_adjusted_es_price(es_ticker.ask, greeks.delta, greeks.gamma, indices_difference)
 
         if not self._validate_indices_difference(indices_difference):
             return False

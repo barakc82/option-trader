@@ -101,3 +101,10 @@ def find_high_limit_buy_trade(option, open_buy_trades):
                 open_buy_trade.order.orderType == 'LMT' and open_buy_trade.order.lmtPrice > 0.1):
             return open_buy_trade
     return None
+
+
+def calculate_adjusted_es_price(es_price, es_delta, es_gamma, indices_difference):
+    delta_component = es_delta * indices_difference
+    gamma_component = 0.5 * es_gamma * (indices_difference ** 2)
+    adjusted_es_price = es_price + delta_component + gamma_component
+    return adjusted_es_price

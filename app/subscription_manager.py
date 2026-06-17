@@ -250,6 +250,7 @@ class SubscriptionManager:
         ]
 
     async def manage_es_subscriptions(self):
+
         """Check current SPX positions and update ES subscriptions."""
         positions = self.trading_bot.get_short_options()
         # SPX options can have symbol 'SPX' or 'SPXW' (weekly)
@@ -279,23 +280,23 @@ class SubscriptionManager:
             contracts_to_subscribe = []
             for required_es_contract in unique_new_es.values():
                 is_contract_subscribed = False
-                for active_contract in active_es_options:
-                    if (active_contract.symbol == required_es_contract.symbol and 
-                        active_contract.strike == required_es_contract.strike and
-                        active_contract.right == required_es_contract.right and
-                        active_contract.lastTradeDateOrContractMonth == required_es_contract.lastTradeDateOrContractMonth):
+                for active_es_contract in active_es_options:
+                    if (active_es_contract.symbol == required_es_contract.symbol and
+                        active_es_contract.strike == required_es_contract.strike and
+                        active_es_contract.right == required_es_contract.right and
+                        active_es_contract.lastTradeDateOrContractMonth == required_es_contract.lastTradeDateOrContractMonth):
                         is_contract_subscribed = True
                         # Use the already qualified instance
-                        unique_new_es[(required_es_contract.strike, required_es_contract.right, required_es_contract.lastTradeDateOrContractMonth)] = active_contract
+                        unique_new_es[(required_es_contract.strike, required_es_contract.right, required_es_contract.lastTradeDateOrContractMonth)] = active_es_contract
                         break
                 if not is_contract_subscribed:
                     logger.info(f"Option ES {required_es_contract.right} {required_es_contract.strike} is missing a ticker")
                     contracts_to_subscribe.append(required_es_contract)
 
             if contracts_to_subscribe:
-                logger.info(f"Subscribing to {len(contracts_to_subscribe)} unique new matching ES options.")
+                logger.info(f"Subscribing to {len(contracts_to_subscribe)} unique new matching ES options")
                 await self.market_data_fetcher.request_subscriptions(contracts_to_subscribe)
-            
+
             for spx_contract, es_contract in new_es_contracts_batch:
                 qualified_es = unique_new_es[(es_contract.strike, es_contract.right, es_contract.lastTradeDateOrContractMonth)]
                 if qualified_es.conId and self.market_data_fetcher.get_ticker(qualified_es):
@@ -320,6 +321,6 @@ class SubscriptionManager:
             lastTradeDateOrContractMonth=spx_contract.lastTradeDateOrContractMonth,
             strike=spx_contract.strike,
             right=spx_contract.right,
-            exchange='GLOBEX',
+            exchange='CME',
             currency='USD',
         )

@@ -144,8 +144,7 @@ class MarketDataFetcher:
                 try:
                     with open(JSON_PATH, "r") as f:
                         state = json.load(f)
-                        if 'SPY' in state.get('index_label', ''):
-                            return state.get('spx_premium', 0)
+                        return state.get('spx_premium', 0)
                 except Exception as e:
                     logger.error(f"MarketDataFetcher: Error reading premium fallback from {JSON_PATH}: {e}")
             return 0
@@ -159,8 +158,7 @@ class MarketDataFetcher:
                 try:
                     with open(JSON_PATH, "r") as f:
                         state = json.load(f)
-                        if 'ES' in state.get('index_label', ''):
-                            return state.get('spx_premium', 0)
+                        return state.get('spx_premium', 0)
                 except Exception as e:
                     logger.error(f"MarketDataFetcher: Error reading premium fallback from {JSON_PATH}: {e}")
             return 0
@@ -400,7 +398,7 @@ class MarketDataFetcher:
     def get_ask(self, option):
         ticker = self.get_ticker(option)
         if not ticker or math.isnan(ticker.ask) or ticker.ask < 0:
-            return sys.float_info.max
+            return math.nan
         return ticker.ask
 
     def get_reference_price(self):
