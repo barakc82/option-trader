@@ -3,7 +3,7 @@ import time
 
 from selenium.webdriver.common.by import By
 
-from utilities.meitav.get_status import extract_status
+from utilities.meitav.get_status import extract_status, is_balance_values_tab_selected, select_balance_values_tab
 from utilities.meitav.meitav_common import *
 from utilities.meitav.start import start
 from utilities.meitav.falling_knife_logic import FallingKnifeCalculator
@@ -16,7 +16,12 @@ program_type = Hishtalmut
 # =======================
 
 def calculate_next_buy2(driver, status):
-    # Select leveraged ETF to ensure UI state
+
+    holdings_tab_element = driver.find_element(By.CSS_SELECTOR, "div[ph='ph4']")
+    is_balance_values_tab_selected_result = is_balance_values_tab_selected(holdings_tab_element)
+    if not is_balance_values_tab_selected_result:
+        select_balance_values_tab(driver)
+
     element = driver.find_element(By.XPATH, f"//*[text()='1144708']")
     element.click()
     time.sleep(1)

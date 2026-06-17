@@ -16,6 +16,10 @@ def fill_in_operation_by_total_value(driver, operation_type, security_id, total_
         buy_button = driver.find_element(By.CSS_SELECTOR, '.buy-btn.stock-info-header')
         buy_button.click()
 
+    if operation_type == 'sell':
+        buy_button = driver.find_element(By.CSS_SELECTOR, '.sell-btn.stock-info-header')
+        buy_button.click()
+
     wait_object = WebDriverWait(driver, 40, 1, ([ElementNotVisibleException]))
     wait_object.until(lambda x: x.find_element(By.XPATH, f"//*[text()='מחיר באגורות']") is not None)
 
@@ -32,6 +36,10 @@ def fill_in_operation(driver, operation_type, security_id, units, price, target_
 
     if operation_type == 'buy':
         buy_button = driver.find_element(By.CSS_SELECTOR, '.buy-btn.stock-info-header')
+        buy_button.click()
+
+    if operation_type == 'sell':
+        buy_button = driver.find_element(By.CSS_SELECTOR, '.sell-btn.stock-info-header')
         buy_button.click()
 
     wait_object = WebDriverWait(driver, 40, 1, ([ElementNotVisibleException]))

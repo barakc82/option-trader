@@ -75,7 +75,7 @@ def extract_next_sell_price(name):
     user_sheet = get_worksheet(main_sheet_name)
     next_sell_price_cell = this_user_data['next_sell_price_cell']
     next_sell_price = user_sheet.get(next_sell_price_cell)
-    return next_sell_price[0][0]
+    return int(next_sell_price[0][0])
 
 
 def extract_excessive_cash(name, program_type):

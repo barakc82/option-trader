@@ -23,9 +23,6 @@ try:
     if status['account_id'] != users_data[user][program_type]['account_id']:
         raise Exception("Username and program type mismatch")
 
-    units = 14
-    purchase_price = 6938
-
     person_data = users_data[user]
     sheet_name = person_data['transactions_sheet_name']
     sheet = get_worksheet(sheet_name)
@@ -60,15 +57,14 @@ try:
             #    pass
             print(f"checking against: {audited_buy}")
 
+        if not is_operation_already_audited:
+            units = completed_operation['quantity']
+            purchase_price = int(completed_operation['price'])
+            sheet_values = sheet.get()
+            new_row_index = len(sheet_values) - 1
+            new_row_values = [current_date, hebrew_program_name, units, purchase_price]
 
-    sheet_values = sheet.get()
-    new_row_index = len(sheet_values) - 1
-
-
-
-    new_row_values = [current_date, hebrew_program_name, units, purchase_price]
-
-    sheet.insert_row(new_row_values, index=new_row_index)
+            sheet.insert_row(new_row_values, index=new_row_index)
 
 finally:
     driver.quit()

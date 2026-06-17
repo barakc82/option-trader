@@ -26,8 +26,8 @@ from .supervisor_control import (
     restart_ibgateway, soft_restart
 )
 
-# Create a logger
-logger = logging.getLogger(__name__)
+# Configure the root logger to catch logs from all modules
+logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # Console handler

@@ -34,7 +34,6 @@ def select_orders_tab(driver):
 def extract_holdings(driver):
 
     holdings_tab_element = driver.find_element(By.CSS_SELECTOR, "div[ph='ph4']")
-
     is_balance_values_tab_selected_result = is_balance_values_tab_selected(holdings_tab_element)
     if not is_balance_values_tab_selected_result:
         select_balance_values_tab(driver)
@@ -105,6 +104,8 @@ def extract_holdings(driver):
             print(row_data)
         assert row_data['security_id']
         row_data['security_id'] = int(row_data['security_id'])
+        if 'quantity' not in row_data:
+            print(row_data)
         assert row_data['quantity']
         holdings[row_data['security_id']] = row_data
 
