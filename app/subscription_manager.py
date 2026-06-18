@@ -133,7 +133,7 @@ class SubscriptionManager:
             spx_contract = position.contract
             if spx_contract.conId not in self.spx_to_es_map:
                 logger.info(f"No ES contract found for {get_option_name(spx_contract)}")
-                es_contract = self.create_matching_es_contract(spx_contract)
+                es_contract = await self.create_matching_es_contract(spx_contract)
                 new_es_contracts_batch.append((spx_contract, es_contract))
 
         if new_es_contracts_batch:
@@ -184,14 +184,20 @@ class SubscriptionManager:
             if not is_in_use:
                 self.market_data_fetcher.cancel_market_data(es_contract)
 
-    def create_matching_es_contract(self, spx_contract):
+    async def create_matching_es_contract(self, spx_contract):
         """Create a matching ES option contract for a given SPX option contract."""
-        return FuturesOption(
+        future_option = FuturesOption(
             symbol='ES',
             lastTradeDateOrContractMonth=spx_contract.lastTradeDateOrContractMonth,
             strike=spx_contract.strike,
             right=spx_contract.right,
             exchange='CME',
-            currency='USD',
-            tradingClass='ES'
+            currency='USD'
         )
+        future_option_details = await self.ib.reqContractDetailsAsync(future_option)
+        future_option = next(
+            future_option_detail.contract
+            for future_option_detail in future_option_details
+            if future_option_detail.contract.tradingClass != "ES"
+        )
+        return future_option

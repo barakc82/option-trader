@@ -194,7 +194,7 @@ class OptionSafeguard:
         now = time.time()
         last_mod_time = self.last_modification_times.get(high_limit_buy_trade.order.orderId, 0)
         if now - last_mod_time < 2:
-            if now - self.last_skipping_log_times.get(option.conId, 0) >= 1:
+            if now - self.last_skipping_log_times.get(option.conId, 0) > 1:
                 logger.info(
                     f"Skipping modification for {get_option_name(option)} as it was modified less than 2 seconds ago")
                 self.last_skipping_log_times[option.conId] = now

@@ -58,7 +58,7 @@ class MarketDataFetcher:
         if con_id not in self.registered_contracts:
             ticker.updateEvent += self.on_ticker_update
             self.registered_contracts[con_id] = ticker
-            logger.info(f"Registered update handler for {get_option_name(ticker.contract)}")
+            logger.info(f"Registered update handler for {ticker.contract.symbol} {get_option_name(ticker.contract)}")
 
     def get_spx_price(self):
         return self.index_manager.get_spx_price()
