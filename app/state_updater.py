@@ -140,12 +140,17 @@ class StateUpdater:
             stop_loss_per_option = self.max_loss_calculator.calculate_max_loss(option.right)
             raw_stop_loss = position.avgCost / 100 + stop_loss_per_option
             stop_loss = self.trading_bot.adjust_limit_to_market_rules(option, raw_stop_loss)
+            
+            distance_to_stop = self.market_data_fetcher.calculate_index_points_margin(option, stop_loss)
+            distance_to_stop_roundness = 1 if distance_to_stop < 100 else 0
+            distance_to_stop = round(distance_to_stop, distance_to_stop_roundness)
 
             pos_data = {
                 'right': option.right, 'strike': option.strike, 'quantity': position.position,
                 'date': datetime.strptime(option.lastTradeDateOrContractMonth, "%Y%m%d").strftime("%d/%m/%y"),
                 'delta': delta, 'market_price': str(market_price) if not math.isnan(market_price) else '',
-                'stop_loss': stop_loss
+                'stop_loss': stop_loss,
+                'distance_to_stop': round(distance_to_stop, 1) if not math.isnan(distance_to_stop) else ''
             }
 
             es_option = subscription_manager.spx_to_es_map.get(option.conId)

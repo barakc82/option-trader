@@ -71,6 +71,7 @@
             <th *ngIf="has_es_prices()">ES Price</th>
             <th>Delta</th>
             <th>Stop Loss</th>
+            <th>Distance to Stop</th>
           </tr>
         </thead>
         <tbody>
@@ -88,6 +89,7 @@
             <td *ngIf="has_es_prices()">{{ pos.es_price }}</td>
             <td>{{ pos.delta }}</td>
             <td>{{ pos.stop_loss }}</td>
+            <td>{{ pos.distance_to_stop }}</td>
           </tr>
         </tbody>
       </table>

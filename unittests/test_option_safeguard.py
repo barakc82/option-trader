@@ -129,5 +129,34 @@ class TestOptionSafeguard(unittest.IsolatedAsyncioTestCase):
         result = self.safeguard.is_unfair_ask_value(option, spy_option)
         self.assertFalse(result)
 
+    async def test_handle_high_limit_buy_trade_throttling(self):
+        # Setup position
+        contract = Contract(conId=123, right='P')
+        position = MagicMock()
+        position.contract = contract
+        
+        # Setup high_limit_buy_trade
+        trade = MagicMock()
+        trade.order.orderId = 999
+        
+        # Set modification time within 2 seconds
+        now = time.time()
+        self.safeguard.last_modification_times[999] = now
+        
+        # Mock logger.info to check if it gets called
+        with patch('app.option_safeguard.logger') as mock_logger:
+            # First call: should log because last_skipping_log_times has no entry
+            await self.safeguard.handle_high_limit_buy_trade(trade, position, 0.5)
+            self.assertEqual(mock_logger.info.call_count, 1)
+            
+            # Second call immediately after: should not log (throttled)
+            await self.safeguard.handle_high_limit_buy_trade(trade, position, 0.5)
+            self.assertEqual(mock_logger.info.call_count, 1) # Still 1
+            
+            # Set skipping log time to more than 10 seconds ago
+            self.safeguard.last_skipping_log_times[123] = now - 11
+            await self.safeguard.handle_high_limit_buy_trade(trade, position, 0.5)
+            self.assertEqual(mock_logger.info.call_count, 2) # Should log now
+
 if __name__ == '__main__':
     unittest.main()

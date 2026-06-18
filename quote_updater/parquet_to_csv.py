@@ -38,4 +38,4 @@ def convert_parquet_to_csv(target_date: str, session: str, type: str):
 
 if __name__ == "__main__":
     # Execute the conversion
-    convert_parquet_to_csv(target_date='20260615', session='RTH', type='processed')
+    convert_parquet_to_csv(target_date='20260617', session='RTH', type='processed')

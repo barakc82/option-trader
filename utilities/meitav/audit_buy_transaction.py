@@ -7,16 +7,18 @@ from utilities.meitav.start import start
 from utilities.meitav.get_status import extract_status
 
 user = Barak
-program_type = Gemel
+program_type = Hishtalmut
 
 person_data = users_data[user]
 
 driver = start(user, program_type)
 
 DATE = 0
-PRICE = 1
+PROGRAM = 1
 UNITS = 2
-PROGRAM = 3
+PRICE = 3
+
+
 
 try:
     status = extract_status(driver)
@@ -49,18 +51,22 @@ try:
         if completed_operation['operation_type'] != 'BUY':
             continue
         is_operation_already_audited = False
+        units = completed_operation['quantity']
+        purchase_price = int(completed_operation['price'])
         for audited_buy in audited_buys:
-            print(f"checking: {audited_buy}")
             if audited_buy[DATE] != current_date or audited_buy[PROGRAM] != hebrew_program_name:
                 continue
 
             #if audited_buy[UNITS] != completed_operation['quantity'] or audited_buy[PRICE] != completed_operation['price']:
             #    pass
             print(f"checking against: {audited_buy}")
+            audited_buy_units = int(audited_buy[UNITS])
+            audited_buy_price = int(audited_buy[PRICE])
+            if audited_buy_units == units and audited_buy_price == purchase_price:
+                is_operation_already_audited = True
 
         if not is_operation_already_audited:
-            units = completed_operation['quantity']
-            purchase_price = int(completed_operation['price'])
+
             sheet_values = sheet.get()
             new_row_index = len(sheet_values) - 1
             new_row_values = [current_date, hebrew_program_name, units, purchase_price]

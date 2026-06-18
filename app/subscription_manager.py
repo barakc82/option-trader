@@ -39,7 +39,6 @@ class SubscriptionManager:
         logger.info("SubscriptionManager: Starting background maintenance loop...")
         while True:
             try:
-                self.load_config()
                 from .option_safeguard import OptionSafeguard
                 safeguard = OptionSafeguard()
                 if time.time() - safeguard.last_run_end_time > SAFEGUARD_MAX_CADENCE:
@@ -194,4 +193,5 @@ class SubscriptionManager:
             right=spx_contract.right,
             exchange='CME',
             currency='USD',
+            tradingClass='ES'
         )

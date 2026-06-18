@@ -48,6 +48,7 @@ class OptionSafeguard:
             self.last_modification_times = {}
             self.last_run_end_time = 0
             self.last_unfair_ask_warning_time = 0
+            self.last_skipping_log_times = {}
             self._initialized = True
 
     async def run(self):
@@ -167,7 +168,7 @@ class OptionSafeguard:
         high_limit_buy_trade = find_high_limit_buy_trade(option, open_trades)
 
         es_option = self.subscription_manager.spx_to_es_map.get(option.conId)
-        if es_option and self.is_unfair_ask_value(option, es_option):
+        if self.is_unfair_ask_value(option, es_option):
             self.handle_unfair_ask_value(high_limit_buy_trade, option, es_option, stop_loss)
             return
 
@@ -190,10 +191,13 @@ class OptionSafeguard:
         assert high_limit_buy_trade
 
         option = position.contract
+        now = time.time()
         last_mod_time = self.last_modification_times.get(high_limit_buy_trade.order.orderId, 0)
-        if time.time() - last_mod_time < 2:
-            logger.info(
-                f"Skipping modification for {get_option_name(option)} as it was modified less than 2 seconds ago")
+        if now - last_mod_time < 2:
+            if now - self.last_skipping_log_times.get(option.conId, 0) >= 1:
+                logger.info(
+                    f"Skipping modification for {get_option_name(option)} as it was modified less than 2 seconds ago")
+                self.last_skipping_log_times[option.conId] = now
             return
 
         current_price = option.ticker.marketPrice()
@@ -217,6 +221,10 @@ class OptionSafeguard:
 
 
     def is_unfair_ask_value(self, option, es_option):
+        if not es_option:
+            logger.error(f"No ES option found for {get_option_name(option)}, will not evaluate unfairness")
+            return False
+
         spx_ask = option.ticker.ask
         if spx_ask < MIN_PRICE_THRESHOLD:
             return False
