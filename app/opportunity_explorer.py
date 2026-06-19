@@ -1,5 +1,5 @@
 import asyncio
-from datetime import date
+from datetime import datetime, date, timedelta
 
 from utilities.utils import *
 from utilities.ib_utils import *
@@ -27,7 +27,10 @@ def find_all_buy_trades(option, open_buy_trades):
 
 
 async def calculate_max_options_for_market_rise(call_option):
-    if not is_switched_to_overnight_trading():
+    expiry_date = datetime.strptime(call_option.lastTradeDateOrContractMonth, "%Y%m%d").date()
+    today_nyc = datetime.now(new_york_timezone).date()
+    is_expiry_or_day_before = (today_nyc == expiry_date) or (today_nyc == expiry_date - timedelta(days=1))
+    if not is_expiry_or_day_before and not is_switched_to_overnight_trading():
         return sys.float_info.max
 
     fold_after_market_rise = 1 + 0.2
@@ -69,7 +72,10 @@ async def calculate_max_options_for_market_rise(call_option):
     return math.floor(net_worth_after_rise / liability_per_contract)
 
 async def calculate_max_options_for_market_drop(put_option):
-    if not is_switched_to_overnight_trading():
+    expiry_date = datetime.strptime(put_option.lastTradeDateOrContractMonth, "%Y%m%d").date()
+    today_nyc = datetime.now(new_york_timezone).date()
+    is_expiry_or_day_before = (today_nyc == expiry_date) or (today_nyc == expiry_date - timedelta(days=1))
+    if not is_expiry_or_day_before and not is_switched_to_overnight_trading():
         return sys.float_info.max
 
     remaining_fraction_after_drop = 1 - 0.3
