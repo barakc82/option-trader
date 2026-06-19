@@ -1,6 +1,7 @@
 import math
 import asyncio
-from datetime import timedelta
+from datetime import datetime, timedelta
+
 
 from utilities.ib_utils import get_delta, get_open_sell_order_expiration_time, \
     POSITION_BUYBACK_ORDER_EXPIRATION_TIME, OPEN_GENERAL_MARGIN_REDUCTION_BUY_ORDER_EXPIRATION_TIME, \
@@ -144,21 +145,25 @@ class OptionTrader:
                 continue
 
             remaining = open_sell_trade.remaining()
-            if remaining and is_after_hours():
-                if open_sell_trade.contract.right == 'P':
-                    max_options_for_market_drop = await calculate_max_options_for_market_drop(open_sell_trade.contract)
-                    if max_options_for_market_drop < remaining:
-                        logger.info(
-                            f"Cancelling sell of {get_option_name(open_sell_trade.contract)} to avoid exposure fee")
-                        self.trading_bot.cancel_trade(open_sell_trade)
-                        continue
-                if open_sell_trade.contract.right == 'C':
-                    max_options_for_market_rise = await calculate_max_options_for_market_rise(open_sell_trade.contract)
-                    if max_options_for_market_rise < remaining:
-                        logger.info(
-                            f"Cancelling sell of {get_option_name(open_sell_trade.contract)} to avoid exposure fee")
-                        self.trading_bot.cancel_trade(open_sell_trade)
-                        continue
+            if remaining:
+                expiry_date = datetime.strptime(open_sell_trade.contract.lastTradeDateOrContractMonth, "%Y%m%d").date()
+                today_nyc = datetime.now(new_york_timezone).date()
+                is_different_than_expiry_and_day_before = (today_nyc != expiry_date) and (today_nyc != expiry_date - timedelta(days=1))
+                if is_after_hours() or is_different_than_expiry_and_day_before:
+                    if open_sell_trade.contract.right == 'P':
+                        max_options_for_market_drop = await calculate_max_options_for_market_drop(open_sell_trade.contract)
+                        if max_options_for_market_drop < remaining:
+                            logger.info(
+                                f"Cancelling sell of {get_option_name(open_sell_trade.contract)} to avoid exposure fee")
+                            self.trading_bot.cancel_trade(open_sell_trade)
+                            continue
+                    if open_sell_trade.contract.right == 'C':
+                        max_options_for_market_rise = await calculate_max_options_for_market_rise(open_sell_trade.contract)
+                        if max_options_for_market_rise < remaining:
+                            logger.info(
+                                f"Cancelling sell of {get_option_name(open_sell_trade.contract)} to avoid exposure fee")
+                            self.trading_bot.cancel_trade(open_sell_trade)
+                            continue
 
         logger.info("Checking for excessive buy-limit trades")
         buy_limit_trades = [trade for trade in open_trades if
