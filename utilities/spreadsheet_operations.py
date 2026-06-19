@@ -1,7 +1,13 @@
+import re
+from string import ascii_uppercase
+
 from utilities.database_access import get_worksheet
 from utilities.meitav.meitav_common import users_data, Hishtalmut, Gemel
 
 ETF_ID_ORDER = [1144708, 5112628, 5109889, 5114657, 5122510, 5113345]
+CELL_REF_REGEX = re.compile(
+    r'(\$?[A-Z]+)(\d+)'  # column (with optional $) + row number
+)
 
 def update_status_in_spreadsheet(name, program_type, status):
     this_user_data = users_data[name]
@@ -87,3 +93,42 @@ def extract_excessive_cash(name, program_type):
     return excessive_cash[0][0]
 
 
+def calculate_trade_formulas_range(column_letter, update_data, row):
+    column_index = ascii_uppercase.index(column_letter.upper())
+    range_start = 65 + column_index + len(update_data[0])
+    range_end = range_start + 4
+    return f"{chr(range_start)}{row}:{chr(range_end)}{row}"
+
+
+def increment_unfixed_rows(formula: str) -> str:
+    def replacer(match):
+        col, row = match.groups()
+
+        # If row is fixed ($ before row), do nothing
+        if col.endswith('$'):  # not possible here, safeguard
+            return match.group(0)
+
+        # Check if row is fixed (preceded by $ in original text)
+        start = match.start(2)
+        if formula[start - 1] == '$':
+            return match.group(0)
+
+        return f"{col}{int(row) + 1}"
+
+    return CELL_REF_REGEX.sub(replacer, formula)
+
+
+def copy_formulas(sheet, column_letter, update_data, row):
+    formulas_range = calculate_trade_formulas_range(column_letter, update_data, row - 1)
+    print(f"range: {formulas_range}")
+    formulas = sheet.get(formulas_range, value_render_option='FORMULA')
+    print(f"range: {formulas}")
+    updated_formulas = [
+        [
+            increment_unfixed_rows(cell) if isinstance(cell, str) and cell.startswith('=') else cell
+            for cell in row
+        ]
+        for row in formulas
+    ]
+    formulas = updated_formulas
+    return update_data[0] + formulas[0]

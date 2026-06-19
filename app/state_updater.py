@@ -150,7 +150,7 @@ class StateUpdater:
                 'date': datetime.strptime(option.lastTradeDateOrContractMonth, "%Y%m%d").strftime("%d/%m/%y"),
                 'delta': delta, 'market_price': str(market_price) if not math.isnan(market_price) else '',
                 'stop_loss': stop_loss,
-                'distance_to_stop': round(distance_to_stop, 1) if not math.isnan(distance_to_stop) else ''
+                'distance_to_stop': distance_to_stop if not math.isnan(distance_to_stop) else ''
             }
 
             es_option = subscription_manager.spx_to_es_map.get(option.conId)

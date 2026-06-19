@@ -175,10 +175,6 @@ def add_formulas(column_letter, update_data, row):
     print(f"range: {formulas_range}")
     formulas = sheet.get(formulas_range, value_render_option='FORMULA')
     print(f"range: {formulas}")
-    """fixed_formulas = [
-        [normalize_formula(cell) for cell in row]
-        for row in formulas
-    ]"""
     updated_formulas = [
         [
             increment_unfixed_rows(cell) if isinstance(cell, str) and cell.startswith('=') else cell

@@ -7,7 +7,7 @@ from utilities.meitav.start import start
 from utilities.meitav.get_status import extract_status
 
 user = Barak
-program_type = Hishtalmut
+program_type = Gemel
 
 person_data = users_data[user]
 

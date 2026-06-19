@@ -14,7 +14,7 @@ from utilities.meitav.start import start
 from utilities.spreadsheet_operations import update_next_buy_in_spreadsheet
 
 user = Barak
-program_type = Hishtalmut
+program_type = Gemel
 
 person_data = users_data[user]
 

@@ -201,33 +201,61 @@ class MarketDataFetcher:
     def calculate_index_points_margin(self, option, stop_loss_limit):
         ticker = self.get_ticker(option)
 
-        if not ticker:
+        if not ticker or not ticker.modelGreeks or not ticker.modelGreeks.delta or not ticker.modelGreeks.gamma:
             return math.nan
 
         current_option_price = ticker.marketPrice()
         if math.isnan(current_option_price) or current_option_price >= stop_loss_limit:
             return 0.0
 
-        delta_val = get_delta(ticker)
-        gamma_val = get_gamma(ticker)
-
-        if delta_val is None or math.isnan(delta_val) or delta_val == 0:
+        delta = ticker.modelGreeks.delta
+        if delta is None or math.isnan(delta) or delta == 0:
             return math.nan
 
         price_diff = stop_loss_limit - current_option_price
+        gamma = ticker.modelGreeks.gamma
+        maximal_distance = abs(self.get_spx_price() - option.strike)
+        if math.isnan(gamma) or gamma < 0.00001:
+            distance_to_stop = abs(price_diff / delta)
+            return min(distance_to_stop, maximal_distance)
 
-        if math.isnan(gamma_val) or gamma_val < 0.00001:
-            return price_diff / delta_val
+        # Solve for d: 0.5 * gamma * d^2 + delta * d - price_diff = 0
+        # d = (-delta + sqrt(delta^2 + 2 * gamma * price_diff)) / gamma
+        discriminant = delta**2 + 2 * gamma * price_diff
+        if discriminant < 0:
+            return math.nan
+        distance_to_stop = abs((-delta + math.sqrt(discriminant)) / gamma)
+        return min(distance_to_stop, maximal_distance)
+
+    def calculate_index_points_margin_es(self, option, stop_loss_limit):
+        ticker = self.get_ticker(option)
+
+        if not ticker or ticker.modelGreeks or ticker.modelGreeks.delta or ticker.modelGreeks.gamma:
+            return math.nan
+
+        current_option_price = ticker.marketPrice()
+        if math.isnan(current_option_price) or current_option_price >= stop_loss_limit:
+            return 0.0
+
+        delta = ticker.modelGreeks.delta
+        if delta is None or math.isnan(delta) or delta == 0:
+            return math.nan
+
+        price_diff = stop_loss_limit - current_option_price
+        gamma = ticker.modelGreeks.gamma
+        if math.isnan(gamma) or gamma < 0.00001:
+            return price_diff / delta
 
         # Solve for d: 0.5 * gamma * d^2 + delta * d - price_diff = 0
         # d = (-delta + sqrt(delta^2 + 2 * gamma * price_diff)) / gamma
         try:
-            discriminant = delta_val**2 + 2 * gamma_val * price_diff
+            discriminant = delta**2 + 2 * gamma * price_diff
             if discriminant < 0:
                 return math.nan
-            return (-delta_val + math.sqrt(discriminant)) / gamma_val
+            return (-delta + math.sqrt(discriminant)) / gamma
         except Exception:
-            return price_diff / delta_val
+            return price_diff / delta
+
 
     def get_reference_price(self):
         if is_regular_hours():
