@@ -10,7 +10,7 @@ import pytz
 from datetime import datetime
 from statistics import mean
 
-from utilities.ib_utils import req_id_to_comment
+from utilities.ib_utils import req_id_to_comment, interpolate_es_price
 from utilities.utils import is_market_open, is_regular_hours, SAFEGUARD_MAX_CADENCE, get_option_name, JSON_PATH, SUPERVISOR_JSON_PATH
 
 from .account_data import AccountData
@@ -162,9 +162,7 @@ class StateUpdater:
                     lower_price = lower_ticker.marketPrice()
                     upper_price = upper_ticker.marketPrice()
                     if not math.isnan(lower_price) and not math.isnan(upper_price):
-                        equivalent_es_strike = option.strike - indices_difference
-                        t = (equivalent_es_strike - lower_es.strike) / (upper_es.strike - lower_es.strike)
-                        adjusted_es_ask = lower_price * (1 - t) + upper_price * t
+                        adjusted_es_ask = interpolate_es_price(option.strike, indices_difference, lower_es, upper_es, lower_price, upper_price)
                         pos_data['es_price'] = str(round(adjusted_es_ask, 2))
 
             state_positions.append(pos_data)

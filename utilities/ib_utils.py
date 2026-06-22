@@ -119,10 +119,7 @@ def find_high_limit_buy_trade(option, open_buy_trades):
     return None
 
 
-def calculate_adjusted_es_price(es_price, es_delta, es_gamma, indices_difference):
-    delta_component = es_delta * indices_difference
-    gamma_component = 0.5 * es_gamma * (indices_difference ** 2)
-    adjusted_es_price = es_price + delta_component + gamma_component
-    if adjusted_es_price > 10 * es_price:
-        logger.error(f"barak: something went wrong with adjusted ES price: {adjusted_es_price} {es_price} {es_delta} {es_gamma}")
-    return adjusted_es_price
+def interpolate_es_price(spx_strike, indices_difference, lower_es, upper_es, lower_price, upper_price):
+    equivalent_es_strike = spx_strike - indices_difference
+    t = (equivalent_es_strike - lower_es.strike) / (upper_es.strike - lower_es.strike)
+    return lower_price * (1 - t) + upper_price * t

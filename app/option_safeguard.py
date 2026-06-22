@@ -249,9 +249,7 @@ class OptionSafeguard:
         if not self._validate_alt_ticker(option, upper_es, upper_ticker, upper_name, "ES"):
             return False
 
-        equivalent_es_strike = option.strike - indices_difference
-        t = (equivalent_es_strike - lower_es.strike) / (upper_es.strike - lower_es.strike)
-        adjusted_es_ask = lower_ticker.ask * (1 - t) + upper_ticker.ask * t
+        adjusted_es_ask = interpolate_es_price(option.strike, indices_difference, lower_es, upper_es, lower_ticker.ask, upper_ticker.ask)
 
         deviation = (spx_ask - adjusted_es_ask) / adjusted_es_ask
 
