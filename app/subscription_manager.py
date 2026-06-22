@@ -133,20 +133,21 @@ class SubscriptionManager:
             spx_contract = position.contract
             if spx_contract.conId not in self.spx_to_es_map:
                 logger.info(f"No ES contract found for {get_option_name(spx_contract)}")
-                es_contract = await self.create_matching_es_contract(spx_contract)
-                new_es_contracts_batch.append((spx_contract, es_contract))
+                es_contracts = await self.create_matching_es_contracts(spx_contract)
+                new_es_contracts_batch.append((spx_contract, es_contracts))
 
         if new_es_contracts_batch:
             active_tickers = self.ib.wrapper.ticker2ReqId['mktData'].keys()
             active_es_options = [ticker.contract for ticker in active_tickers if ticker.contract.symbol == 'ES' and ticker.contract.secType == 'FOP']
 
-            # Deduplicate by (strike, right, lastTradeDateOrContractMonth)
+            # Deduplicate all ES contracts by (strike, right, lastTradeDateOrContractMonth)
             unique_new_es = {}
-            for _, es in new_es_contracts_batch:
-                key = (es.strike, es.right, es.lastTradeDateOrContractMonth)
-                if key not in unique_new_es:
-                    unique_new_es[key] = es
-            
+            for _, es_contracts in new_es_contracts_batch:
+                for es in es_contracts:
+                    key = (es.strike, es.right, es.lastTradeDateOrContractMonth)
+                    if key not in unique_new_es:
+                        unique_new_es[key] = es
+
             contracts_to_subscribe = []
             for required_es_contract in unique_new_es.values():
                 is_contract_subscribed = False
@@ -156,8 +157,8 @@ class SubscriptionManager:
                         active_es_contract.right == required_es_contract.right and
                         active_es_contract.lastTradeDateOrContractMonth == required_es_contract.lastTradeDateOrContractMonth):
                         is_contract_subscribed = True
-                        # Use the already qualified instance
-                        unique_new_es[(required_es_contract.strike, required_es_contract.right, required_es_contract.lastTradeDateOrContractMonth)] = active_es_contract
+                        key = (required_es_contract.strike, required_es_contract.right, required_es_contract.lastTradeDateOrContractMonth)
+                        unique_new_es[key] = active_es_contract
                         break
                 if not is_contract_subscribed:
                     logger.info(f"Option ES {required_es_contract.right} {required_es_contract.strike} is missing a ticker")
@@ -167,37 +168,60 @@ class SubscriptionManager:
                 logger.info(f"Subscribing to {len(contracts_to_subscribe)} unique new matching ES options")
                 await self.market_data_fetcher.request_subscriptions(contracts_to_subscribe)
 
-            for spx_contract, es_contract in new_es_contracts_batch:
-                qualified_es = unique_new_es[(es_contract.strike, es_contract.right, es_contract.lastTradeDateOrContractMonth)]
-                if qualified_es.conId and self.market_data_fetcher.get_ticker(qualified_es):
-                    self.spx_to_es_map[spx_contract.conId] = qualified_es
-                    logger.info(f"Subscribed to ES hedge for SPX position {get_option_name(spx_contract)}")
-                else:
-                    logger.error(f"Failed to subscribe matching ES option for {get_option_name(spx_contract)}")
+            for spx_contract, es_contracts in new_es_contracts_batch:
+                qualified_es_list = []
+                for es_contract in es_contracts:
+                    key = (es_contract.strike, es_contract.right, es_contract.lastTradeDateOrContractMonth)
+                    qualified_es = unique_new_es[key]
+                    if qualified_es.conId and self.market_data_fetcher.get_ticker(qualified_es):
+                        qualified_es_list.append(qualified_es)
+                    else:
+                        logger.error(f"Failed to subscribe matching ES option {qualified_es.strike} for {get_option_name(spx_contract)}")
+                if qualified_es_list:
+                    self.spx_to_es_map[spx_contract.conId] = qualified_es_list
+                    logger.info(f"Subscribed to {len(qualified_es_list)} ES hedges for SPX position {get_option_name(spx_contract)}")
 
         # 2. Unsubscribe from ES options for closed SPX positions
         closed_spx_con_ids = [con_id for con_id in list(self.spx_to_es_map.keys()) if con_id not in current_spx_con_ids]
         for con_id in closed_spx_con_ids:
-            es_contract = self.spx_to_es_map.pop(con_id)
-            logger.info(f"SPX position {con_id} closed. Unsubscribing from ES hedge.")
-            is_in_use = any(es_contract == c for c in self.spx_to_es_map.values())
-            if not is_in_use:
-                self.market_data_fetcher.cancel_market_data(es_contract)
+            es_contracts = self.spx_to_es_map.pop(con_id)
+            logger.info(f"SPX position {con_id} closed. Unsubscribing from ES hedges.")
+            for es_contract in es_contracts:
+                is_in_use = any(es_contract in contracts for contracts in self.spx_to_es_map.values())
+                if not is_in_use:
+                    self.market_data_fetcher.cancel_market_data(es_contract)
 
-    async def create_matching_es_contract(self, spx_contract):
-        """Create a matching ES option contract for a given SPX option contract."""
-        future_option = FuturesOption(
-            symbol='ES',
-            lastTradeDateOrContractMonth=spx_contract.lastTradeDateOrContractMonth,
-            strike=spx_contract.strike,
-            right=spx_contract.right,
-            exchange='CME',
-            currency='USD'
+    async def create_matching_es_contracts(self, spx_contract):
+        """Return two ES option contracts whose strikes bracket the SPX strike in ES terms."""
+        difference = self.market_data_fetcher.calculate_spx_es_difference()
+        equivalent_es_strike = spx_contract.strike - difference
+
+        strike_increment = 5.0
+        lower_strike = math.floor(equivalent_es_strike / strike_increment) * strike_increment
+        upper_strike = math.ceil(equivalent_es_strike / strike_increment) * strike_increment
+
+        logger.info(
+            f"SPX strike {spx_contract.strike} maps to ES equivalent {equivalent_es_strike:.2f} "
+            f"(difference={difference:.2f}); bracketing with ES strikes {lower_strike} / {upper_strike}"
         )
-        future_option_details = await self.ib.reqContractDetailsAsync(future_option)
-        future_option = next(
-            future_option_detail.contract
-            for future_option_detail in future_option_details
-            if future_option_detail.contract.tradingClass != "ES"
+
+        async def fetch_es_contract(strike):
+            future_option = FuturesOption(
+                symbol='ES',
+                lastTradeDateOrContractMonth=spx_contract.lastTradeDateOrContractMonth,
+                strike=strike,
+                right=spx_contract.right,
+                exchange='CME',
+                currency='USD'
+            )
+            details = await self.ib.reqContractDetailsAsync(future_option)
+            return next(
+                detail.contract
+                for detail in details
+                if detail.contract.tradingClass != "ES"
+            )
+
+        return await asyncio.gather(
+            fetch_es_contract(lower_strike),
+            fetch_es_contract(upper_strike)
         )
-        return future_option

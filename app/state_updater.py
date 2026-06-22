@@ -10,7 +10,7 @@ import pytz
 from datetime import datetime
 from statistics import mean
 
-from utilities.ib_utils import req_id_to_comment, calculate_adjusted_es_price
+from utilities.ib_utils import req_id_to_comment
 from utilities.utils import is_market_open, is_regular_hours, SAFEGUARD_MAX_CADENCE, get_option_name, JSON_PATH, SUPERVISOR_JSON_PATH
 
 from .account_data import AccountData
@@ -153,13 +153,18 @@ class StateUpdater:
                 'distance_to_stop': distance_to_stop if not math.isnan(distance_to_stop) else ''
             }
 
-            es_option = subscription_manager.spx_to_es_map.get(option.conId)
-            if es_option:
-                es_ticker = self.market_data_fetcher.get_ticker(es_option)
-                if es_ticker:
-                    es_price = es_ticker.marketPrice()
-                    adjusted_es_ask = calculate_adjusted_es_price(es_price, es_ticker.modelGreeks.delta, es_ticker.modelGreeks.gamma, indices_difference)
-                    if not math.isnan(es_price):
+            es_options = subscription_manager.spx_to_es_map.get(option.conId)
+            if es_options and len(es_options) == 2:
+                lower_es, upper_es = es_options
+                lower_ticker = self.market_data_fetcher.get_ticker(lower_es)
+                upper_ticker = self.market_data_fetcher.get_ticker(upper_es)
+                if lower_ticker and upper_ticker:
+                    lower_price = lower_ticker.marketPrice()
+                    upper_price = upper_ticker.marketPrice()
+                    if not math.isnan(lower_price) and not math.isnan(upper_price):
+                        equivalent_es_strike = option.strike - indices_difference
+                        t = (equivalent_es_strike - lower_es.strike) / (upper_es.strike - lower_es.strike)
+                        adjusted_es_ask = lower_price * (1 - t) + upper_price * t
                         pos_data['es_price'] = str(round(adjusted_es_ask, 2))
 
             state_positions.append(pos_data)

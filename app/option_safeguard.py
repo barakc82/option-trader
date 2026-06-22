@@ -168,9 +168,9 @@ class OptionSafeguard:
         stop_loss = position.avgCost / 100 + stop_loss_per_option
         high_limit_buy_trade = find_high_limit_buy_trade(option, open_trades)
 
-        es_option = self.subscription_manager.spx_to_es_map.get(option.conId)
-        if self.is_unfair_ask_value(option, es_option):
-            self.handle_unfair_ask_value(high_limit_buy_trade, option, es_option, stop_loss)
+        es_options = self.subscription_manager.spx_to_es_map.get(option.conId)
+        if self.is_unfair_ask_value(option, es_options):
+            self.handle_unfair_ask_value(high_limit_buy_trade, option, es_options, stop_loss)
             return
 
         if stop_loss * 0.5 <= current_price < stop_loss:
@@ -221,8 +221,8 @@ class OptionSafeguard:
         await self.trading_bot.modify_limit_order(high_limit_buy_trade, required_limit_price)
 
 
-    def is_unfair_ask_value(self, option, es_option):
-        if not es_option:
+    def is_unfair_ask_value(self, option, es_options):
+        if not es_options:
             now = time.time()
             if now - self.last_no_es_option_log_times.get(option.conId, 0) >= 60:
                 logger.error(f"No ES option found for {get_option_name(option)}, will not evaluate unfairness")
@@ -233,26 +233,31 @@ class OptionSafeguard:
         if spx_ask < MIN_PRICE_THRESHOLD:
             return False
 
-        es_ticker = self.market_data_fetcher.get_ticker(es_option)
-        es_name = f"ES {es_option.right} {es_option.strike}"
-
-        if not self._validate_alt_ticker(option, es_option, es_ticker, es_name, "ES"):
-            return False
-        if not self._validate_greeks(es_ticker, es_name):
-            return False
-
-        greeks = es_ticker.askGreeks or es_ticker.modelGreeks
         indices_difference = self.market_data_fetcher.calculate_spx_es_difference()
-        adjusted_es_ask = calculate_adjusted_es_price(es_ticker.ask, greeks.delta, greeks.gamma, indices_difference)
-
         if not self._validate_indices_difference(indices_difference):
             return False
+
+        lower_es, upper_es = es_options
+        lower_ticker = self.market_data_fetcher.get_ticker(lower_es)
+        upper_ticker = self.market_data_fetcher.get_ticker(upper_es)
+
+        lower_name = f"ES {lower_es.right} {lower_es.strike}"
+        upper_name = f"ES {upper_es.right} {upper_es.strike}"
+
+        if not self._validate_alt_ticker(option, lower_es, lower_ticker, lower_name, "ES"):
+            return False
+        if not self._validate_alt_ticker(option, upper_es, upper_ticker, upper_name, "ES"):
+            return False
+
+        equivalent_es_strike = option.strike - indices_difference
+        t = (equivalent_es_strike - lower_es.strike) / (upper_es.strike - lower_es.strike)
+        adjusted_es_ask = lower_ticker.ask * (1 - t) + upper_ticker.ask * t
 
         deviation = (spx_ask - adjusted_es_ask) / adjusted_es_ask
 
         if int(time.time() * 10) % 1000 == 0:
-            logger.info(f"Checking option {get_option_name(option)} for unfair ask using {es_name}. "
-                        f"SPX ask is {spx_ask} and the Adjusted ES ask is {adjusted_es_ask:.2f}, "
+            logger.info(f"Checking option {get_option_name(option)} for unfair ask using {lower_name}/{upper_name}. "
+                        f"SPX ask is {spx_ask} and the interpolated ES ask is {adjusted_es_ask:.2f}, "
                         f"the deviation is {deviation:.2f}, SPX premium is {indices_difference:.2f}")
 
         if deviation < MAX_DEVIATION:
@@ -261,29 +266,29 @@ class OptionSafeguard:
         now = time.time()
         if now - self.last_unfair_ask_warning_time >= 10:
             logger.warning(
-                f"Unfair ask for {get_option_name(option)} against {es_name}: "
-                f"SPX Ask: {spx_ask}, ES Ask: {es_ticker.ask}, deviation: {deviation:.2f} "
-                f"(Adjusted: {adjusted_es_ask:.2f}, SPX premium : {indices_difference:.2f})")
+                f"Unfair ask for {get_option_name(option)} against {lower_name}/{upper_name}: "
+                f"SPX Ask: {spx_ask}, interpolated ES ask: {adjusted_es_ask:.2f}, deviation: {deviation:.2f} "
+                f"(SPX premium: {indices_difference:.2f})")
             self.last_unfair_ask_warning_time = now
         return True
 
-    def handle_unfair_ask_value(self, high_limit_buy_trade: Any | None, option, es_option: FuturesOption,
+    def handle_unfair_ask_value(self, high_limit_buy_trade: Any | None, option, es_options: list,
                                         stop_loss: Any):
+        lower_es, upper_es = es_options
         logger.warning(
-            f"Ask value of {get_option_name(option)} ({option.ticker.ask}) is unfair against ES option ask value (Ask: {es_option.ticker.ask}), "
-            f"will not close position")
+            f"Ask value of {get_option_name(option)} ({option.ticker.ask}) is unfair against interpolated ES ask "
+            f"(ES {lower_es.strike}/{upper_es.strike}), will not close position")
 
         if high_limit_buy_trade:
             logger.warning(
                 f"Cancelling buy order for {get_option_name(option)} since the ask value is unfair against ES")
             self.trading_bot.cancel_order(high_limit_buy_trade.order)
 
-        es_ticker = self.ib.ticker(es_option)
-        if es_ticker:
-            es_current_price = es_ticker.marketPrice()
-
-            if not math.isnan(es_current_price):
-                if es_current_price > stop_loss:
+        for es_option in es_options:
+            es_ticker = self.ib.ticker(es_option)
+            if es_ticker:
+                es_current_price = es_ticker.marketPrice()
+                if not math.isnan(es_current_price) and es_current_price > stop_loss:
                     logger.warning(f"Should consider buying ES hedge {es_option.strike}, since the ask value of "
                                    f"{get_option_name(option)} is unfair, and the fair price is above the stop loss")
 
