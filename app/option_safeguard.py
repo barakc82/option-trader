@@ -49,6 +49,7 @@ class OptionSafeguard:
             self.last_run_end_time = 0
             self.last_unfair_ask_warning_time = 0
             self.last_skipping_log_times = {}
+            self.last_no_es_option_log_times = {}
             self._initialized = True
 
     async def run(self):
@@ -222,7 +223,10 @@ class OptionSafeguard:
 
     def is_unfair_ask_value(self, option, es_option):
         if not es_option:
-            logger.error(f"No ES option found for {get_option_name(option)}, will not evaluate unfairness")
+            now = time.time()
+            if now - self.last_no_es_option_log_times.get(option.conId, 0) >= 60:
+                logger.error(f"No ES option found for {get_option_name(option)}, will not evaluate unfairness")
+                self.last_no_es_option_log_times[option.conId] = now
             return False
 
         spx_ask = option.ticker.ask

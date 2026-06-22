@@ -1,13 +1,12 @@
 import math
-import os
-import json
 import logging
 import pandas as pd
 import exchange_calendars as ecals
+import yfinance as yf
 from datetime import datetime
 from collections import deque
 from ib_insync import Index, Future
-from utilities.utils import is_regular_hours, JSON_PATH
+from utilities.utils import is_regular_hours
 from .market_data_utils import SPXESPair
 
 logger = logging.getLogger(__name__)
@@ -20,6 +19,8 @@ class IndexPriceManager:
         self.spx_es_history = deque(maxlen=100)
         self.previous_spx_value = math.nan
         self.previous_es_value = math.nan
+        self._macro_rates = (None, None)  # (r, q)
+        self._macro_rates_fetched_at = None
 
     def get_spx_price(self):
         spx_ticker = self.ib.ticker(self.spx)
@@ -73,14 +74,44 @@ class IndexPriceManager:
 
     def calculate_spx_es_difference(self):
         if not self.spx_es_history:
-            if os.path.exists(JSON_PATH):
-                try:
-                    with open(JSON_PATH, "r") as f:
-                        state = json.load(f)
-                        return state.get('spx_premium', 0)
-                except Exception as e:
-                    logger.error(f"IndexPriceManager: Error reading premium fallback from {JSON_PATH}: {e}")
-            return 0
+            es_price = self.get_es_price()
+            if math.isnan(es_price) or not self.es:
+                return 0
+            try:
+                now = datetime.now()
+                if (self._macro_rates_fetched_at is None or
+                        (now - self._macro_rates_fetched_at).total_seconds() >= 86400):
+                    irx = yf.Ticker("^IRX")
+                    risk_free_rate_pct = irx.info.get('regularMarketPrice')
+                    r = risk_free_rate_pct / 100.0 if risk_free_rate_pct else None
+
+                    spy = yf.Ticker("SPY")
+                    dividend_yield_pct = spy.info.get('dividendYield')
+                    q = dividend_yield_pct / 100.0 if dividend_yield_pct else None
+
+                    self._macro_rates = (r, q)
+                    self._macro_rates_fetched_at = now
+                    logger.info(f"Fetched macro rates from yfinance: r={r}, q={q}")
+                else:
+                    r, q = self._macro_rates
+
+                if r is None or q is None:
+                    logger.warning("Could not fetch macro rates for theoretical SPX calculation")
+                    return 0
+
+                expiry_date = datetime.strptime(self.es.lastTradeDateOrContractMonth, '%Y%m%d')
+                T = (expiry_date - datetime.now()).days / 365.25
+
+                if T <= 0:
+                    logger.warning("ES future expiration is in the past")
+                    return 0
+
+                # Cost of carry: F = S * e^((r-q)*T)  =>  S = F / e^((r-q)*T)
+                theoretical_spx = es_price / math.exp((r - q) * T)
+                return theoretical_spx - es_price
+            except Exception as e:
+                logger.error(f"Error calculating theoretical SPX-ES difference: {e}")
+                return 0
 
         total_diff = sum(entry.spx_price - entry.es_price for entry in self.spx_es_history)
         return total_diff / len(self.spx_es_history)

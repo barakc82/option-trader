@@ -16,7 +16,7 @@ def fetch_macro_rates():
     q = spy.info.get('dividendYield')
 
     print(f"Risk-Free Rate (r): {r * 100:.2f}%" if r else "r: Not found")
-    print(f"Dividend Yield (q): {q * 100:.2f}%" if q else "q: Not found")
+    print(f"Dividend Yield (q): {q:.2f}%" if q else "q: Not found")
 
     return r, q
 
