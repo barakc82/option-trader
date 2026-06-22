@@ -306,18 +306,6 @@ class OptionSafeguard:
         
         return True
 
-    def _validate_greeks(self, ticker, name):
-        greeks = ticker.askGreeks or ticker.modelGreeks
-        if not greeks:
-            logger.info(f"Matching ticker for {name} has no ask greeks nor model greeks. Unfairness is not detected")
-            return False
-
-        if not greeks.delta or math.isnan(greeks.delta) or not greeks.gamma or math.isnan(greeks.gamma):
-            logger.info(f"Matching ticker for {name} has an invalid delta and gamma values: "
-                        f"delta: {greeks.delta}, gamma: {greeks.gamma}. Unfairness is not detected")
-            return False
-
-        return True
 
     def _validate_indices_difference(self, indices_difference):
         if math.isnan(indices_difference):
