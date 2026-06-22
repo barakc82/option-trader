@@ -2,15 +2,12 @@ import math
 import asyncio
 from datetime import datetime, timedelta
 
-
-from utilities.ib_utils import get_delta, get_open_sell_order_expiration_time, \
-    POSITION_BUYBACK_ORDER_EXPIRATION_TIME, OPEN_GENERAL_MARGIN_REDUCTION_BUY_ORDER_EXPIRATION_TIME, \
-    get_time_passed_since_submission, get_delta_for_sell
 from utilities.utils import *
+from utilities.ib_utils import *
 
 from .max_loss_calculator import MaxLossCalculator
-from .opportunity_explorer import OpportunityExplorer, calculate_max_options_for_market_drop, \
-    calculate_max_options_for_market_rise, MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION
+from .net_worth_calculator import NetWorthCalculator
+from .opportunity_explorer import OpportunityExplorer, MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION
 from .positions_manager import PositionsManager, MINIMAL_SELL_PRICE_TO_CLOSE_POSITION
 from .trading_bot import TradingBot
 from .connection_manager import ConnectionManager
@@ -29,6 +26,7 @@ class OptionTrader:
         self.ib = self.connection_manager.ib
         self.trading_bot = TradingBot()
         self.max_loss_calculator = MaxLossCalculator()
+        self.net_worth_calculator = NetWorthCalculator()
         self.opportunity_explorer = OpportunityExplorer()
         self.positions_manager = PositionsManager()
         self.market_data_fetcher = MarketDataFetcher()
@@ -147,17 +145,31 @@ class OptionTrader:
             remaining = open_sell_trade.remaining()
             if remaining:
                 if open_sell_trade.contract.right == 'P':
-                    max_options_for_market_drop = await calculate_max_options_for_market_drop(open_sell_trade.contract)
+                    max_options_for_market_drop = await self.net_worth_calculator.calculate_max_options_for_market_drop(open_sell_trade.contract)
                     if max_options_for_market_drop < remaining:
                         logger.info(
                             f"Cancelling sell of {get_option_name(open_sell_trade.contract)} to avoid exposure fee")
                         self.trading_bot.cancel_trade(open_sell_trade)
                 if open_sell_trade.contract.right == 'C':
-                    max_options_for_market_rise = await calculate_max_options_for_market_rise(open_sell_trade.contract)
+                    max_options_for_market_rise = await self.net_worth_calculator.calculate_max_options_for_market_rise(open_sell_trade.contract)
                     if max_options_for_market_rise < remaining:
                         logger.info(
                             f"Cancelling sell of {get_option_name(open_sell_trade.contract)} to avoid exposure fee")
                         self.trading_bot.cancel_trade(open_sell_trade)
+
+        logger.info("Checking for collective excessive sell trades leading to exposure fee")
+        exposure_result = await self.net_worth_calculator.ensure_safe_exposure_with_all_trades()
+        if exposure_result == FAILED:
+            max_time_passed_since_submission = timedelta(days=1)
+            trade_to_cancel = None
+            for open_sell_trade in open_sell_trades:
+                time_passed_since_submission = get_time_passed_since_submission(open_sell_trade)
+                if time_passed_since_submission > max_time_passed_since_submission:
+                    max_time_passed_since_submission = time_passed_since_submission
+                    trade_to_cancel = open_sell_trade
+                logger.info(
+                    f"Cancelling sell of {get_option_name(trade_to_cancel.contract)} because if all the trades get filled they will lead to exposure fee")
+                self.trading_bot.cancel_trade(open_sell_trade)
 
         logger.info("Checking for excessive buy-limit trades")
         buy_limit_trades = [trade for trade in open_trades if

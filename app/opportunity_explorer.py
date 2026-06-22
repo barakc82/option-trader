@@ -6,6 +6,7 @@ from utilities.ib_utils import *
 from .account_data import AccountData
 from .market_data_fetcher import MarketDataFetcher
 from .max_loss_calculator import MaxLossCalculator
+from .net_worth_calculator import NetWorthCalculator
 from .option_cache import OptionCache
 from .strike_finder import StrikeFinder
 from .target_delta_calculator import TargetDeltaCalculator
@@ -26,96 +27,6 @@ def find_all_buy_trades(option, open_buy_trades):
     return buy_trades_for_position
 
 
-async def calculate_max_options_for_market_rise(call_option):
-    expiry_date = datetime.strptime(call_option.lastTradeDateOrContractMonth, "%Y%m%d").date()
-    today_nyc = datetime.now(new_york_timezone).date()
-    is_expiry_or_day_before = (today_nyc == expiry_date) or (today_nyc == expiry_date - timedelta(days=1))
-    if not is_expiry_or_day_before and not is_switched_to_overnight_trading():
-        return sys.float_info.max
-
-    fold_after_market_rise = 1 + 0.2
-    market_data_fetcher = MarketDataFetcher()
-    current_price = market_data_fetcher.get_spx_price()
-    if math.isnan(current_price):
-        logger.error("Cannot calculate max number of options for market rise because the S&P 500 index value is NaN")
-        return 0
-
-    price_after_market_rise = current_price * fold_after_market_rise
-    if call_option.strike > price_after_market_rise:
-        return sys.float_info.max
-
-    trading_bot = TradingBot()
-    positions = trading_bot.get_short_options()
-    current_total_liability = 0
-    for position in positions:
-        if not position.contract.secType == 'OPT' or position.position >= 0 or position.contract.right != 'C':
-            continue
-        if position.contract.strike > price_after_market_rise:
-            continue
-        last_trade_date = datetime.strptime(position.contract.lastTradeDateOrContractMonth, "%Y%m%d").date()
-        if last_trade_date <= date.today():
-            continue
-        position_liability = (price_after_market_rise - position.contract.strike) * 100 * -position.position
-        current_total_liability += position_liability
-
-    account_data = AccountData()
-    current_net_liquidation_value = await account_data.get_net_liquidation_value()
-    net_liquidation_value_after_rise = current_net_liquidation_value * fold_after_market_rise
-    net_worth_after_rise = net_liquidation_value_after_rise - current_total_liability
-    if net_worth_after_rise < 0:
-        return 0
-
-    if price_after_market_rise == call_option.strike:
-        return sys.float_info.max
-
-    liability_per_contract = (price_after_market_rise - call_option.strike) * 100
-    return math.floor(net_worth_after_rise / liability_per_contract)
-
-async def calculate_max_options_for_market_drop(put_option):
-    expiry_date = datetime.strptime(put_option.lastTradeDateOrContractMonth, "%Y%m%d").date()
-    today_nyc = datetime.now(new_york_timezone).date()
-    is_expiry_or_day_before = (today_nyc == expiry_date) or (today_nyc == expiry_date - timedelta(days=1))
-    if not is_expiry_or_day_before and not is_switched_to_overnight_trading():
-        return sys.float_info.max
-
-    remaining_fraction_after_drop = 1 - 0.3
-    market_data_fetcher = MarketDataFetcher()
-    current_price = market_data_fetcher.get_spx_price()
-    if math.isnan(current_price):
-        logger.error("Cannot calculate max number of options for market drop because the S&P 500 index value is NaN")
-        return 0
-
-    price_after_drop = current_price * remaining_fraction_after_drop
-    if put_option.strike < price_after_drop:
-        logger.info(f"{get_option_name(put_option)} is lower than worst case scenario market drop")
-        return sys.float_info.max
-
-    trading_bot = TradingBot()
-    positions = trading_bot.get_short_options()
-    current_total_liability = 0
-    for position in positions:
-        if not position.contract.secType == 'OPT' or position.position >= 0 or position.contract.right != 'P':
-            continue
-        if position.contract.strike < price_after_drop:
-            continue
-        last_trade_date = datetime.strptime(position.contract.lastTradeDateOrContractMonth, "%Y%m%d").date()
-        if last_trade_date <= date.today():
-            continue
-        position_liability = (position.contract.strike - price_after_drop) * 100 * -position.position
-        current_total_liability += position_liability
-
-    account_data = AccountData()
-    current_net_liquidation_value = await account_data.get_net_liquidation_value()
-    net_liquidation_value_after_drop = current_net_liquidation_value * remaining_fraction_after_drop
-    net_worth_after_drop = net_liquidation_value_after_drop - current_total_liability
-    if net_worth_after_drop < 0:
-        logger.info(f"Negative net worth in case of a market drop")
-        return 0
-
-    liability_per_contract = (put_option.strike - price_after_drop) * 100
-    return math.floor(net_worth_after_drop / liability_per_contract)
-
-
 class OpportunityExplorer:
     _instance = None
 
@@ -131,6 +42,7 @@ class OpportunityExplorer:
             self.account_data = AccountData()
             self.market_data_fetcher = MarketDataFetcher()
             self.trading_bot = TradingBot()
+            self.net_worth_calculator = NetWorthCalculator()
             self.max_loss_calculator = MaxLossCalculator()
             self.last_submit_order_attempt_time = 0
             self.no_put_options_above_minimal_sell_price = False
@@ -294,7 +206,7 @@ class OpportunityExplorer:
 
     async def calculate_max_allowed_call_options(self, call_option):
         logger.info(f"Testing sell capacity for {get_option_name(call_option)}")
-        max_options = await calculate_max_options_for_market_rise(call_option)
+        max_options = await self.net_worth_calculator.calculate_max_options_for_market_rise(call_option)
         if not max_options:
             logger.warning(f"Failed to sell {get_option_name(call_option)} due to projected exposure fee")
         return max_options
@@ -406,7 +318,7 @@ class OpportunityExplorer:
 
     async def calculate_max_allowed_put_options(self, put_option):
         logger.info(f"Testing sell capacity for {get_option_name(put_option)}")
-        max_options = await calculate_max_options_for_market_drop(put_option)
+        max_options = await self.net_worth_calculator.calculate_max_options_for_market_drop(put_option)
         if not max_options:
             logger.warning(f"Failed to sell {get_option_name(put_option)} due to projected exposure fee")
         return max_options

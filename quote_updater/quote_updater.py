@@ -183,11 +183,15 @@ def fetch_es_future(ib: IB):
     es_details = ib.reqContractDetails(es_incomplete)
     contracts = [es_detail.contract for es_detail in es_details]
 
+    today_str = datetime.now().strftime('%Y%m%d')
+    active_contracts = [c for c in contracts if c.lastTradeDateOrContractMonth >= today_str]
+
     # 3. Sort the contracts chronologically by expiration date
-    contracts.sort(key=lambda c: c.lastTradeDateOrContractMonth)
+    active_contracts.sort(key=lambda c: c.lastTradeDateOrContractMonth)
 
     # 4. Select the closest expiration (front-month)
-    closest_es_future = contracts[0]
+    closest_es_future = active_contracts[0]
+    print(f"Selected ES future: {closest_es_future.lastTradeDateOrContractMonth}")
     return closest_es_future
 
 if __name__ == '__main__':

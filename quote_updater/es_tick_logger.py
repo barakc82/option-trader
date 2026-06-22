@@ -26,10 +26,13 @@ class ESTickLogger:
         # Request all ES futures and find the front-month
         es_incomplete = Future('ES', 'CME')
         future_details = self.ib.reqContractDetails(es_incomplete)
-        futures = [d.contract for d in future_details]
+
+        today_str = datetime.datetime.now(new_york_timezone).strftime('%Y%m%d')
+        futures = [d.contract for d in future_details  if d.contract.lastTradeDateOrContractMonth >= today_str]
         futures.sort(key=lambda c: c.lastTradeDateOrContractMonth)
 
         self.es_future = futures[0]
+        print(f"Selected ES future: {self.es_future.lastTradeDateOrContractMonth}")
         self.ib.qualifyContracts(self.es_future)
 
         print(f"Locked onto ES Future: {self.es_future.localSymbol}")
