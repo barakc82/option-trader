@@ -10,8 +10,8 @@ import pytz
 from datetime import datetime
 from statistics import mean
 
-from utilities.ib_utils import req_id_to_comment, interpolate_es_price
-from utilities.utils import is_market_open, is_regular_hours, SAFEGUARD_MAX_CADENCE, get_option_name, JSON_PATH, SUPERVISOR_JSON_PATH
+from utilities.ib_utils import req_id_to_comment, interpolate_es_price, get_es_option_name
+from utilities.utils import is_market_open, is_regular_hours, SAFEGUARD_MAX_CADENCE, get_option_name, SHARED_JSON_PATH, CACHED_JSON_PATH, SUPERVISOR_JSON_PATH
 
 from .account_data import AccountData
 from .market_data_fetcher import MarketDataFetcher
@@ -44,6 +44,7 @@ class StateUpdater:
             self.account_data = AccountData()
             self.market_data_fetcher = MarketDataFetcher()
             self.trading_bot = TradingBot()
+            self.subscription_manager = SubscriptionManager()
             self.target_delta_calculator = TargetDeltaCalculator()
             self.max_loss_calculator = MaxLossCalculator()
 
@@ -82,7 +83,10 @@ class StateUpdater:
         os.makedirs(os.path.dirname(TEMP_PATH), exist_ok=True)
         with open(TEMP_PATH, 'w') as file:
             json.dump(state, file, indent=4)
-        os.replace(TEMP_PATH, JSON_PATH)
+        os.replace(TEMP_PATH, SHARED_JSON_PATH)
+        if state.get('spx_premium'):
+            with open(CACHED_JSON_PATH, 'w') as file:
+                json.dump(state, file, indent=4)
 
     def store_supervisor_state_locally(self, supervisor_state):
         os.makedirs(os.path.dirname(SUPERVISOR_TEMP_PATH), exist_ok=True)
@@ -93,7 +97,13 @@ class StateUpdater:
     async def update_state(self, base_state):
         """Orchestrates the asynchronous collection and reporting of bot state."""
         state = base_state.copy()
-        
+        premium = self.market_data_fetcher.calculate_spx_es_difference()
+        if not premium:
+            logger.error("Cannot update state since the SPX premium is 0")
+            return
+
+        state['spx_premium'] = round(premium, 2)
+
         # 1. Gather account metrics
         state['cash'] = round(self.account_data.get_cash_balance_value())
         excess_liq = self.account_data.get_cached_excess_liquidity()
@@ -156,14 +166,22 @@ class StateUpdater:
             es_options = subscription_manager.spx_to_es_map.get(option.conId)
             if es_options and len(es_options) == 2:
                 lower_es, upper_es = es_options
-                lower_ticker = self.market_data_fetcher.get_ticker(lower_es)
-                upper_ticker = self.market_data_fetcher.get_ticker(upper_es)
-                if lower_ticker and upper_ticker:
-                    lower_price = lower_ticker.marketPrice()
-                    upper_price = upper_ticker.marketPrice()
-                    if not math.isnan(lower_price) and not math.isnan(upper_price):
-                        adjusted_es_ask = interpolate_es_price(option.strike, indices_difference, lower_es, upper_es, lower_price, upper_price)
-                        pos_data['es_price'] = str(round(adjusted_es_ask, 2))
+                equivalent_es_strike = option.strike - indices_difference
+                if equivalent_es_strike < lower_es.strike or equivalent_es_strike > upper_es.strike:
+                    self.subscription_manager.invalidate_key(option)
+                    logger.error(
+                        f"The equivalent ES strike price of {get_option_name(option)} is {equivalent_es_strike:.2f}, "
+                        f"but the current matching ES options are {get_es_option_name(lower_es)} and {get_es_option_name(upper_es)}, "
+                        f"going to set new matching ES options")
+                else:
+                    lower_ticker = self.market_data_fetcher.get_ticker(lower_es)
+                    upper_ticker = self.market_data_fetcher.get_ticker(upper_es)
+                    if lower_ticker and upper_ticker:
+                        lower_price = lower_ticker.marketPrice()
+                        upper_price = upper_ticker.marketPrice()
+                        if not math.isnan(lower_price) and not math.isnan(upper_price):
+                            adjusted_es_ask = interpolate_es_price(option.strike, indices_difference, lower_es, upper_es, lower_price, upper_price)
+                            pos_data['es_price'] = str(round(adjusted_es_ask, 2))
 
             state_positions.append(pos_data)
             contract_id_to_delta[option.conId] = delta
@@ -203,9 +221,6 @@ class StateUpdater:
         state['call_margin_reduction'] = opportunity_explorer.call_margin_reduction
         state['put_margin_reduction'] = opportunity_explorer.put_margin_reduction
         
-        premium = self.market_data_fetcher.calculate_spx_es_difference()
-        state['spx_premium'] = round(premium, 2)
-
         is_reg_hours = is_regular_hours()
         if is_reg_hours:
             index_price = self.market_data_fetcher.get_spx_price()
@@ -224,7 +239,7 @@ class StateUpdater:
         except Exception as e:
             logger.error(f"Failed to post state to Render: {e}")
             
-        return state
+        return
 
 async def post_current_state(state):
     """Standalone async helper for simple state reporting."""

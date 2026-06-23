@@ -45,6 +45,7 @@ class OptionSafeguard:
             self.last_alive_log_time = 0
             self.config = {}
             self.should_guard_positions = True
+            self.should_check_fairness = True
             self.last_modification_times = {}
             self.last_run_end_time = 0
             self.last_unfair_ask_warning_time = 0
@@ -120,6 +121,7 @@ class OptionSafeguard:
                 with open(config_path, "r") as f:
                     self.config = json.load(f)
                     self.should_guard_positions = self.config.get("should_guard_positions", True)
+                    self.should_check_fairness = self.config.get("should_check_fairness", True)
                     self.enable_es_option_hedging = self.config.get("enable_es_option_hedging", False)
         except Exception as e:
             logger.error(f"OptionSafeguard: Error reading config: {e}")
@@ -169,7 +171,7 @@ class OptionSafeguard:
         high_limit_buy_trade = find_high_limit_buy_trade(option, open_trades)
 
         es_options = self.subscription_manager.spx_to_es_map.get(option.conId)
-        if self.is_unfair_ask_value(option, es_options):
+        if self.should_check_fairness and self.is_unfair_ask_value(option, es_options):
             self.handle_unfair_ask_value(high_limit_buy_trade, option, es_options, stop_loss)
             return
 
@@ -181,7 +183,7 @@ class OptionSafeguard:
 
         if not high_limit_buy_trade:
             if current_price > stop_loss:
-                logger.info(f"Creating missing limit order for {get_option_name(option)}, limit: {stop_loss}")
+                logger.info(f"Creating missing limit order for {get_option_name(option)}, limit: {stop_loss:.2f}, current price: {current_price:.2f}")
                 await self.trading_bot.close_short_option_position(position, limit=stop_loss)
             return
 
@@ -238,6 +240,14 @@ class OptionSafeguard:
             return False
 
         lower_es, upper_es = es_options
+        equivalent_es_strike = option.strike - indices_difference
+        if equivalent_es_strike < lower_es.strike or equivalent_es_strike > upper_es.strike:
+            self.subscription_manager.invalidate_key(option)
+            logger.error(f"The equivalent ES strike price of {get_option_name(option)} is {equivalent_es_strike:.2f}, "
+                         f"but the current matching ES options are {get_es_option_name(lower_es)} and {get_es_option_name(upper_es)}, "
+                         f"going to set new matching ES options")
+            return False
+
         lower_ticker = self.market_data_fetcher.get_ticker(lower_es)
         upper_ticker = self.market_data_fetcher.get_ticker(upper_es)
 
@@ -294,7 +304,7 @@ class OptionSafeguard:
         if not alt_ticker:
             logger.info(f"Matching {alt_type} ticker for {get_option_name(option)} ({alt_name}) not found in tickers cache. "
                         f"Invalidating subscription in SubscriptionManager. Unfairness is not detected")
-            self.subscription_manager.spx_to_es_map.pop(option.conId, None)
+            self.subscription_manager.invalidate_key(option)
             return False
 
         if math.isnan(alt_ticker.ask) or alt_ticker.ask <= 0:

@@ -36,7 +36,8 @@ AFTER_HOURS_END_TIME = dt_time(17, 0)  # 00:00
 JUST_AFTER_TRADE_END_TIME = dt_time(17, 5)
 
 MY_ACCOUNT = 'U15897350'
-JSON_PATH = 'shared/state.json'
+SHARED_JSON_PATH = 'shared/state.json'
+CACHED_JSON_PATH = 'cache/state.json'
 SUPERVISOR_JSON_PATH = 'shared/supervisor_state.json'
 
 SUCCESS = 0

@@ -5,7 +5,8 @@ echo Creating archive of python scripts...
 tar --exclude="__pycache__" -czf scripts.tar.gz app utilities
 
 echo Sending archive to VM...
-call gcloud compute scp scripts.tar.gz %VM_NAME%:/home/barakc82/
+for %%F in (scripts.tar.gz) do echo Archive size: %%~zF bytes
+call gcloud compute scp --verbosity=info scripts.tar.gz %VM_NAME%:/home/barakc82/
 
 if %ERRORLEVEL% neq 0 (
     echo Error occurred when sending files to %VM_NAME%! Exiting...

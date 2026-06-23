@@ -5,6 +5,8 @@ import math
 import json
 import os
 from ib_insync import Option, FuturesOption
+
+from utilities.ib_utils import get_es_option_name
 from .connection_manager import ConnectionManager
 from .trading_bot import TradingBot
 from .market_data_fetcher import MarketDataFetcher
@@ -175,11 +177,12 @@ class SubscriptionManager:
                     qualified_es = unique_new_es[key]
                     if qualified_es.conId and self.market_data_fetcher.get_ticker(qualified_es):
                         qualified_es_list.append(qualified_es)
+                        logger.info(
+                            f"Subscribed to {get_es_option_name(qualified_es)} for SPX {get_option_name(spx_contract)}")
                     else:
                         logger.error(f"Failed to subscribe matching ES option {qualified_es.strike} for {get_option_name(spx_contract)}")
                 if qualified_es_list:
                     self.spx_to_es_map[spx_contract.conId] = qualified_es_list
-                    logger.info(f"Subscribed to {len(qualified_es_list)} ES hedges for SPX position {get_option_name(spx_contract)}")
 
         # 2. Unsubscribe from ES options for closed SPX positions
         closed_spx_con_ids = [con_id for con_id in list(self.spx_to_es_map.keys()) if con_id not in current_spx_con_ids]
@@ -190,6 +193,10 @@ class SubscriptionManager:
                 is_in_use = any(es_contract in contracts for contracts in self.spx_to_es_map.values())
                 if not is_in_use:
                     self.market_data_fetcher.cancel_market_data(es_contract)
+
+    def invalidate_key(self, option):
+        logger.info(f"Invalidating ES subscription key for {get_option_name(option)}")
+        self.spx_to_es_map.pop(option.conId, None)
 
     async def create_matching_es_contracts(self, spx_contract):
         """Return two ES option contracts whose strikes bracket the SPX strike in ES terms."""

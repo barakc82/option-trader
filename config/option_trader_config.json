@@ -1,5 +1,6 @@
 {
     "should_guard_positions": true,
+    "should_check_fairness": true,
     "should_write_options_overnight": true,
     "should_monitor_only": false,
     "enable_spy_option_hedging": false,

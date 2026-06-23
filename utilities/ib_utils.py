@@ -65,9 +65,9 @@ def extract_ask(ticker):
     return ticker.ask
 
 
-def get_spy_option_name(spy_contract):
+def get_es_option_name(es_contract):
     """Return a string representing the SPY option name."""
-    return f"SPY {spy_contract.right} {spy_contract.strike}"
+    return f"ES {es_contract.right} {es_contract.strike}"
 
 
 def is_hollow(ticker):
@@ -120,6 +120,14 @@ def find_high_limit_buy_trade(option, open_buy_trades):
 
 
 def interpolate_es_price(spx_strike, indices_difference, lower_es, upper_es, lower_price, upper_price):
+    if upper_es.strike == lower_es.strike:
+        logger.error(f"For SPX strike of {spx_strike} upper_es.strike is equal to lower_es.strike: {upper_es.strike}")
+        return upper_price
+
     equivalent_es_strike = spx_strike - indices_difference
     t = (equivalent_es_strike - lower_es.strike) / (upper_es.strike - lower_es.strike)
-    return lower_price * (1 - t) + upper_price * t
+    result = lower_price * (1 - t) + upper_price * t
+    if result < 0:
+        result = upper_price if t > 0.5 else lower_price
+
+    return result

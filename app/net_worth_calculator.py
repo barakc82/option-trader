@@ -71,27 +71,27 @@ class NetWorthCalculator:
                 "Cannot calculate max number of options for market drop because the S&P 500 index value is NaN")
             return 0
 
-        price_after_drop = current_spx_value * FOLD_AFTER_MARKET_DROP
-        if put_option.strike < price_after_drop:
+        spx_price_after_drop = current_spx_value * FOLD_AFTER_MARKET_DROP
+        if put_option.strike < spx_price_after_drop:
             logger.info(f"{get_option_name(put_option)} is lower than worst case scenario market drop")
             return sys.float_info.max
 
         positions = self.trading_bot.get_short_options()
-        net_worth_after_drop = await self.calculate_net_worth_after_change(price_after_drop, current_spx_value,
+        net_worth_after_drop = await self.calculate_net_worth_after_change(FOLD_AFTER_MARKET_DROP, current_spx_value,
                                                                       positions)
         if net_worth_after_drop < 0:
             logger.info(f"Negative net worth in case of a market drop")
             return 0
 
-        liability_per_contract = (put_option.strike - price_after_drop) * 100
+        liability_per_contract = (put_option.strike - spx_price_after_drop) * 100
         return math.floor(net_worth_after_drop / liability_per_contract)
 
     async def calculate_net_worth_after_change(self, fold_after_market_change: float, current_spx_value, positions) -> float:
 
-        spx_value_after_market_change = current_spx_value * FOLD_AFTER_MARKET_RISE
+        spx_value_after_market_change = current_spx_value * fold_after_market_change
 
         current_total_liability = 0
-        right_of_interest = 'C' if spx_value_after_market_change > 0 else 'P'
+        right_of_interest = 'C' if fold_after_market_change > 1 else 'P'
         for position in positions:
             if not position.contract.secType == 'OPT' or position.position >= 0 or position.contract.right != right_of_interest:
                 continue
@@ -130,6 +130,7 @@ class NetWorthCalculator:
             call_option = open_sell_call_trade.contract
             expiry_date = datetime.strptime(call_option.lastTradeDateOrContractMonth, "%Y%m%d").date()
             is_expiry_or_day_before = (today_nyc == expiry_date) or (today_nyc == expiry_date - timedelta(days=1))
+
             if is_expiry_or_day_before and not is_switched_to_overnight_trading():
                 continue
 
