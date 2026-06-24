@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import Any
 from ib_insync import Trade
 
-from utilities.utils import get_option_name, is_after_hours
+from utilities.utils import get_option_name, is_after_hours, new_york_timezone, REGULAR_HOURS_END_TIME
 from utilities.tws_connection import TwsConnection
 
 
@@ -134,3 +134,66 @@ def interpolate_es_price(spx_strike, indices_difference, lower_es, upper_es, low
                      f"lower_es.strike={lower_es.strike}, upper_es.strike={upper_es.strike}, "
                      f"lower_price={lower_price}, upper_price={upper_price}, t={t:.4f})")
     return result
+
+
+def _norm_cdf(x):
+    return (1 + math.erf(x / math.sqrt(2))) / 2
+
+
+def _bs_price(S, K, T, r, sigma, right):
+    if T <= 0 or sigma <= 0 or S <= 0:
+        return math.nan
+    d1 = (math.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * math.sqrt(T))
+    d2 = d1 - sigma * math.sqrt(T)
+    if right == 'C':
+        return S * _norm_cdf(d1) - K * math.exp(-r * T) * _norm_cdf(d2)
+    else:
+        return K * math.exp(-r * T) * _norm_cdf(-d2) - S * _norm_cdf(-d1)
+
+
+def calculate_bs_distance_to_stop(option, ticker, stop_loss, spot_price, r):
+    """Return SPX points between spot_price and the level where the option hits stop_loss."""
+    greeks = ticker.modelGreeks or ticker.lastGreeks
+    if not greeks or greeks.impliedVol is None or math.isnan(greeks.impliedVol) or greeks.impliedVol <= 0:
+        return math.nan
+
+    sigma = greeks.impliedVol
+    K = option.strike
+    right = option.right
+    expiry_date = datetime.strptime(option.lastTradeDateOrContractMonth, '%Y%m%d').date()
+    expiry_datetime = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
+    T = (expiry_datetime - datetime.now(new_york_timezone)).total_seconds() / (365.25 * 24 * 3600)
+    if T <= 0:
+        return math.nan
+
+    # For puts: price decreases as S rises → S* < spot (SPX must fall to hit stop loss)
+    # For calls: price increases as S rises → S* > spot (SPX must rise to hit stop loss)
+    if right == 'P':
+        S_low, S_high = spot_price * 0.3, spot_price * 1.2
+        if _bs_price(S_low, K, T, r, sigma, right) < stop_loss:
+            return math.nan
+        if _bs_price(S_high, K, T, r, sigma, right) > stop_loss:
+            return math.nan
+    else:
+        S_low, S_high = spot_price * 0.8, spot_price * 2.0
+        if _bs_price(S_low, K, T, r, sigma, right) > stop_loss:
+            return math.nan
+        if _bs_price(S_high, K, T, r, sigma, right) < stop_loss:
+            return math.nan
+
+    for _ in range(60):
+        S_mid = (S_low + S_high) / 2
+        price_mid = _bs_price(S_mid, K, T, r, sigma, right)
+        if right == 'P':
+            if price_mid > stop_loss:
+                S_low = S_mid
+            else:
+                S_high = S_mid
+        else:
+            if price_mid < stop_loss:
+                S_low = S_mid
+            else:
+                S_high = S_mid
+
+    S_star = (S_low + S_high) / 2
+    return spot_price - S_star if right == 'P' else S_star - spot_price

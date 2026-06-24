@@ -9,6 +9,7 @@ export interface Position {
     delta: string;
     stop_loss: number;
     distance_to_stop?: string;
+    distance_to_stop_bs?: string;
   }
   
   export interface Trade {

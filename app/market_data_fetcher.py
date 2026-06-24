@@ -4,6 +4,7 @@ import time
 import logging
 import pandas as pd
 import exchange_calendars as ecals
+import yfinance as yf
 from ib_insync import Index, Future
 from utilities.utils import *
 from utilities.ib_utils import get_delta
@@ -35,7 +36,9 @@ class MarketDataFetcher:
             self.option_fetcher = OptionDataFetcher(self)
             
             self._state_lock = asyncio.Lock()
-            
+            self._risk_free_rate = None
+            self._risk_free_rate_fetched_at = None
+
             logger.info("MarketDataFetcher initialized.")
             self._initialized = True
 
@@ -71,6 +74,21 @@ class MarketDataFetcher:
 
     def calculate_spx_es_difference(self):
         return self.index_manager.calculate_spx_es_difference()
+
+    def get_cached_risk_free_rate(self):
+        now = time.time()
+        if self._risk_free_rate is None or now - self._risk_free_rate_fetched_at >= 86400:
+            try:
+                irx = yf.Ticker("^IRX")
+                rate_pct = irx.info.get('regularMarketPrice')
+                self._risk_free_rate = rate_pct / 100.0 if rate_pct else 0.05
+                self._risk_free_rate_fetched_at = now
+                logger.info(f"Fetched risk-free rate from yfinance: r={self._risk_free_rate:.4f}")
+            except Exception as e:
+                logger.error(f"Failed to fetch risk-free rate: {e}")
+                self._risk_free_rate = self._risk_free_rate or 0.05
+                self._risk_free_rate_fetched_at = now
+        return self._risk_free_rate
 
     async def ensure_market_data_type(self):
         """Ensures the correct market data type (Live vs Frozen) based on market hours."""

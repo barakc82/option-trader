@@ -10,7 +10,7 @@ import pytz
 from datetime import datetime
 from statistics import mean
 
-from utilities.ib_utils import req_id_to_comment, interpolate_es_price, get_es_option_name
+from utilities.ib_utils import req_id_to_comment, interpolate_es_price, get_es_option_name, calculate_bs_distance_to_stop
 from utilities.utils import is_market_open, is_regular_hours, SAFEGUARD_MAX_CADENCE, get_option_name, SHARED_JSON_PATH, CACHED_JSON_PATH, SUPERVISOR_JSON_PATH
 
 from .account_data import AccountData
@@ -141,6 +141,8 @@ class StateUpdater:
         subscription_manager = SubscriptionManager()
         is_reg_hours = is_regular_hours()
         indices_difference = self.market_data_fetcher.calculate_spx_es_difference()
+        spot_price = self.market_data_fetcher.get_spx_price() if is_reg_hours else self.market_data_fetcher.get_es_price() + indices_difference
+        r = self.market_data_fetcher.get_cached_risk_free_rate()
 
         for position in positions:
             option = position.contract
@@ -155,12 +157,18 @@ class StateUpdater:
             distance_to_stop_roundness = 1 if distance_to_stop < 100 else 0
             distance_to_stop = round(distance_to_stop, distance_to_stop_roundness)
 
+            ticker = self.market_data_fetcher.get_ticker(option)
+            distance_to_stop_bs = calculate_bs_distance_to_stop(option, ticker, stop_loss, spot_price, r) if ticker else math.nan
+            distance_to_stop_bs_roundness = 1 if distance_to_stop_bs < 100 else 0
+            distance_to_stop_bs = round(distance_to_stop_bs, distance_to_stop_bs_roundness)
+
             pos_data = {
                 'right': option.right, 'strike': option.strike, 'quantity': position.position,
                 'date': datetime.strptime(option.lastTradeDateOrContractMonth, "%Y%m%d").strftime("%d/%m/%y"),
                 'delta': delta, 'market_price': str(market_price) if not math.isnan(market_price) else '',
                 'stop_loss': stop_loss,
-                'distance_to_stop': distance_to_stop if not math.isnan(distance_to_stop) else ''
+                'distance_to_stop': distance_to_stop if not math.isnan(distance_to_stop) else '',
+                'distance_to_stop_bs': distance_to_stop_bs if not math.isnan(distance_to_stop_bs) else ''
             }
 
             es_options = subscription_manager.spx_to_es_map.get(option.conId)
