@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import os
+import numpy as np
 import pandas as pd
 from ib_insync import IB, Future
 
@@ -147,7 +148,13 @@ class ESTickLogger:
             
             # Mid price for calculations
             df['mid_price'] = (df['bid'] + df['ask']) / 2
-            
+
+            # gained_10_in_30s: True if mid_price rises >= 10 at any point in the next 30 seconds.
+            # shift(-1) skips the current row; reversed rolling max then reversed back gives the
+            # forward-looking max over the next 30 rows (= 30s at 1 record/second).
+            future_max_30s = df['mid_price'].shift(-1)[::-1].rolling(window=30, min_periods=1).max()[::-1]
+            df['gained_10_in_30s'] = (future_max_30s - df['mid_price']) >= 10
+
             # velocity_3s = price change over 3 seconds
             df['velocity_3s'] = df['mid_price'].diff(3)
             
