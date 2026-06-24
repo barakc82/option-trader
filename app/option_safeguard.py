@@ -184,6 +184,7 @@ class OptionSafeguard:
         if not high_limit_buy_trade:
             if current_price > stop_loss:
                 logger.info(f"Creating missing limit order for {get_option_name(option)}, limit: {stop_loss:.2f}, current price: {current_price:.2f}")
+                self.last_skipping_log_times[option.conId] = time.time()
                 await self.trading_bot.close_short_option_position(position, limit=stop_loss)
             return
 
@@ -196,10 +197,10 @@ class OptionSafeguard:
         option = position.contract
         now = time.time()
         last_mod_time = self.last_modification_times.get(high_limit_buy_trade.order.orderId, 0)
-        if now - last_mod_time < 2:
+        if now - last_mod_time < 30:
             if now - self.last_skipping_log_times.get(option.conId, 0) > 1:
                 logger.info(
-                    f"Skipping modification for {get_option_name(option)} as it was modified less than 2 seconds ago")
+                    f"Skipping modification for {get_option_name(option)} as it was modified less than 30 seconds ago")
                 self.last_skipping_log_times[option.conId] = now
             return
 
@@ -210,7 +211,7 @@ class OptionSafeguard:
             f"Risky position detected: {get_option_name(option)}, current price is {current_price}, trying to close it using limit of {current_limit_price}")
 
         red_line_stop_loss = stop_loss + stop_loss_per_option * 0.5
-        required_limit_price = min(option.ticker.ask + 0.1, red_line_stop_loss)
+        required_limit_price = min(current_limit_price * 1.1, red_line_stop_loss)
         logger.info(f"The required limit price for {get_option_name(option)} is {required_limit_price:.2f}, "
                     f"red line stop loss is {red_line_stop_loss:.2f}, maximal additional increment is {stop_loss_per_option:.2f}")
 
