@@ -224,8 +224,24 @@ class MarketDataFetcher:
         discriminant = delta**2 + 2 * gamma * price_diff
         if discriminant < 0:
             return math.nan
-        distance_to_stop = abs((-delta + math.sqrt(discriminant)) / gamma)
+        sqrt_disc = math.sqrt(discriminant)
+
+        # 2. Calculate BOTH roots mathematically
+        root1 = (-delta + sqrt_disc) / gamma
+        root2 = (-delta - sqrt_disc) / gamma
+
+        # 3. Filter for the physically real, positive distance
+        # In option/futures trading models, we need the positive real solution
+        valid_distances = [r for r in [root1, root2] if r >= 0]
+
+        if not valid_distances:
+            return math.nan  # No logically valid positive distance exists
+
+        # If both are positive (rare), we typically want the closest approach
+        distance_to_stop = min(valid_distances)
+
         return min(distance_to_stop, maximal_distance)
+
 
     def calculate_index_points_margin_es(self, option, stop_loss_limit):
         ticker = self.get_ticker(option)

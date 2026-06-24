@@ -129,5 +129,8 @@ def interpolate_es_price(spx_strike, indices_difference, lower_es, upper_es, low
     result = lower_price * (1 - t) + upper_price * t
     if result < 0:
         result = upper_price if t > 0.5 else lower_price
-
+        logger.error(f"interpolate_es_price returned negative value: {result:.4f} "
+                     f"(spx_strike={spx_strike}, indices_difference={indices_difference}, "
+                     f"lower_es.strike={lower_es.strike}, upper_es.strike={upper_es.strike}, "
+                     f"lower_price={lower_price}, upper_price={upper_price}, t={t:.4f})")
     return result

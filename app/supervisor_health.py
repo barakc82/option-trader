@@ -110,7 +110,8 @@ def is_process_active():
 
         except (Exception) as e:
             logger.error(f"Invalid data in heartbeat file: {e}")
-            time.sleep(5)
+
+        time.sleep(5)
 
     logger.error(f"No heartbeat from option trader")
     return False

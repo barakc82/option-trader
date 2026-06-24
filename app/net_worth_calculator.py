@@ -130,7 +130,6 @@ class NetWorthCalculator:
             call_option = open_sell_call_trade.contract
             expiry_date = datetime.strptime(call_option.lastTradeDateOrContractMonth, "%Y%m%d").date()
             is_expiry_or_day_before = (today_nyc == expiry_date) or (today_nyc == expiry_date - timedelta(days=1))
-
             if is_expiry_or_day_before and not is_switched_to_overnight_trading():
                 continue
 
