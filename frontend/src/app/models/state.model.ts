@@ -70,4 +70,5 @@ export interface Position {
     trades: Trade[];
     fills: Fill[];
     spx_premium: number;
+    daily_profit?: number;
   }

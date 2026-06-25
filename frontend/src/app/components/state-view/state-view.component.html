@@ -4,6 +4,7 @@
       <p>
         <strong>Cash:</strong> {{ state.cash }}
       </p>
+      <p><strong>Daily Profit:</strong> {{ state.daily_profit }}</p>
       <p [ngStyle]="!is_supervisor_active() ? {'background-color': 'red'} : {}">
         <strong>Supervisor Time:</strong> 
         {{ supervisor_state ? (supervisor_state.time * 1000 | date:'dd/MM/yy HH:mm') : 'Inactive'}}

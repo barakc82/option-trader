@@ -5,6 +5,7 @@ from typing import Any
 from ib_insync import Option, Trade, FuturesOption
 
 from utilities.utils import *
+from .index_price_manager import IndexPriceManager
 from .max_loss_calculator import MaxLossCalculator
 
 from .trading_bot import TradingBot
@@ -17,7 +18,7 @@ from utilities.ib_utils import *
 
 logger = logging.getLogger(__name__)
 
-MAX_DEVIATION = 0.15
+MAX_DEVIATION = 0.1
 MIN_PRICE_THRESHOLD = 1
 
 
@@ -37,6 +38,7 @@ class OptionSafeguard:
             self.ib = self.connection_manager.ib
             self.trading_bot = TradingBot()
             self.max_loss_calculator = MaxLossCalculator()
+            self.index_price_manager = IndexPriceManager()
             self.market_data_fetcher = MarketDataFetcher()
             self.positions_manager = PositionsManager()
             self.subscription_manager = SubscriptionManager()
@@ -48,7 +50,7 @@ class OptionSafeguard:
             self.should_check_fairness = True
             self.last_modification_times = {}
             self.last_run_end_time = 0
-            self.last_unfair_ask_warning_time = 0
+            self.last_unfair_ask_warning_times = {}
             self.last_skipping_log_times = {}
             self.last_no_es_option_log_times = {}
             self._initialized = True
@@ -176,7 +178,10 @@ class OptionSafeguard:
             return
 
         if stop_loss * 0.5 <= current_price < stop_loss:
-            logger.info(f"Watching the current price of {get_option_name(option)}: {current_price:.2f}, stop loss is at {stop_loss:.2f}")
+            spot_price = self.index_price_manager.get_spot_price()
+            risk_free_rate = self.market_data_fetcher.get_cached_risk_free_rate()
+            distance_to_stop = calculate_distance_to_stop(option, option.ticker, stop_loss, spot_price, risk_free_rate)
+            logger.info(f"Watching the current price of {get_option_name(option)}: {current_price:.2f}, stop loss is at {stop_loss:.2f}, distance to stop is {distance_to_stop:.1f}")
 
         if current_price < stop_loss or math.isnan(current_price):
             return
@@ -197,10 +202,12 @@ class OptionSafeguard:
         option = position.contract
         now = time.time()
         last_mod_time = self.last_modification_times.get(high_limit_buy_trade.order.orderId, 0)
-        if now - last_mod_time < 30:
+        time_interval_between_modifications = 60
+        if now - last_mod_time < time_interval_between_modifications:
             if now - self.last_skipping_log_times.get(option.conId, 0) > 1:
                 logger.info(
-                    f"Skipping modification for {get_option_name(option)} as it was modified less than 30 seconds ago")
+                    f"Skipping modifying the limit for {get_option_name(option)} as it was modified less than "
+                    f"{time_interval_between_modifications} seconds ago, limit is {high_limit_buy_trade.order.lmtPrice}")
                 self.last_skipping_log_times[option.conId] = now
             return
 
@@ -273,12 +280,12 @@ class OptionSafeguard:
             return False
 
         now = time.time()
-        if now - self.last_unfair_ask_warning_time >= 10:
+        if now - self.last_unfair_ask_warning_times.get(option.conId, 0) >= 4:
             logger.warning(
                 f"Unfair ask for {get_option_name(option)} against {lower_name}/{upper_name}: "
                 f"SPX Ask: {spx_ask}, interpolated ES ask: {adjusted_es_ask:.2f}, deviation: {deviation:.2f} "
                 f"(SPX premium: {indices_difference:.2f})")
-            self.last_unfair_ask_warning_time = now
+            self.last_unfair_ask_warning_times[option.conId] = now
         return True
 
     def handle_unfair_ask_value(self, high_limit_buy_trade: Any | None, option, es_options: list,

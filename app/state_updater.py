@@ -10,7 +10,7 @@ import pytz
 from datetime import datetime
 from statistics import mean
 
-from utilities.ib_utils import req_id_to_comment, interpolate_es_price, get_es_option_name, calculate_bs_distance_to_stop
+from utilities.ib_utils import req_id_to_comment, interpolate_es_price, get_es_option_name, calculate_distance_to_stop
 from utilities.utils import is_market_open, is_regular_hours, SAFEGUARD_MAX_CADENCE, get_option_name, SHARED_JSON_PATH, CACHED_JSON_PATH, SUPERVISOR_JSON_PATH
 
 from .account_data import AccountData
@@ -153,14 +153,10 @@ class StateUpdater:
             raw_stop_loss = position.avgCost / 100 + stop_loss_per_option
             stop_loss = self.trading_bot.adjust_limit_to_market_rules(option, raw_stop_loss)
             
-            distance_to_stop = self.market_data_fetcher.calculate_index_points_margin(option, stop_loss)
+            ticker = self.market_data_fetcher.get_ticker(option)
+            distance_to_stop = calculate_distance_to_stop(option, ticker, stop_loss, spot_price, r) if ticker else math.nan
             distance_to_stop_roundness = 1 if distance_to_stop < 100 else 0
             distance_to_stop = round(distance_to_stop, distance_to_stop_roundness)
-
-            ticker = self.market_data_fetcher.get_ticker(option)
-            distance_to_stop_bs = calculate_bs_distance_to_stop(option, ticker, stop_loss, spot_price, r) if ticker else math.nan
-            distance_to_stop_bs_roundness = 1 if distance_to_stop_bs < 100 else 0
-            distance_to_stop_bs = round(distance_to_stop_bs, distance_to_stop_bs_roundness)
 
             pos_data = {
                 'right': option.right, 'strike': option.strike, 'quantity': position.position,
@@ -168,7 +164,6 @@ class StateUpdater:
                 'delta': delta, 'market_price': str(market_price) if not math.isnan(market_price) else '',
                 'stop_loss': stop_loss,
                 'distance_to_stop': distance_to_stop if not math.isnan(distance_to_stop) else '',
-                'distance_to_stop_bs': distance_to_stop_bs if not math.isnan(distance_to_stop_bs) else ''
             }
 
             es_options = subscription_manager.spx_to_es_map.get(option.conId)
@@ -213,6 +208,7 @@ class StateUpdater:
         # 5. Process fills
         fills = self.trading_bot.ib.fills()
         state_fills = []
+        daily_profit = 0
         for f in fills:
             if f.contract.secType != 'OPT': continue
             comment = 'Liquidation' if f.execution.liquidation == 1 else req_id_to_comment.get(f.execution.orderId, '')
@@ -221,7 +217,10 @@ class StateUpdater:
                 'quantity': f.execution.shares, 'price': f.execution.price,
                 'time': f.time.timestamp(), 'comment': comment
             })
+            sign = 1 if f.execution.side == 'SLD' else -1
+            daily_profit += sign * f.execution.price * f.execution.shares * 100
         state['fills'] = sorted(state_fills, key=lambda x: x['time'], reverse=True)
+        state['daily_profit'] = round(daily_profit)
 
         opportunity_explorer = OpportunityExplorer()
         state['last_put_option_price'] = round(opportunity_explorer.last_put_option_price, 2)

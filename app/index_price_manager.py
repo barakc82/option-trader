@@ -8,18 +8,29 @@ from datetime import datetime
 from collections import deque
 from ib_insync import Index, Future
 from utilities.utils import is_regular_hours, CACHED_JSON_PATH
+from .connection_manager import ConnectionManager
 from .market_data_utils import SPXESPair
 
 logger = logging.getLogger(__name__)
 
 class IndexPriceManager:
-    def __init__(self, ib):
-        self.ib = ib
-        self.spx = Index(symbol='SPX', exchange='CBOE', currency='USD')
-        self.es = None
-        self.spx_es_history = deque(maxlen=100)
-        self.previous_spx_value = math.nan
-        self.previous_es_value = math.nan
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(IndexPriceManager, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self):
+        if not self._initialized:
+            self.ib = ConnectionManager().ib
+            self.spx = Index(symbol='SPX', exchange='CBOE', currency='USD')
+            self.es = None
+            self.spx_es_history = deque(maxlen=100)
+            self.previous_spx_value = math.nan
+            self.previous_es_value = math.nan
+            self._initialized = True
 
     def get_spx_price(self):
         spx_ticker = self.ib.ticker(self.spx)
@@ -70,6 +81,12 @@ class IndexPriceManager:
             logger.info(f"Selected ES future: {closest_es_future.lastTradeDateOrContractMonth}")
             self.es = closest_es_future
         return self.es
+
+    def get_spot_price(self):
+        indices_difference = self.calculate_spx_es_difference()
+        if is_regular_hours():
+            return self.get_spx_price()
+        return self.get_es_price() + indices_difference
 
     def calculate_spx_es_difference(self):
         if not self.spx_es_history:
