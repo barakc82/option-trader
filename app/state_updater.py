@@ -11,7 +11,7 @@ from datetime import datetime
 from statistics import mean
 
 from utilities.ib_utils import req_id_to_comment, interpolate_es_price, get_es_option_name, calculate_distance_to_stop
-from utilities.utils import is_market_open, is_regular_hours, SAFEGUARD_MAX_CADENCE, get_option_name, SHARED_JSON_PATH, CACHED_JSON_PATH, SUPERVISOR_JSON_PATH
+from utilities.utils import is_market_open, is_regular_hours, SAFEGUARD_MAX_CADENCE, get_option_name, SHARED_JSON_PATH, CACHED_JSON_PATH, SUPERVISOR_JSON_PATH, new_york_timezone, REGULAR_HOURS_END_TIME
 
 from .account_data import AccountData
 from .market_data_fetcher import MarketDataFetcher
@@ -217,8 +217,11 @@ class StateUpdater:
                 'quantity': f.execution.shares, 'price': f.execution.price,
                 'time': f.time.timestamp(), 'comment': comment
             })
-            sign = 1 if f.execution.side == 'SLD' else -1
-            daily_profit += sign * f.execution.price * f.execution.shares * 100
+            expiry_date = datetime.strptime(f.contract.lastTradeDateOrContractMonth, '%Y%m%d').date()
+            expiry_datetime = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
+            if datetime.now(new_york_timezone) < expiry_datetime:
+                sign = 1 if f.execution.side == 'SLD' else -1
+                daily_profit += sign * f.execution.price * f.execution.shares * 100
         state['fills'] = sorted(state_fills, key=lambda x: x['time'], reverse=True)
         state['daily_profit'] = round(daily_profit)
 
