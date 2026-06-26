@@ -291,9 +291,12 @@ class OptionSafeguard:
     def handle_unfair_ask_value(self, high_limit_buy_trade: Any | None, option, es_options: list,
                                         stop_loss: Any):
         lower_es, upper_es = es_options
-        logger.warning(
-            f"Ask value of {get_option_name(option)} ({option.ticker.ask}) is unfair against interpolated ES ask "
-            f"(ES {lower_es.strike}/{upper_es.strike}), will not close position")
+        now = time.time()
+        if now - self.last_unfair_ask_warning_times.get(option.conId, 0) >= 10:
+            logger.warning(
+                f"Ask value of {get_option_name(option)} ({option.ticker.ask}) is unfair against interpolated ES ask "
+                f"(ES {lower_es.strike}/{upper_es.strike}), will not close position")
+            self.last_unfair_ask_warning_times[option.conId] = now
 
         if high_limit_buy_trade:
             logger.warning(
