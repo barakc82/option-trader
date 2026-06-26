@@ -194,6 +194,17 @@ class SubscriptionManager:
                 if not is_in_use:
                     self.market_data_fetcher.cancel_market_data(es_contract)
 
+        # 3. Warn about stale ES tickers
+        for es_contracts in self.spx_to_es_map.values():
+            for es_contract in es_contracts:
+                ticker = self.market_data_fetcher.get_ticker(es_contract)
+                if ticker and ticker.time:
+                    age_minutes = (time.time() - ticker.time.timestamp()) / 60
+                    if age_minutes > 20:
+                        logger.warning(f"ES ticker {get_es_option_name(es_contract)} last updated {age_minutes:.1f} minutes ago (at {ticker.time})")
+                elif ticker and time.time() % 1000000:
+                    logger.error(f"ES ticker {get_es_option_name(es_contract)} has no time field")
+
     def invalidate_key(self, option):
         logger.info(f"Invalidating ES subscription key for {get_option_name(option)}")
         self.spx_to_es_map.pop(option.conId, None)

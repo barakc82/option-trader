@@ -283,7 +283,8 @@ class OptionSafeguard:
         if now - self.last_unfair_ask_warning_times.get(option.conId, 0) >= 4:
             logger.warning(
                 f"Unfair ask for {get_option_name(option)} against {lower_name}/{upper_name}: "
-                f"SPX Ask: {spx_ask}, interpolated ES ask: {adjusted_es_ask:.2f}, deviation: {deviation:.2f} "
+                f"SPX Ask: {spx_ask}, interpolated ES ask: {adjusted_es_ask:.2f}, lower ES ask: {lower_ticker.ask},"
+                f"upper ES ask: {upper_ticker.ask}, deviation: {deviation:.2f} "
                 f"(SPX premium: {indices_difference:.2f})")
             self.last_unfair_ask_warning_times[option.conId] = now
         return True
