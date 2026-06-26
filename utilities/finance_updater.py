@@ -10,7 +10,6 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
 MAIN_SHEET              = '$$$$'
-HEARTBEAT_FILE          = 'finance_updater/yahoo-heartbeat.txt'
 CONFIG_FILE             = 'finance_updater/config.json'
 ISRAELI_PAUSE_MINUTES   = 10
 ISRAELI_STOCK_IDS_FILE  = 'finance_updater/yahoo-israeli-stock-ids.txt'
@@ -40,11 +39,6 @@ def is_israeli_update_paused():
 def read_ticker_names(filename):
     with open(filename, 'r') as f:
         return [line.strip() for line in f if line.strip()]
-
-
-def heartbeat():
-    with open(HEARTBEAT_FILE, 'w') as f:
-        f.write(str(int(time.time() * 1000)))
 
 
 def col_range(col, start_row, count):
@@ -117,7 +111,6 @@ class FinanceUpdater:
 
     def run(self):
         while True:
-            heartbeat()
             now = datetime.now()
             logger.info(f'Starting update cycle at {now}')
 
@@ -130,7 +123,6 @@ class FinanceUpdater:
                 sleep_seconds = 240 if is_short_sleep else 1800
                 label = '4 minutes' if is_short_sleep else 'half an hour'
                 logger.info(f'Sleeping for {label}')
-                heartbeat()
                 time.sleep(sleep_seconds)
 
             except IOError as e:
@@ -160,17 +152,14 @@ class FinanceUpdater:
             logger.info('Israeli stocks update skipped (within 10-minute break window)')
             return
         stock_ids = read_ticker_names(ISRAELI_STOCK_IDS_FILE)
-        prices = []
-        for stock_id in stock_ids:
+        for i, stock_id in enumerate(stock_ids):
             try:
                 price = get_israeli_stock_price(stock_id)
                 logger.info(f'{stock_id}: {price}')
-                prices.append(price)
+                update_single(MAIN_SHEET, 'B', ISRAELI_START_ROW + i, price)
             except Exception as e:
                 logger.error(f'Failed to fetch Israeli stock {stock_id}: {e}')
-                prices.append('')
             time.sleep(0.2)
-        update_column(MAIN_SHEET, 'B', ISRAELI_START_ROW, prices)
 
     def _update_daily_dividends_if_needed(self):
         today = datetime.now().date()

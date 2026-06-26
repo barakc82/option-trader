@@ -5,9 +5,10 @@ from utilities.meitav.audit import extract_completed_operations
 from utilities.meitav.meitav_common import *
 from utilities.meitav.start import start
 from utilities.meitav.get_status import extract_status
+from utilities.spreadsheet_operations import increment_unfixed_rows
 
 user = Barak
-program_type = Gemel
+program_type = Hishtalmut
 
 person_data = users_data[user]
 
@@ -71,7 +72,16 @@ try:
             new_row_index = len(sheet_values) - 1
             new_row_values = [current_date, hebrew_program_name, units, purchase_price]
 
+            prev_formulas = sheet.get(f"E{new_row_index - 1}:G{new_row_index - 1}", value_render_option='FORMULA')
+            incremented_formulas = [
+                increment_unfixed_rows(cell) if isinstance(cell, str) and cell.startswith('=') else cell
+                for cell in prev_formulas[0]
+            ]
+
             sheet.insert_row(new_row_values, index=new_row_index)
+            sheet.update(range_name=f"E{new_row_index}:G{new_row_index}",
+                         values=[incremented_formulas],
+                         value_input_option='USER_ENTERED')
 
 finally:
     driver.quit()
