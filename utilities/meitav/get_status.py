@@ -1,5 +1,7 @@
+import json
 import re
 import traceback
+from pathlib import Path
 
 from selenium.common import NoSuchElementException
 from selenium.webdriver.common.by import By
@@ -9,6 +11,20 @@ from selenium.webdriver.support import expected_conditions as EC
 from utilities.meitav.meitav_common import *
 from utilities.meitav.start import start
 from utilities.spreadsheet_operations import update_status_in_spreadsheet
+
+
+_FINANCE_CONFIG = Path(__file__).resolve().parent.parent / 'finance_updater' / 'config.json'
+
+
+def _update_break_time():
+    try:
+        with open(_FINANCE_CONFIG, 'r') as f:
+            config = json.load(f)
+        config['break_time'] = datetime.now().isoformat()
+        with open(_FINANCE_CONFIG, 'w') as f:
+            json.dump(config, f, indent=2)
+    except Exception as e:
+        print(f'Warning: could not update break_time in config: {e}')
 
 
 # & C:\\"Program Files"\\Google\\Chrome\\Application\\chrome.exe --remote-debugging-port=9222 --user-data-dir=C:\\ChromeDebug --no-first-run
@@ -121,6 +137,7 @@ def extract_field(driver, selector):
 
 
 def extract_status(driver):
+    _update_break_time()
     try:
         first_span = driver.find_element(By.CSS_SELECTOR, ".account-container .ng-binding:nth-of-type(3)")
         account_id = first_span.text.strip()
@@ -133,28 +150,6 @@ def extract_status(driver):
                 status['user'] = user
                 status['program_type'] = Gemel
         assert status['user']
-
-        """
-        all_spans = driver.find_elements(By.CSS_SELECTOR, "span.ng-binding[title]")
-        for span in all_spans:
-            field_value = span.get_attribute("title")
-            print(f"Field value: {field_value}")
-            if "." in field_value:
-                field_name = ""
-                try:
-                    field_name = span.find_element(By.XPATH, "./../preceding-sibling::div").text
-                except NoSuchElementException:
-                    try:
-                        field_name = span.find_element(By.XPATH, "./../../preceding-sibling::div").text
-                    except NoSuchElementException:
-                        pass
-
-                print(f"Value found: {field_value} {field_name}")
-                if "מזומנים" in field_name:
-                    status["cash"] = float(field_value.replace(",", ""))
-                if "שווי" in field_name:
-                    status["total"] = float(field_value.replace(",", ""))
-        """
 
         cash_word = 'מזומנים'
         income_word = 'הכנסה'

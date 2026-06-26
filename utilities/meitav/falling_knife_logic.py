@@ -61,48 +61,37 @@ class FallingKnifeCalculator:
             "required_transfer": required_transfer
         }
 
+    def _portfolio_after_rebalancing(self):
+        """Simulate buying 1000 NIS at a time at the current price until rebalanced.
+        Returns (leveraged_quantity, cash) reflecting all simulated purchases."""
+        qty, cash = self.leveraged_quantity, self.cash
+        person_data = {'max_leveraged_share': self.max_leveraged_share, 'min_leveraged_share': self.min_leveraged_share}
+        while cash >= 1000:
+            temp = FallingKnifeCalculator(qty, self.current_leveraged_price,
+                                          self.base_etfs_data, cash, person_data, self.should_decrease_base)
+            if temp.calculate_at_price(self.current_leveraged_price)['required_transfer'] <= 1000:
+                break
+            qty += 100000 / self.current_leveraged_price  # 1000 NIS / (price in agorot)
+            cash -= 1000
+        return qty, cash
+
     def find_next_transfer_price(self):
-        """Searches for the price boundary where a transfer of 1000 NIS is required."""
+        """Searches for the next lower price at which a transfer of 1000 NIS will be required."""
         current_result = self.calculate_at_price(self.current_leveraged_price)
-        should_buy_now = current_result['required_transfer'] > 1000
 
-        if should_buy_now:
-            # Simulate buying 1000 NIS at a time until rebalanced, then find the next lower trigger.
-            # After each buy the leveraged share rises, so the next trigger is higher than it would be
-            # without accounting for the purchase.
-            simulated_qty = self.leveraged_quantity
-            simulated_cash = self.cash
+        if current_result['required_transfer'] > 1000:
+            logger.info("The required transfer is more than 1000 NIS")
+            qty, cash = self._portfolio_after_rebalancing()
             person_data = {'max_leveraged_share': self.max_leveraged_share, 'min_leveraged_share': self.min_leveraged_share}
-
-            while simulated_cash >= 1000:
-                temp_calc = FallingKnifeCalculator(
-                    simulated_qty, self.current_leveraged_price,
-                    self.base_etfs_data, simulated_cash,
-                    person_data, self.should_decrease_base
-                )
-                if temp_calc.calculate_at_price(self.current_leveraged_price)['required_transfer'] <= 1000:
-                    break
-                # Buy 1000 NIS worth: price is in agorot, so units = 100000 / price
-                simulated_qty += 100000 / self.current_leveraged_price
-                simulated_cash -= 1000
-            else:
-                # Cash exhausted — create a calc with the final simulated state
-                temp_calc = FallingKnifeCalculator(
-                    simulated_qty, self.current_leveraged_price,
-                    self.base_etfs_data, simulated_cash,
-                    person_data, self.should_decrease_base
-                )
-
-            for price in range(self.current_leveraged_price - 1, 0, -1):
-                result = temp_calc.calculate_at_price(price)
-                if result['required_transfer'] > 1000:
-                    return result['leveraged_price'], result
+            search_calc = FallingKnifeCalculator(qty, self.current_leveraged_price,
+                                                 self.base_etfs_data, cash, person_data, self.should_decrease_base)
         else:
-            # Not yet in buy territory, search DOWN for the boundary where we start buying
-            for price in range(self.current_leveraged_price - 1, 0, -1):
-                result = self.calculate_at_price(price)
-                if result['required_transfer'] > 1000:
-                    return result['leveraged_price'], result
+            search_calc = self
+
+        for price in range(self.current_leveraged_price - 1, 0, -1):
+            result = search_calc.calculate_at_price(price)
+            if result['required_transfer'] > 1000:
+                return result['leveraged_price'], result
 
         return self.current_leveraged_price, current_result
 

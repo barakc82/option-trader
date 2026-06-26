@@ -6,7 +6,7 @@ from utilities.meitav.start import start
 LEVERAGED_SECURITY_ID = 1144708
 
 user = Barak
-program_type = Gemel
+program_type = Hishtalmut
 
 
 

@@ -23,13 +23,26 @@ class ConnectionManager:
             self.port = 4001 if is_in_docker() else 7496
             self.reconnect_delay = 1
             self.is_connecting = False
-            
+            self._managed_tasks: list[asyncio.Task] = []
+
             # Hook events
             self.ib.disconnectedEvent += self.on_disconnected
             self.ib.errorEvent += self.on_error
             self.ib.orderStatusEvent += self.on_order_status
-            
+
             self._initialized = True
+
+    def register_task(self, task: asyncio.Task):
+        self._managed_tasks = [t for t in self._managed_tasks if not t.done()]
+        self._managed_tasks.append(task)
+
+    async def _restart_managed_tasks(self):
+        logger.info(f"Cancelling {len(self._managed_tasks)} managed tasks for restart after reconnect...")
+        for task in self._managed_tasks:
+            if not task.done():
+                task.cancel()
+        self._managed_tasks.clear()
+        await asyncio.sleep(0)  # Let cancellations propagate
 
     def on_order_status(self, trade):
         if trade.orderStatus.status == 'Filled' and trade.contract.secType == 'OPT':
@@ -59,6 +72,7 @@ class ConnectionManager:
             self.reconnect_delay = 1 # Reset delay on success
 
             await self.initialize_data()
+            await self._restart_managed_tasks()
 
         except Exception as e:
             logger.error(f"Connection failed: {e}. Retrying soon...")
@@ -87,7 +101,7 @@ class ConnectionManager:
 
         except Exception as e:
             logger.error(f"Error during data initialization: {e}")
-
+    
     async def _check_health(self):
         """Check if the connection is actually responsive."""
         try:

@@ -1,3 +1,4 @@
+import json
 import time
 import logging
 import requests
@@ -10,6 +11,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(mess
 
 MAIN_SHEET              = '$$$$'
 HEARTBEAT_FILE          = 'finance_updater/yahoo-heartbeat.txt'
+CONFIG_FILE             = 'finance_updater/config.json'
+ISRAELI_PAUSE_MINUTES   = 10
 ISRAELI_STOCK_IDS_FILE  = 'finance_updater/yahoo-israeli-stock-ids.txt'
 ETF_NAMES_FILE          = 'finance_updater/yahoo-etf-names.txt'
 ETF_NAMES_FOR_DIV_FILE  = 'finance_updater/yahoo-etf-names-for-div-yield.txt'
@@ -19,6 +22,20 @@ ETF_START_ROW           = 15
 SHILLER_PE_ROW          = 20
 DIV_YIELD_START_ROW     = 45
 ISRAELI_START_ROW       = 59
+
+def is_israeli_update_paused():
+    try:
+        with open(CONFIG_FILE, 'r') as f:
+            config = json.load(f)
+        break_time_str = config.get('break_time')
+        if not break_time_str:
+            return False
+        break_time = datetime.fromisoformat(break_time_str)
+        return datetime.now() < break_time + timedelta(minutes=ISRAELI_PAUSE_MINUTES)
+    except Exception as e:
+        logger.warning(f'Could not read config: {e}')
+        return False
+
 
 def read_ticker_names(filename):
     with open(filename, 'r') as f:
@@ -139,6 +156,9 @@ class FinanceUpdater:
             logger.error(f'Failed to fetch Shiller PE: {e}')
 
     def _update_israeli_stocks(self):
+        if is_israeli_update_paused():
+            logger.info('Israeli stocks update skipped (within 10-minute break window)')
+            return
         stock_ids = read_ticker_names(ISRAELI_STOCK_IDS_FILE)
         prices = []
         for stock_id in stock_ids:

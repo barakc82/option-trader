@@ -14,20 +14,30 @@ from .state_updater import StateUpdater
 
 OPTION_TRADER_CLIENT_ID = 1
 
-async def supervisor(task_coro, name):
-    """Supervise a task and restart it if it crashes."""
+async def supervisor(task_factory, name, register=True):
+    """Supervise a task and restart it on crash or reconnect-triggered cancellation."""
+    cm = ConnectionManager()
     while True:
+        logger.info(f"Supervisor: Starting {name}...")
+        inner_task = asyncio.create_task(task_factory(), name=name)
+        if register:
+            cm.register_task(inner_task)
         try:
-            logger.info(f"Supervisor: Starting {name}...")
-            await task_coro
+            await inner_task
             logger.warning(f"Supervisor: {name} finished unexpectedly. Restarting in 10s...")
+            await asyncio.sleep(10)
         except asyncio.CancelledError:
-            logger.info(f"Supervisor: {name} was cancelled.")
-            raise
+            if inner_task.cancelled():
+                # Inner task was cancelled by ConnectionManager for restart — loop back immediately.
+                logger.info(f"Supervisor: {name} restarting after reconnect...")
+            else:
+                # The supervisor itself is being shut down — propagate.
+                inner_task.cancel()
+                await asyncio.gather(inner_task, return_exceptions=True)
+                raise
         except Exception:
             logger.exception(f"Supervisor: {name} crashed with a fatal error. Restarting in 10s...")
-        
-        await asyncio.sleep(10)
+            await asyncio.sleep(10)
 
 async def main():
     """Application entry point."""
@@ -45,11 +55,11 @@ async def main():
     try:
         # Run everything concurrently under supervision
         await asyncio.gather(
-            supervisor(connection_manager.connect(client_id=OPTION_TRADER_CLIENT_ID), "ConnectionManager"),
-            supervisor(trader.run(), "OptionTrader"),
-            supervisor(safeguard.run(), "OptionSafeguard"),
-            supervisor(subscription_manager.run(), "SubscriptionManager"),
-            supervisor(state_updater.run(), "StateUpdater")
+            supervisor(lambda: connection_manager.connect(client_id=OPTION_TRADER_CLIENT_ID), "ConnectionManager", register=False),
+            supervisor(trader.run, "OptionTrader"),
+            supervisor(safeguard.run, "OptionSafeguard"),
+            supervisor(subscription_manager.run, "SubscriptionManager"),
+            supervisor(state_updater.run, "StateUpdater")
         )
     except asyncio.CancelledError:
         logger.info("Tasks were cancelled during shutdown.")
