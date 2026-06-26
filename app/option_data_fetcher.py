@@ -67,6 +67,7 @@ class OptionDataFetcher:
             iv = get_implied_volatility(option.ticker)
             if not math.isnan(iv):
                 implied_volatility = iv
+                logger.info(f"Found implied volatility using {get_option_name(option)}: {implied_volatility:.2f}")
                 break
 
         if math.isnan(implied_volatility):

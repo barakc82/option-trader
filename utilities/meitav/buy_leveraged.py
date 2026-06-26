@@ -11,7 +11,7 @@ from utilities.meitav.get_status import extract_status
 from utilities.meitav.meitav_common import *
 from utilities.meitav.spark_falling_knife import calculate_next_buy2
 from utilities.meitav.start import start
-from utilities.spreadsheet_operations import update_next_buy_in_spreadsheet
+from utilities.spreadsheet_operations import update_next_buy_in_spreadsheet, update_status_in_spreadsheet
 
 user = Barak
 program_type = Gemel
@@ -29,6 +29,7 @@ try:
     status = extract_status(driver)
     if status['account_id'] != users_data[user][program_type]['account_id']:
         raise Exception("Username and program type mismatch")
+    update_status_in_spreadsheet(user, program_type, status)
 
     # price, units = calculate_next_buy(user, program_type)
     price, units = calculate_next_buy2(driver, status)

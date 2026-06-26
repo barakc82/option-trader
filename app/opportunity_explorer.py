@@ -218,10 +218,16 @@ class OpportunityExplorer:
         if right == 'C':
             if self.last_call_option_price != price:
                 logger.info(f"The current price level for call options changed from {self.last_call_option_price} to {price}")
+                if self.last_call_option_price < 0.15 < price:
+                    logger.info(f"However, this is a high jump, slowing the pace of increase so that the price level for call options is {price}")
+                    price = 0.15
                 self.last_call_option_price = price
         else:
             if self.last_put_option_price != price:
                 logger.info(f"The current price level for put options changed from {self.last_put_option_price} to {price}")
+                if self.last_put_option_price < 0.15 < price:
+                    logger.info(f"However, this is a high jump, slowing the pace of increase so that the price level for put options is {price}")
+                    price = 0.15
                 self.last_put_option_price = price
 
     def try_to_publish_available_cheap_option(self, right):

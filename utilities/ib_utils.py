@@ -151,7 +151,7 @@ def _bs_price(S, K, T, r, sigma, right):
         return K * math.exp(-r * T) * _norm_cdf(-d2) - S * _norm_cdf(-d1)
 
 
-def calculate_bs_distance_to_stop(option, ticker, stop_loss, spot_price, r):
+def calculate_distance_to_stop(option, ticker, stop_loss, spot_price, r):
     """Return SPX points between spot_price and the level where the option hits stop_loss."""
     greeks = ticker.modelGreeks or ticker.lastGreeks
     if not greeks or greeks.impliedVol is None or math.isnan(greeks.impliedVol) or greeks.impliedVol <= 0:
