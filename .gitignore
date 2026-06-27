@@ -9,6 +9,11 @@ clientportal.gw/
 resources/service_account.json
 utilities/meitav/meitav_accounts.json
 utilities/finance_updater/config.json
+utilities/yahoo-heartbeat.txt
+quote_updater/raw_data/*
+!quote_updater/raw_data/.gitkeep
+quote_updater/processed_data/*
+!quote_updater/processed_data/.gitkeep
 frontend/dist
 frontend/node_modules
 scripts.tar.gz
