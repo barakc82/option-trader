@@ -1,7 +1,9 @@
 import asyncio
+import json
+from datetime import datetime
 from typing import Any
 
-from utilities.utils import is_trade_cancelled, write_heartbeat, get_option_name, is_final_hours
+from utilities.utils import is_trade_cancelled, write_heartbeat, get_option_name, is_final_hours, CACHED_JSON_PATH
 from utilities.ib_utils import *
 
 from .max_loss_calculator import MaxLossCalculator
@@ -30,9 +32,25 @@ class PositionsManager:
             self.max_loss_calculator = MaxLossCalculator()
             self.done_contract_ids = set()
             self.target_delta_map = {}
+            self._load_cached_target_deltas()
             logger.info("PositionsManager singleton initialized.")
             self._initialized = True
 
+
+    def _load_cached_target_deltas(self):
+        try:
+            with open(CACHED_JSON_PATH, 'r') as f:
+                state = json.load(f)
+            for pos in state.get('positions', []):
+                target_delta = pos.get('target_delta')
+                if not target_delta:
+                    continue
+                expiry = datetime.strptime(pos['date'], "%d/%m/%y").strftime("%Y%m%d")
+                key = (pos['strike'], pos['right'], expiry)
+                self.target_delta_map[key] = {'target_delta': target_delta, 'quantity': pos['quantity']}
+            logger.info(f"Loaded {len(self.target_delta_map)} target delta entries from cache")
+        except Exception as e:
+            logger.warning(f"Could not load cached target deltas: {e}")
 
     def find_low_limit_buy_trade(self, option, open_buy_trades) -> Trade | None:
         for open_buy_trade in open_buy_trades:
