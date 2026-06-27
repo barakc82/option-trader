@@ -8,6 +8,7 @@ cache/
 clientportal.gw/
 resources/service_account.json
 utilities/meitav/meitav_accounts.json
+utilities/finance_updater/config.json
 frontend/dist
 frontend/node_modules
 scripts.tar.gz
