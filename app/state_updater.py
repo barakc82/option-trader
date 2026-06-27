@@ -20,6 +20,7 @@ from .target_delta_calculator import TargetDeltaCalculator
 from .trading_bot import TradingBot
 from .opportunity_explorer import OpportunityExplorer
 from .subscription_manager import SubscriptionManager
+from .positions_manager import PositionsManager
 
 
 TEMP_PATH = 'shared/state_temp.json'
@@ -139,6 +140,7 @@ class StateUpdater:
         state_positions = []
         contract_id_to_delta = {}
         subscription_manager = SubscriptionManager()
+        target_delta_map = PositionsManager().target_delta_map
         is_reg_hours = is_regular_hours()
         indices_difference = self.market_data_fetcher.calculate_spx_es_difference()
         spot_price = self.market_data_fetcher.get_spx_price() if is_reg_hours else self.market_data_fetcher.get_es_price() + indices_difference
@@ -158,12 +160,14 @@ class StateUpdater:
             distance_to_stop_roundness = 1 if distance_to_stop < 100 else 0
             distance_to_stop = round(distance_to_stop, distance_to_stop_roundness)
 
+            td_entry = target_delta_map.get((option.strike, option.right, option.lastTradeDateOrContractMonth))
             pos_data = {
                 'right': option.right, 'strike': option.strike, 'quantity': position.position,
                 'date': datetime.strptime(option.lastTradeDateOrContractMonth, "%Y%m%d").strftime("%d/%m/%y"),
                 'delta': delta, 'market_price': str(market_price) if not math.isnan(market_price) else '',
                 'stop_loss': stop_loss,
                 'distance_to_stop': distance_to_stop if not math.isnan(distance_to_stop) else '',
+                'target_delta': round(td_entry['target_delta'], 4) if td_entry else '',
             }
 
             es_options = subscription_manager.spx_to_es_map.get(option.conId)

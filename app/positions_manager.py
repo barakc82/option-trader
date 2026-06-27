@@ -1,4 +1,5 @@
 import asyncio
+from typing import Any
 
 from utilities.utils import is_trade_cancelled, write_heartbeat, get_option_name, is_final_hours
 from utilities.ib_utils import *
@@ -28,6 +29,7 @@ class PositionsManager:
             self.trading_bot = TradingBot()
             self.max_loss_calculator = MaxLossCalculator()
             self.done_contract_ids = set()
+            self.target_delta_map = {}
             logger.info("PositionsManager singleton initialized.")
             self._initialized = True
 
@@ -83,9 +85,27 @@ class PositionsManager:
         return not is_final_hours()
 
     def on_fill(self, trade):
-        logger.info(f"Trade filled: {get_option_name(trade.contract)} {trade.order.action}")
+        target_delta = getattr(trade, 'target_delta', None)
+        target_delta_str = f", target delta: {target_delta}" if target_delta is not None else ""
+        logger.info(f"Trade filled: {get_option_name(trade.contract)} {trade.order.action}{target_delta_str}")
+        if trade.order.action.upper() == 'SELL' and target_delta is not None:
+            self.update_position_entry(target_delta, trade)
         if trade.order.action.upper() == 'BUY':
             self.done_contract_ids.add(trade.contract.conId)
+            c = trade.contract
+            self.target_delta_map.pop((c.strike, c.right, c.lastTradeDateOrContractMonth), None)
         if trade.order.orderId in req_id_to_comment and "Margin" in req_id_to_comment[trade.order.orderId]:
             opportunity_explorer = OpportunityExplorer()
             opportunity_explorer.notify_margin_lock_resolution_attempted()
+
+    def update_position_entry(self, target_delta: Any | None, trade):
+        c = trade.contract
+        key = (c.strike, c.right, c.lastTradeDateOrContractMonth)
+        new_qty = trade.order.totalQuantity
+        existing = self.target_delta_map.get(key)
+        if existing:
+            total_qty = existing['quantity'] + new_qty
+            avg_delta = (existing['target_delta'] * existing['quantity'] + target_delta * new_qty) / total_qty
+            self.target_delta_map[key] = {'target_delta': avg_delta, 'quantity': total_qty}
+        else:
+            self.target_delta_map[key] = {'target_delta': target_delta, 'quantity': new_qty}
