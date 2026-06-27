@@ -1,5 +1,7 @@
 import math
 import asyncio
+import csv
+from datetime import datetime
 from typing import Any
 
 from ib_insync import Option, Trade, FuturesOption
@@ -158,6 +160,18 @@ class OptionSafeguard:
         return SUCCESS
 
 
+    def _log_close_event(self, option, stop_loss, stop_loss_per_option):
+        spot_price = self.index_price_manager.get_spot_price()
+        risk_free_rate = self.market_data_fetcher.get_cached_risk_free_rate()
+        distance_to_stop = calculate_distance_to_stop(option, option.ticker, stop_loss, spot_price, risk_free_rate)
+        csv_path = 'cache/close_events.csv'
+        write_header = not os.path.exists(csv_path)
+        with open(csv_path, 'a', newline='') as f:
+            writer = csv.writer(f)
+            if write_header:
+                writer.writerow(['datetime', 'stop_loss', 'stop_loss_per_option', 'distance_to_stop'])
+            writer.writerow([datetime.now().isoformat(), stop_loss, stop_loss_per_option, distance_to_stop])
+
     async def handle_current_risk(self, position, open_trades):
         if position.contract.conId in self.positions_manager.done_contract_ids:
             return
@@ -191,6 +205,7 @@ class OptionSafeguard:
                 logger.info(f"Creating missing limit order for {get_option_name(option)}, limit: {stop_loss:.2f}, current price: {current_price:.2f}")
                 self.last_skipping_log_times[option.conId] = time.time()
                 await self.trading_bot.close_short_option_position(position, limit=stop_loss)
+                self._log_close_event(option, stop_loss, stop_loss_per_option)
             return
 
         await self.handle_high_limit_buy_trade(high_limit_buy_trade, position, stop_loss_per_option)
