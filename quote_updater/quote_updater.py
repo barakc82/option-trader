@@ -8,17 +8,16 @@ from utilities.ib_utils import connect
 from utilities.database_access import SERVICE_ACCOUNT_FILE, get_worksheet
 
 # --- CONFIGURATION ---
-SYMBOLS = ['VT', 'AVUV', 'AVDV', 'VGT', 'UPRO', 'SP5Y', 'SPHD', 'SCHD', 'SCHY', 'VIG', 'VIGI']
+ETF_SYMBOLS = ['VT', 'AVUV', 'AVDV', 'VGT', 'UPRO', 'SP5Y', 'SPHD', 'SCHD', 'SCHY', 'VIG', 'VIGI']
+
 QUOTED_SHEET_NAME = '$$$$'
 LEVERAGE_SHEET_NAME = 'Barak-dollar-leverage'
 UPDATE_INTERVAL_SECONDS = 60
 QUOTE_UPDATER_CLIENT_ID = 4
 
-SYMBOL_ROW_MAP = {symbol: 4 + i for i, symbol in enumerate(SYMBOLS)}
-
 latest_quotes = {}
-last_sent_prices = {symbol: None for symbol in SYMBOLS}
-
+SYMBOL_ROW_MAP = {symbol: 4 + i for i, symbol in enumerate(ETF_SYMBOLS)}
+last_sent_prices = {symbol: None for symbol in ETF_SYMBOLS}
 
 def on_pending_tickers(tickers):
     for ticker in tickers:
@@ -48,11 +47,10 @@ def periodic_sheet_updater(quotes_worksheet, leverage_worksheet):
     updates_payload = []
     changed_quotes = []
 
-    for symbol in SYMBOLS:
+    for symbol in ETF_SYMBOLS:
         if symbol in latest_quotes:
             data = latest_quotes[symbol]
             current_price = data[1]
-
             if current_price != last_sent_prices[symbol]:
                 row = SYMBOL_ROW_MAP[symbol]
                 if last_sent_prices[symbol] is not None:
@@ -121,14 +119,15 @@ def main():
     ib = tws_connection.ib
 
     # 3. Create contracts
-    contracts = [Stock(symbol, 'SMART', 'USD') for symbol in SYMBOLS]
-    if 'SP5Y' in SYMBOLS:
-        sp5y_index = SYMBOLS.index('SP5Y')
+    contracts = [Stock(symbol, 'SMART', 'USD') for symbol in ETF_SYMBOLS]
+    if 'SP5Y' in ETF_SYMBOLS:
+        sp5y_index = ETF_SYMBOLS.index('SP5Y')
         contracts[sp5y_index].primaryExchange = 'LSEETF'
+    if 'ACWD' in ETF_SYMBOLS:
+        acwd_index = ETF_SYMBOLS.index('ACWD')
+        contracts[acwd_index].exchange = 'LSEETF'
 
     contracts.append(Forex('USDILS'))
-    es_future = fetch_es_future(ib)
-    contracts.append(es_future)
 
     if ib.isConnected():
         setup_subscriptions(ib, contracts)
@@ -175,24 +174,6 @@ def main():
         print("Shutting down...")
     finally:
         ib.disconnect()
-
-def fetch_es_future(ib: IB):
-    es_incomplete = Future('ES', exchange='CME')
-
-    # 2. Fetch all matching contract details from the exchange
-    es_details = ib.reqContractDetails(es_incomplete)
-    contracts = [es_detail.contract for es_detail in es_details]
-
-    today_str = datetime.now().strftime('%Y%m%d')
-    active_contracts = [c for c in contracts if c.lastTradeDateOrContractMonth >= today_str]
-
-    # 3. Sort the contracts chronologically by expiration date
-    active_contracts.sort(key=lambda c: c.lastTradeDateOrContractMonth)
-
-    # 4. Select the closest expiration (front-month)
-    closest_es_future = active_contracts[0]
-    print(f"Selected ES future: {closest_es_future.lastTradeDateOrContractMonth}")
-    return closest_es_future
 
 if __name__ == '__main__':
     main()

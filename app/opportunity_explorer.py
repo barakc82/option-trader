@@ -268,6 +268,7 @@ class OpportunityExplorer:
             comment = f"Delta: {delta:.3f}, target delta: {target_delta:.3f}"
             req_id_to_comment[result.trade.order.orderId] = comment
             req_id_to_target_delta[result.trade.order.orderId] = target_delta
+            result.trade.target_delta = target_delta
         return result
 
     async def try_to_sell_put_options(self, open_trades, options):

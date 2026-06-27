@@ -8,7 +8,7 @@ from utilities.spreadsheet_operations import update_status_in_spreadsheet
 
 if __name__ == "__main__":
     name = Barak
-    program_type = Gemel
+    program_type = Hishtalmut
 
     driver = start(name, program_type)
 

@@ -11,8 +11,8 @@ from .max_loss_calculator import DEFAULT_MAX_LOSS, MaxLossCalculator
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-MIN_TARGET_DELTA = {'C': 0.003, 'P': 0.004}
-MAX_TARGET_DELTA = {'C': 0.011, 'P': 0.014}
+MIN_TARGET_DELTA = {'C': 0.001, 'P': 0.002}
+MAX_TARGET_DELTA = {'C': 0.009, 'P': 0.012}
 AVERAGE_TARGET_DELTA = {
     'C': (MAX_TARGET_DELTA['C'] + MIN_TARGET_DELTA['C']) / 2,
     'P': (MAX_TARGET_DELTA['P'] + MIN_TARGET_DELTA['P']) / 2
@@ -130,15 +130,14 @@ class TargetDeltaCalculator:
         z_score = (implied_volatility - iv_mean) / iv_std
         target_delta_std = (AVERAGE_TARGET_DELTA[right] - MIN_TARGET_DELTA[right]) / 2
         target_delta = target_delta_std * z_score + AVERAGE_TARGET_DELTA[right]
-        if is_reduced_safe_cushion_time() or is_switched_to_overnight_trading():
-            target_delta *= 0.875
 
-        target_delta = max(target_delta, MIN_TARGET_DELTA[right])
-        
         max_loss = self.max_loss_calculator.calculate_max_loss(right)
         logger.info(f"Max loss ({right}): {max_loss:.2f}")
-        target_delta_increase = (max_loss - DEFAULT_MAX_LOSS) / 1000
+        target_delta_increase = (max_loss - DEFAULT_MAX_LOSS) / 500
         target_delta += target_delta_increase
+        if is_reduced_safe_cushion_time() or is_switched_to_overnight_trading():
+            target_delta *= 0.875
+        target_delta = max(target_delta, 0.003)
         logger.info(f"Target delta ({right}): {target_delta:.4f}, increase: {target_delta_increase:.4f}")
         
         self.last_target_delta_calculation_time[right] = time.time()

@@ -1,4 +1,3 @@
-import json
 import time
 import logging
 import requests
@@ -10,8 +9,6 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
 MAIN_SHEET              = '$$$$'
-CONFIG_FILE             = 'finance_updater/config.json'
-ISRAELI_PAUSE_MINUTES   = 10
 ISRAELI_STOCK_IDS_FILE  = 'finance_updater/yahoo-israeli-stock-ids.txt'
 ETF_NAMES_FILE          = 'finance_updater/yahoo-etf-names.txt'
 ETF_NAMES_FOR_DIV_FILE  = 'finance_updater/yahoo-etf-names-for-div-yield.txt'
@@ -21,20 +18,6 @@ ETF_START_ROW           = 15
 SHILLER_PE_ROW          = 20
 DIV_YIELD_START_ROW     = 45
 ISRAELI_START_ROW       = 59
-
-def is_israeli_update_paused():
-    try:
-        with open(CONFIG_FILE, 'r') as f:
-            config = json.load(f)
-        break_time_str = config.get('break_time')
-        if not break_time_str:
-            return False
-        break_time = datetime.fromisoformat(break_time_str)
-        return datetime.now() < break_time + timedelta(minutes=ISRAELI_PAUSE_MINUTES)
-    except Exception as e:
-        logger.warning(f'Could not read config: {e}')
-        return False
-
 
 def read_ticker_names(filename):
     with open(filename, 'r') as f:
@@ -117,6 +100,7 @@ class FinanceUpdater:
             try:
                 self._update_shiller_pe()
                 self._update_israeli_stocks()
+                self._update_etfs_and_stocks()
                 self._update_daily_dividends_if_needed()
 
                 is_short_sleep = self.prev_etf_quotes is None or (14 < now.hour < 23)
@@ -148,18 +132,48 @@ class FinanceUpdater:
             logger.error(f'Failed to fetch Shiller PE: {e}')
 
     def _update_israeli_stocks(self):
-        if is_israeli_update_paused():
-            logger.info('Israeli stocks update skipped (within 10-minute break window)')
-            return
         stock_ids = read_ticker_names(ISRAELI_STOCK_IDS_FILE)
-        for i, stock_id in enumerate(stock_ids):
+        prices = []
+        for stock_id in stock_ids:
             try:
                 price = get_israeli_stock_price(stock_id)
                 logger.info(f'{stock_id}: {price}')
-                update_single(MAIN_SHEET, 'B', ISRAELI_START_ROW + i, price)
+                prices.append(price)
             except Exception as e:
                 logger.error(f'Failed to fetch Israeli stock {stock_id}: {e}')
+                prices.append('')
             time.sleep(0.2)
+        update_column(MAIN_SHEET, 'B', ISRAELI_START_ROW, prices)
+
+    def _update_etfs_and_stocks(self):
+        etfs = read_ticker_names(ETF_NAMES_FILE)
+        etf_prices = []
+        for etf in etfs:
+            try:
+                price = get_current_price(etf)
+                logger.info(f'{etf}: {price}')
+                etf_prices.append(price)
+            except Exception as e:
+                logger.error(f'Failed to fetch ETF {etf}: {e}')
+                etf_prices.append('')
+            time.sleep(0.2)
+        update_column(MAIN_SHEET, 'B', ETF_START_ROW, etf_prices)
+
+        stocks_start_row = ETF_START_ROW + len(etfs) + 2
+        stock_names = read_ticker_names(STOCK_NAMES_FILE)
+        stock_prices = []
+        for stock in stock_names:
+            try:
+                price = get_current_price(stock)
+                logger.info(f'{stock}: {price}')
+                stock_prices.append(price)
+            except Exception as e:
+                logger.error(f'Failed to fetch stock {stock}: {e}')
+                stock_prices.append('')
+            time.sleep(0.2)
+        update_column(MAIN_SHEET, 'B', stocks_start_row, stock_prices)
+
+        self.prev_etf_quotes = etf_prices
 
     def _update_daily_dividends_if_needed(self):
         today = datetime.now().date()
