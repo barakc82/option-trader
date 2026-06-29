@@ -71,22 +71,17 @@ def store_platform_log():
     except Exception as e:
         logger.error(f"Failed to store platform logs: {e}")
 
-def trim_supervisor_log():
+def switch_supervisor_log():
     log_path = f'{LOGS_DIR}/supervisor.log'
     if not os.path.exists(log_path):
         return False
 
     try:
-        with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
-            lines = f.readlines()
-        
-        if not lines:
-            return False
-
-        half_point = len(lines) // 2
-        with open(log_path, 'w', encoding='utf-8') as f:
-            f.writelines(lines[half_point:])
+        archive_path = f'{LOGS_DIR}/supervisor_old.log'
+        if os.path.exists(archive_path):
+            os.remove(archive_path)
+        os.rename(log_path, archive_path)
         return True
     except Exception as e:
-        print(f"Error trimming log: {e}")
+        print(f"Error archiving supervisor log: {e}")
         return False

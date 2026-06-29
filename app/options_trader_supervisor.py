@@ -12,9 +12,9 @@ from utilities.utils import is_in_docker, acquire_single_instance_lock, SUCCESS,
 from .state_updater import update_supervisor_state_async, post_current_state
 
 from .supervisor_utils import (
-    send_telegram_message, count_text_in_file, 
-    find_latest_option_trader_log, store_platform_log, 
-    trim_supervisor_log, LOGS_DIR
+    send_telegram_message, count_text_in_file,
+    find_latest_option_trader_log, store_platform_log,
+    switch_supervisor_log, LOGS_DIR
 )
 from .supervisor_health import (
     analyze_option_trader_log, is_process_active, 
@@ -169,12 +169,12 @@ def check_log_size():
     global file_handler
     log_path = f'{LOGS_DIR}/supervisor.log'
     if os.path.exists(log_path) and os.path.getsize(log_path) > 10 * 1024 * 1024:
-        logger.info("supervisor.log reached 10MB, trimming...")
+        logger.info("supervisor.log reached 10MB, switching logs...")
         
         logger.removeHandler(file_handler)
         file_handler.close()
         
-        if trim_supervisor_log():
+        if switch_supervisor_log():
             print("Successfully trimmed supervisor.log")
         else:
             print("Failed to trim supervisor.log")
