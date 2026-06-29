@@ -59,6 +59,7 @@ class OpportunityExplorer:
             # Dynamic config fields
             self.should_write_options_overnight = True
             self.should_monitor_only = False
+            self.should_resolve_margin_locks = True
 
             self._initialized = True
 
@@ -79,6 +80,11 @@ class OpportunityExplorer:
                     if new_monitor_only != self.should_monitor_only:
                         logger.info(f"OpportunityExplorer: should_monitor_only changed from {self.should_monitor_only} to {new_monitor_only}")
                         self.should_monitor_only = new_monitor_only
+
+                    new_resolve_margin_locks = config.get("should_resolve_margin_locks", True)
+                    if new_resolve_margin_locks != self.should_resolve_margin_locks:
+                        logger.info(f"OpportunityExplorer: should_resolve_margin_locks changed from {self.should_resolve_margin_locks} to {new_resolve_margin_locks}")
+                        self.should_resolve_margin_locks = new_resolve_margin_locks
 
         except Exception as e:
             logger.error(f"OpportunityExplorer: Error reading config: {e}")
@@ -193,6 +199,8 @@ class OpportunityExplorer:
                 is_margin_lock_trade_already_open = any(trade.contract.right == 'P' and trade.contract.strike == candidate.strike and trade.order.action.upper() == 'BUY' and trade.order.lmtPrice > 0.05 for trade in open_trades)
                 if is_margin_lock_trade_already_open:
                     logger.info(f"Margin lock buy trade for {get_option_name(candidate)} is already open")
+                elif not self.should_resolve_margin_locks:
+                    logger.info("Margin lock resolution is disabled by configuration")
                 else:
                     missing_sum = sell_option_result.required_initial_margin - sell_option_result.initial_margin_after
                     await self.try_to_resolve_margin_lock(candidate, missing_sum)
@@ -350,6 +358,8 @@ class OpportunityExplorer:
                 is_margin_lock_trade_already_open = any(trade.contract.right == 'C' and trade.contract.strike == candidate.strike and trade.order.action.upper() == 'BUY' and trade.order.lmtPrice > 0.05 for trade in open_trades)
                 if is_margin_lock_trade_already_open:
                     logger.info(f"Margin lock buy trade for {get_option_name(candidate)} is already open")
+                elif not self.should_resolve_margin_locks:
+                    logger.info("Margin lock resolution is disabled by configuration")
                 else:
                     missing_sum = sell_option_result.required_initial_margin - sell_option_result.initial_margin_after
                     await self.try_to_resolve_margin_lock(candidate, missing_sum)
