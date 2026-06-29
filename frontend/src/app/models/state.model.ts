@@ -7,6 +7,7 @@ export interface Position {
     spy_price?: string;
     es_price?: string;
     delta: string;
+    target_delta?: string;
     stop_loss: number;
     distance_to_stop?: string;
   }
