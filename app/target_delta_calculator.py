@@ -11,8 +11,8 @@ from .max_loss_calculator import DEFAULT_MAX_LOSS, MaxLossCalculator
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-MIN_TARGET_DELTA = {'C': 0.001, 'P': 0.002}
-MAX_TARGET_DELTA = {'C': 0.009, 'P': 0.012}
+MIN_TARGET_DELTA = {'C': 0.003, 'P': 0.002}
+MAX_TARGET_DELTA = {'C': 0.011, 'P': 0.012}
 AVERAGE_TARGET_DELTA = {
     'C': (MAX_TARGET_DELTA['C'] + MIN_TARGET_DELTA['C']) / 2,
     'P': (MAX_TARGET_DELTA['P'] + MIN_TARGET_DELTA['P']) / 2
@@ -96,7 +96,8 @@ class TargetDeltaCalculator:
         self.load_config()
 
         if self.last_target_delta_calculation_time[right] < self.market_data_fetcher.options_dump_time:
-            self.last_target_delta[right] = AVERAGE_TARGET_DELTA[right]
+            target_delta = await self.calculate_max_loss_based_target_delta(right)
+            self.last_target_delta[right] = target_delta
 
         if time.time() - self.last_target_delta_calculation_time[right] < 60:
             return self.last_target_delta[right]
@@ -129,18 +130,22 @@ class TargetDeltaCalculator:
         iv_std = statistics.stdev(self.iv_history[right])
         z_score = (implied_volatility - iv_mean) / iv_std
         target_delta_std = (AVERAGE_TARGET_DELTA[right] - MIN_TARGET_DELTA[right]) / 2
-        target_delta = target_delta_std * z_score + AVERAGE_TARGET_DELTA[right]
-
-        max_loss = self.max_loss_calculator.calculate_max_loss(right)
-        logger.info(f"Max loss ({right}): {max_loss:.2f}")
-        target_delta_increase = (max_loss - DEFAULT_MAX_LOSS) / 500
-        target_delta += target_delta_increase
+        iv_factor = target_delta_std * z_score
+        target_delta, max_loss_factor = await self.calculate_max_loss_based_target_delta(right)
+        target_delta += iv_factor
         if is_reduced_safe_cushion_time() or is_switched_to_overnight_trading():
             target_delta *= 0.875
         target_delta = max(target_delta, 0.003)
-        logger.info(f"Target delta ({right}): {target_delta:.4f}, increase: {target_delta_increase:.4f}")
+        logger.info(f"Target delta ({right}): {target_delta:.4f}, iv factor: {iv_factor:.2f}, max loss factor: {max_loss_factor:.2f}")
         
         self.last_target_delta_calculation_time[right] = time.time()
         self.last_target_delta[right] = target_delta
-        self.last_target_delta_increase[right] = target_delta_increase
+        self.last_target_delta_increase[right] = iv_factor
         return target_delta
+
+    async def calculate_max_loss_based_target_delta(self, right) -> tuple[float, float]:
+        max_loss = self.max_loss_calculator.calculate_max_loss(right)
+        logger.info(f"Max loss ({right}): {max_loss:.2f}")
+        max_loss_factor = 0.0025 if right == 'C' else 0.003
+        target_delta = max_loss * max_loss_factor
+        return target_delta, max_loss_factor
