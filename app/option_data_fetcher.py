@@ -57,7 +57,7 @@ class OptionDataFetcher:
         await self.mdf.request_snapshots(candidate_options)
 
         implied_volatility = math.nan
-        for option in candidate_options:
+        for i, option in enumerate(candidate_options):
             if not hasattr(option, "ticker"):
                 logger.error(f"Option {get_option_name(option)} has no ticker field")
                 continue
@@ -67,7 +67,7 @@ class OptionDataFetcher:
             iv = get_implied_volatility(option.ticker)
             if not math.isnan(iv):
                 implied_volatility = iv
-                logger.info(f"Found implied volatility using {get_option_name(option)}: {implied_volatility:.2f}")
+                logger.info(f"Found implied volatility using [{i}] {get_option_name(option)}: {implied_volatility:.2f}")
                 break
 
         if math.isnan(implied_volatility):

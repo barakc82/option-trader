@@ -10,7 +10,7 @@ from utilities.utils import *
 from utilities.ib_utils import get_delta
 
 from .connection_manager import ConnectionManager
-from .market_data_utils import LIVE_DATA, FROZEN_DATA, SPXESPair, get_gamma, get_implied_volatility
+from .market_data_utils import LIVE_DATA, FROZEN_DATA, SPXESPair, get_gamma
 from .index_price_manager import IndexPriceManager
 from .option_data_fetcher import OptionDataFetcher
 
@@ -217,10 +217,7 @@ class MarketDataFetcher:
         return ticker.ask
 
     def get_reference_price(self):
-        if is_regular_hours():
-            return self.get_spx_price()
-        else:
-            return self.get_es_price()
+        return self.index_manager.get_spot_price()
 
     async def get_chains(self, underlying):
         return await self.option_fetcher.get_chains(underlying)
