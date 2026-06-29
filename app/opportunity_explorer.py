@@ -149,6 +149,9 @@ class OpportunityExplorer:
             return SellOptionResult()
 
         estimated_sell_price = await self.estimate_sell_price(call_option)
+        if estimated_sell_price < 0:
+            logger.error("Failed to estimate selling price")
+            return SellOptionResult()
         self._update_last_option_price(estimated_sell_price, 'C')
 
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss('C')
@@ -285,6 +288,9 @@ class OpportunityExplorer:
             return SellOptionResult()
 
         estimated_sell_price = await self.estimate_sell_price(put_option)
+        if estimated_sell_price < 0:
+            logger.error("Failed to estimate selling price")
+            return SellOptionResult()
         self._update_last_option_price(estimated_sell_price, 'P')
 
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss('P')

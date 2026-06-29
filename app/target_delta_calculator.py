@@ -96,7 +96,7 @@ class TargetDeltaCalculator:
         self.load_config()
 
         if self.last_target_delta_calculation_time[right] < self.market_data_fetcher.options_dump_time:
-            target_delta = await self.calculate_max_loss_based_target_delta(right)
+            target_delta, _ = await self.calculate_max_loss_based_target_delta(right)
             self.last_target_delta[right] = target_delta
 
         if time.time() - self.last_target_delta_calculation_time[right] < 60:
