@@ -33,7 +33,7 @@ class MarketDataFetcher:
             self.options_dump_time = 0
             
             self.index_manager = IndexPriceManager( )
-            self.option_fetcher = OptionDataFetcher(self)
+            self.option_fetcher = OptionDataFetcher()
             
             self._state_lock = asyncio.Lock()
             self._risk_free_rate = None
@@ -221,9 +221,6 @@ class MarketDataFetcher:
 
     async def get_chains(self, underlying):
         return await self.option_fetcher.get_chains(underlying)
-
-    async def get_options(self, date):
-        return await self.option_fetcher.get_options(date)
 
     async def get_spx_implied_volatility(self, right):
         return await self.option_fetcher.get_spx_implied_volatility(right)
