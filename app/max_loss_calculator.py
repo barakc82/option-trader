@@ -34,7 +34,8 @@ class MaxLossCalculator:
             self.market_data_fetcher = MarketDataFetcher()
             self.trading_bot = TradingBot()
             self.last_max_loss = {'C': DEFAULT_MAX_LOSS, 'P': DEFAULT_MAX_LOSS}
-            self.last_save_time = {'C': 0.0, 'P': 0.0}
+            self.last_calculation_time = {'C': 0.0, 'P': 0.0}
+            self.last_dump_time = {'C': 0.0, 'P': 0.0}
             self.quantity = {'C': [], 'P': []}
             self.risk_fraction = {'C': 1.0, 'P': 1.0}
             try:
@@ -53,10 +54,10 @@ class MaxLossCalculator:
         regular_hours_end_time_today = datetime.combine(datetime.today(), REGULAR_HOURS_END_TIME)
         end_time_timestamp = regular_hours_end_time_today.timestamp()
         current_time = time.time()
-        if current_time > end_time_timestamp and self.last_save_time[right] <= end_time_timestamp:
-            self.last_save_time[right] = 0
+        if current_time > end_time_timestamp and self.last_calculation_time[right] <= end_time_timestamp:
+            self.last_calculation_time[right] = 0
 
-        if time.time() - self.last_save_time[right] < 3600:
+        if time.time() - self.last_calculation_time[right] < 60:
             return self.last_max_loss[right]
 
         positions = self.trading_bot.get_short_options()
@@ -67,11 +68,13 @@ class MaxLossCalculator:
         self.quantity[right].append((now, number_of_options))
         self.quantity[right] = [(t, v) for t, v in self.quantity[right] if now - t <= WINDOW_SECONDS]
 
-        try:
-            with open(options_file_names[right], "w") as f:
-                json.dump(self.quantity[right], f)
-        except Exception as e:
-            logger.error(f"{e}")
+        if now - self.last_dump_time[right] >= 3600:
+            try:
+                with open(options_file_names[right], "w") as f:
+                    json.dump(self.quantity[right], f)
+                self.last_dump_time[right] = now
+            except Exception as e:
+                logger.error(f"{e}")
 
         max_number_of_options = self.get_max_number_of_options(right)
 
@@ -92,7 +95,7 @@ class MaxLossCalculator:
             max_loss = max(extra_cash_per_option * risk_fraction, DEFAULT_MAX_LOSS)
             self.risk_fraction[right] = risk_fraction
 
-        self.last_save_time[right] = time.time()
+        self.last_calculation_time[right] = time.time()
         self.last_max_loss[right] = max_loss
 
         return max_loss
