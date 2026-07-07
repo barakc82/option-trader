@@ -60,6 +60,7 @@ class SubscriptionManager:
             await asyncio.sleep(60)
 
     async def maintain_tickers(self):
+
         """Transverse positions and open trades to ensure tickers are attached to contracts."""
         positions = self.trading_bot.get_short_options()
         open_trades = self.trading_bot.get_open_trades()

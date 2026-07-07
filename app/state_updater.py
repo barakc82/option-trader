@@ -11,7 +11,7 @@ from datetime import datetime
 from statistics import mean
 
 from utilities.ib_utils import req_id_to_comment, interpolate_es_price, get_es_option_name, calculate_distance_to_stop
-from utilities.utils import is_market_open, is_regular_hours, SAFEGUARD_MAX_CADENCE, get_option_name, SHARED_JSON_PATH, CACHED_JSON_PATH, SUPERVISOR_JSON_PATH, new_york_timezone, REGULAR_HOURS_END_TIME
+from utilities.utils import *
 
 from .account_data import AccountData
 from .market_data_fetcher import MarketDataFetcher
@@ -88,6 +88,15 @@ class StateUpdater:
         if state.get('spx_premium'):
             with open(CACHED_JSON_PATH, 'w') as file:
                 json.dump(state, file, indent=4)
+
+    def _read_cached_after_hours_profit(self):
+        try:
+            with open(CACHED_JSON_PATH, 'r') as file:
+                cached_state = json.load(file)
+            return cached_state.get('after_hours_profit', 0)
+        except Exception as e:
+            logger.warning(f"Could not read cached after_hours_profit: {e}")
+            return 0
 
     def store_supervisor_state_locally(self, supervisor_state):
         os.makedirs(os.path.dirname(SUPERVISOR_TEMP_PATH), exist_ok=True)
@@ -167,7 +176,7 @@ class StateUpdater:
                 'delta': delta, 'market_price': str(market_price) if not math.isnan(market_price) else '',
                 'stop_loss': stop_loss,
                 'distance_to_stop': distance_to_stop if not math.isnan(distance_to_stop) else '',
-                'target_delta': round(td_entry['target_delta'], 4) if td_entry else '',
+                'target_delta': round(td_entry['target_delta'], 3) if td_entry else '',
             }
 
             es_options = subscription_manager.spx_to_es_map.get(option.conId)
@@ -213,6 +222,8 @@ class StateUpdater:
         fills = self.trading_bot.ib.fills()
         state_fills = []
         daily_profit = 0
+        has_fill_not_from_today = False
+        today_date = datetime.now(new_york_timezone).date()
         for f in fills:
             if f.contract.secType != 'OPT': continue
             comment = 'Liquidation' if f.execution.liquidation == 1 else req_id_to_comment.get(f.execution.orderId, '')
@@ -221,13 +232,25 @@ class StateUpdater:
                 'quantity': f.execution.shares, 'price': f.execution.price,
                 'time': f.time.timestamp(), 'comment': comment
             })
+            if f.time.astimezone(new_york_timezone).date() != today_date:
+                has_fill_not_from_today = True
             expiry_date = datetime.strptime(f.contract.lastTradeDateOrContractMonth, '%Y%m%d').date()
             expiry_datetime = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
             if datetime.now(new_york_timezone) < expiry_datetime:
                 sign = 1 if f.execution.side == 'SLD' else -1
                 daily_profit += sign * f.execution.price * f.execution.shares * 100
         state['fills'] = sorted(state_fills, key=lambda x: x['time'], reverse=True)
+
         state['daily_profit'] = round(daily_profit)
+        if is_after_hours():
+            state['after_hours_profit'] = round(daily_profit)
+        else:
+            state['after_hours_profit'] = self._read_cached_after_hours_profit()
+            if not has_fill_not_from_today:
+                state['daily_profit'] += state['after_hours_profit']
+
+
+
 
         opportunity_explorer = OpportunityExplorer()
         state['last_put_option_price'] = round(opportunity_explorer.last_put_option_price, 2)

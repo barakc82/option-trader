@@ -68,6 +68,7 @@ class ConnectionManager:
         try:
             logger.info(f"Connecting to IB on {self.host}:{self.port} (clientId={self.client_id})...")
             await self.ib.connectAsync(self.host, self.port, clientId=self.client_id)
+            
             logger.info("Successfully connected to IB.")
             self.reconnect_delay = 1 # Reset delay on success
 
@@ -98,6 +99,7 @@ class ConnectionManager:
             logger.info(f"Initializing account data for {MY_ACCOUNT}...")
             await self.ib.reqAccountUpdatesAsync(MY_ACCOUNT)
             await self.ib.reqAccountSummaryAsync()
+            logger.info("Initializing data done")
 
         except Exception as e:
             logger.error(f"Error during data initialization: {e}")
@@ -121,7 +123,7 @@ class ConnectionManager:
         # Specific IB error codes that indicate connection issues
         # 1100: Connectivity between IB and Trader Workstation has been lost.
         # 2110: Connectivity between Trader Workstation and server is broken.
-        if errorCode in [1100, 1101, 1102, 2110]: 
+        if errorCode in [1100, 1101, 1102, 2110]:
             logger.warning(f"IB Connectivity Error {errorCode}: {errorString}")
             if errorCode in [1101, 1102]:
                 logger.info(f"Connectivity restored (error {errorCode}). Re-initializing data...")

@@ -96,7 +96,7 @@ class TargetDeltaCalculator:
         self.load_config()
 
         if self.last_target_delta_calculation_time[right] < self.market_data_fetcher.options_dump_time:
-            target_delta, _ = await self.calculate_max_loss_based_target_delta(right)
+            target_delta, _ = self.calculate_max_loss_based_target_delta(right)
             self.last_target_delta[right] = target_delta
 
         if time.time() - self.last_target_delta_calculation_time[right] < 60:
@@ -131,7 +131,7 @@ class TargetDeltaCalculator:
         z_score = (implied_volatility - iv_mean) / iv_std
         target_delta_std = (AVERAGE_TARGET_DELTA[right] - MIN_TARGET_DELTA[right]) / 2
         iv_factor = target_delta_std * z_score
-        target_delta, max_loss_factor = await self.calculate_max_loss_based_target_delta(right)
+        target_delta, max_loss_factor = self.calculate_max_loss_based_target_delta(right)
         target_delta += iv_factor
         if is_reduced_safe_cushion_time() or is_switched_to_overnight_trading():
             target_delta *= 0.875
@@ -143,7 +143,7 @@ class TargetDeltaCalculator:
         self.last_target_delta_increase[right] = iv_factor
         return target_delta
 
-    async def calculate_max_loss_based_target_delta(self, right) -> tuple[float, float]:
+    def calculate_max_loss_based_target_delta(self, right) -> tuple[float, float]:
         max_loss = self.max_loss_calculator.calculate_max_loss(right)
         logger.info(f"Max loss ({right}): {max_loss:.2f}")
         max_loss_factor = 0.0025 if right == 'C' else 0.003

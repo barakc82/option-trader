@@ -54,21 +54,20 @@ class MaxLossCalculator:
         regular_hours_end_time_today = datetime.combine(datetime.today(), REGULAR_HOURS_END_TIME)
         end_time_timestamp = regular_hours_end_time_today.timestamp()
         current_time = time.time()
-        if current_time > end_time_timestamp and self.last_calculation_time[right] <= end_time_timestamp:
+        if current_time > end_time_timestamp >= self.last_calculation_time[right]:
             self.last_calculation_time[right] = 0
 
         if time.time() - self.last_calculation_time[right] < 60:
             return self.last_max_loss[right]
 
-        positions = self.trading_bot.get_short_options()
         now = time.time()
-
-        position_quantities_for_right = [-position.position for position in positions if position.contract.right == right]
-        number_of_options = sum(position_quantities_for_right)
-        self.quantity[right].append((now, number_of_options))
-        self.quantity[right] = [(t, v) for t, v in self.quantity[right] if now - t <= WINDOW_SECONDS]
-
         if now - self.last_dump_time[right] >= 3600:
+            positions = self.trading_bot.get_short_options()
+            position_quantities_for_right = [-position.position for position in positions if
+                                             position.contract.right == right]
+            number_of_options = sum(position_quantities_for_right)
+            self.quantity[right].append((now, number_of_options))
+            self.quantity[right] = [(t, v) for t, v in self.quantity[right] if now - t <= WINDOW_SECONDS]
             try:
                 with open(options_file_names[right], "w") as f:
                     json.dump(self.quantity[right], f)

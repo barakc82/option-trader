@@ -2,17 +2,21 @@ import time
 import logging
 import requests
 import yfinance as yf
+from pathlib import Path
 from datetime import datetime, timedelta
 from utilities.database_access import get_worksheet
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
+# Data files stay in utilities/finance_updater/ (unchanged) even though this script now lives in quote_updater/.
+_DATA_DIR = Path(__file__).resolve().parent.parent / 'utilities' / 'finance_updater'
+
 MAIN_SHEET              = '$$$$'
-ISRAELI_STOCK_IDS_FILE  = 'finance_updater/yahoo-israeli-stock-ids.txt'
-ETF_NAMES_FILE          = 'finance_updater/yahoo-etf-names.txt'
-ETF_NAMES_FOR_DIV_FILE  = 'finance_updater/yahoo-etf-names-for-div-yield.txt'
-STOCK_NAMES_FILE        = 'finance_updater/yahoo-stock-names.txt'
+ISRAELI_STOCK_IDS_FILE  = str(_DATA_DIR / 'yahoo-israeli-stock-ids.txt')
+ETF_NAMES_FILE          = str(_DATA_DIR / 'yahoo-etf-names.txt')
+ETF_NAMES_FOR_DIV_FILE  = str(_DATA_DIR / 'yahoo-etf-names-for-div-yield.txt')
+STOCK_NAMES_FILE        = str(_DATA_DIR / 'yahoo-stock-names.txt')
 
 ETF_START_ROW           = 15
 SHILLER_PE_ROW          = 20
@@ -141,9 +145,10 @@ class FinanceUpdater:
                 prices.append(price)
             except Exception as e:
                 logger.error(f'Failed to fetch Israeli stock {stock_id}: {e}')
-                prices.append('')
+                break
             time.sleep(0.2)
-        update_column(MAIN_SHEET, 'B', ISRAELI_START_ROW, prices)
+        if len(stock_ids) == len(prices):
+            update_column(MAIN_SHEET, 'B', ISRAELI_START_ROW, prices)
 
     def _update_etfs_and_stocks(self):
         etfs = read_ticker_names(ETF_NAMES_FILE)

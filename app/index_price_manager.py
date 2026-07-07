@@ -6,7 +6,7 @@ import pandas as pd
 import exchange_calendars as ecals
 from datetime import datetime
 from collections import deque
-from ib_insync import Index, Future
+from ib_insync import Index, Future, Stock
 from utilities.utils import is_regular_hours, CACHED_JSON_PATH
 from .connection_manager import ConnectionManager
 from .market_data_utils import SPXESPair
@@ -72,7 +72,7 @@ class IndexPriceManager:
     async def fetch_es_future(self):
         today_str = datetime.now().strftime('%Y%m%d')
         if not self.es or self.es.lastTradeDateOrContractMonth < today_str:
-            es_incomplete = Future('ES', exchange='CME')
+            es_incomplete = Future('ES', '20260918', exchange='CME', currency='USD')
             es_details = await self.ib.reqContractDetailsAsync(es_incomplete)
             contracts = [es_detail.contract for es_detail in es_details if es_detail.contract.lastTradeDateOrContractMonth >= today_str]
             contracts.sort(key=lambda c: c.lastTradeDateOrContractMonth)

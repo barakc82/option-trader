@@ -11,20 +11,9 @@ from datetime import datetime
 from utilities.utils import is_in_docker, acquire_single_instance_lock, SUCCESS, ERROR, REGULAR_HOURS_END_TIME, new_york_timezone
 from .state_updater import update_supervisor_state_async, post_current_state
 
-from .supervisor_utils import (
-    send_telegram_message, count_text_in_file,
-    find_latest_option_trader_log, store_platform_log,
-    switch_supervisor_log, LOGS_DIR
-)
-from .supervisor_health import (
-    analyze_option_trader_log, is_process_active, 
-    check_ib_gateway_health, is_session_expired, 
-    test_connection_to_platform, IBGATEWAY_RESTART_REQUIRED
-)
-from .supervisor_control import (
-    start_option_trader, kill_option_trader, 
-    restart_ibgateway, soft_restart
-)
+from .supervisor_utils import *
+from .supervisor_health import *
+from .supervisor_control import *
 
 # Configure the root logger to catch logs from all modules
 logger = logging.getLogger()
@@ -151,7 +140,7 @@ def restart_platform():
 
 def check_sunday_expiration():
     global last_sunday_expiration_check_date
-    now_et = datetime.now(ZoneInfo("America/New_York"))
+    now_et = datetime.datetime.now(ZoneInfo("America/New_York"))
     current_date = now_et.date()
 
     if now_et.weekday() == 6 and now_et.hour >= 1:

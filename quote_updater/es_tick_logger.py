@@ -16,13 +16,11 @@ class ESTickLogger:
         self.tick_buffer = []
         self.es_future = None
         self.last_logged_second = None
+        self._background_tasks_started = False
 
-    def setup_contracts(self):
-        """Connects to IBKR and isolates the front-month ES Future."""
-        print("Connecting to IBKR...")
-        print("Connecting to IB Gateway...")
-        tws_connection = connect(ES_TICK_LOGGER_CLIENT_ID)
-        self.ib = tws_connection.ib
+    def setup_contracts(self, ib):
+        """Isolates the front-month ES Future using an already-connected IB instance."""
+        self.ib = ib
 
         # Request all ES futures and find the front-month
         es_incomplete = Future('ES', 'CME')
@@ -43,6 +41,22 @@ class ESTickLogger:
         # Request standard market data for the future
         self.ib.reqMktData(self.es_future, '', False, False)
         self.ib.pendingTickersEvent += self.on_pending_tickers
+
+    def start(self, ib):
+        """Attach to an IB connection owned by another script (e.g. quote_updater, sharing its client ID)
+        and begin streaming/logging. Background flush/processing tasks are scheduled once on ib's event loop."""
+        self.setup_contracts(ib)
+        self.start_data_streams()
+        if not self._background_tasks_started:
+            loop = asyncio.get_event_loop()
+            loop.create_task(self.buffer_flush_loop(interval_seconds=300))
+            loop.create_task(self.data_processing_loop())
+            self._background_tasks_started = True
+
+    def resubscribe(self, ib):
+        """Re-qualify the contract and re-subscribe after the shared IB connection reconnects."""
+        self.setup_contracts(ib)
+        self.start_data_streams()
 
     def on_pending_tickers(self, tickers):
         """Triggered automatically, but now throttled to 1 snapshot per second."""
@@ -188,14 +202,15 @@ class ESTickLogger:
             print(f"Failed to process {raw_path}: {e}")
 
     def run(self):
-        """Starts the event loop with reconnection logic."""
+        """Standalone entry point: opens its own IB connection (its own client ID) and runs independently."""
         # Schedule the background tasks
         loop = asyncio.get_event_loop()
         loop.create_task(self.buffer_flush_loop(interval_seconds=300))
         loop.create_task(self.data_processing_loop())
+        self._background_tasks_started = True
 
         print("Tick Logger Live. Streaming data...")
-        
+
         try:
             while True:
                 try:
@@ -203,8 +218,10 @@ class ESTickLogger:
                         if self.ib:
                             print("Disconnected from IB. Attempting to reconnect...")
                             self.ib.disconnect()
-                        
-                        self.setup_contracts()
+
+                        print("Connecting to IB Gateway...")
+                        tws_connection = connect(ES_TICK_LOGGER_CLIENT_ID)
+                        self.setup_contracts(tws_connection.ib)
                         self.start_data_streams()
                         print("Reconnected and re-subscribed.")
                     

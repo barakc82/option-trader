@@ -1,4 +1,5 @@
 import asyncio
+import math
 from datetime import datetime, date, timedelta
 
 from utilities.utils import *
@@ -8,6 +9,7 @@ from .market_data_fetcher import MarketDataFetcher
 from .max_loss_calculator import MaxLossCalculator
 from .net_worth_calculator import NetWorthCalculator
 from .option_cache import OptionCache
+from .option_data_fetcher import OptionDataFetcher
 from .strike_finder import StrikeFinder
 from .target_delta_calculator import TargetDeltaCalculator
 from .connection_manager import ConnectionManager
@@ -41,6 +43,7 @@ class OpportunityExplorer:
             self.ib = ConnectionManager().ib
             self.account_data = AccountData()
             self.market_data_fetcher = MarketDataFetcher()
+            self.option_data_fetcher = OptionDataFetcher()
             self.trading_bot = TradingBot()
             self.net_worth_calculator = NetWorthCalculator()
             self.max_loss_calculator = MaxLossCalculator()
@@ -100,8 +103,14 @@ class OpportunityExplorer:
             self.put_margin_reduction = None
 
         logger.info("Exploring new opportunities")
+        reference_price = self.market_data_fetcher.get_reference_price()
+        if math.isnan(reference_price):
+            logger.error("Reference price is NaN, cannot explore opportunities")
+            return
         date = get_current_trading_day()
-        options = await self.market_data_fetcher.get_options(date)
+        options = await self.option_data_fetcher.get_options(date)
+        options = [option for option in options if (option.right == 'P' and option.strike < reference_price) or (
+                    option.right == 'C' and option.strike > reference_price)]
         open_trades = self.trading_bot.get_open_trades()
         short_options = self.trading_bot.get_short_options()
 
@@ -265,7 +274,7 @@ class OpportunityExplorer:
             return result
 
         start_time = time.time()
-        result = await self.trading_bot.try_to_sell(option, quantity)
+        result = await self.trading_bot.try_to_sell(option, quantity, target_delta)
         end_time = time.time()
         duration_of_sell_operation = end_time - start_time
 
@@ -278,8 +287,8 @@ class OpportunityExplorer:
         if result.success:
             comment = f"Delta: {delta:.3f}, target delta: {target_delta:.3f}"
             req_id_to_comment[result.trade.order.orderId] = comment
-            req_id_to_target_delta[result.trade.order.orderId] = target_delta
-            result.trade.target_delta = target_delta
+            logger.info(f"Submitted sell option of {get_option_name(option)}, order ID: {result.trade.order.orderId}, "
+                      f"target delta: {target_delta:.3f}")
         return result
 
     async def try_to_sell_put_options(self, open_trades, options):

@@ -34,6 +34,8 @@ class TradingBot:
             self.account_data = AccountData()
 
             self.price_increments = []
+            self.req_id_to_target_delta = {}
+
             logger.info("TradingBot singleton initialized.")
             self._initialized = True
 
@@ -189,7 +191,7 @@ class TradingBot:
         raw_limit = bid + spread / 2
         return self.adjust_limit_to_market_rules(contract, raw_limit)
 
-    async def sell(self, contract, quantity):
+    async def sell(self, contract, quantity, order_metadata):
         ticker = contract.ticker
         assert ticker
         limit = await self.calculate_limit(contract, ticker.bid, ticker.ask)
@@ -200,6 +202,8 @@ class TradingBot:
         order.tif = 'GTC'
 
         trade = self.ib.placeOrder(contract, order)
+        self.req_id_to_target_delta[trade.order.orderId] = order_metadata
+
         for _ in range(20):
             if trade.orderStatus.status not in ('PendingSubmit', 'PreSubmitted'):
                 break
@@ -214,7 +218,7 @@ class TradingBot:
 
         return trade
 
-    async def try_to_sell(self, contract, quantity):
+    async def try_to_sell(self, contract, quantity, order_metadata):
         ticker = contract.ticker
         assert ticker
 
@@ -237,7 +241,7 @@ class TradingBot:
         if not result.success:
             return result
 
-        trade = await self.sell(contract, quantity)
+        trade = await self.sell(contract, quantity, order_metadata=order_metadata)
         is_cancelled = is_trade_cancelled(trade)
         if is_cancelled and quantity == 1:
             for trade_log_entry in trade.log:

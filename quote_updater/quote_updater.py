@@ -1,11 +1,14 @@
 import math
 import time
+import threading
 import gspread
 from ib_insync import *
 from datetime import datetime
 
 from utilities.ib_utils import connect
 from utilities.database_access import SERVICE_ACCOUNT_FILE, get_worksheet
+from es_tick_logger import ESTickLogger
+from finance_updater import FinanceUpdater
 
 # --- CONFIGURATION ---
 ETF_SYMBOLS = ['VT', 'AVUV', 'AVDV', 'VGT', 'UPRO', 'SP5Y', 'SPHD', 'SCHD', 'SCHY', 'VIG', 'VIGI']
@@ -102,6 +105,9 @@ def periodic_database_updater():
 
 
 def main():
+    # 0. Start Finance Updater in the background (no IB connection, independent Google Sheets/web updates)
+    threading.Thread(target=FinanceUpdater().run, daemon=True, name="FinanceUpdater").start()
+
     # 1. Initialize Google Sheets connection
     print("Authenticating with Google Sheets...")
     gc = gspread.service_account(filename=SERVICE_ACCOUNT_FILE)
@@ -129,8 +135,12 @@ def main():
 
     contracts.append(Forex('USDILS'))
 
+    # ES tick logger shares this same IB connection/client ID rather than opening a second TWS session.
+    es_logger = ESTickLogger()
+
     if ib.isConnected():
         setup_subscriptions(ib, contracts)
+        es_logger.start(ib)
         print(f"System active. Reacting to live quotes and updating sheet every {UPDATE_INTERVAL_SECONDS} seconds...")
     else:
         print("Initial connection failed. Will attempt to reconnect in the loop.")
@@ -148,6 +158,7 @@ def main():
                         tws_connection.connect(QUOTE_UPDATER_CLIENT_ID)
                         ib = tws_connection.ib
                         setup_subscriptions(ib, contracts)
+                        es_logger.resubscribe(ib)
                         print("Reconnected and re-subscribed.")
                     except Exception as e:
                         print(f"Reconnect failed: {e}. Retrying in 10 seconds...")

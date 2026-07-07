@@ -1,7 +1,7 @@
 import sys
 import logging
 import time
-from utilities.utils import MY_ACCOUNT
+from utilities.utils import MY_ACCOUNT, SUCCESS, ERROR
 from utilities.ib_utils import PORTFOLIO_MARGIN
 from .connection_manager import ConnectionManager
 
@@ -71,9 +71,9 @@ class AccountData:
         account_values = self.ib.accountValues(account=MY_ACCOUNT)
         for val in account_values:
             if val.tag == item_tag and (currency is None or val.currency == currency):
-                return self._parse_value(val.value, data_type)
+                return SUCCESS, self._parse_value(val.value, data_type)
         logger.error(f"Could not find an account value for {item_tag}")
-        return 1
+        return ERROR, 1
 
     def get_cached_cushion(self): return self.get_account_summary_cached_item('Cushion')
     async def get_previous_day_equity_with_loan(self): return await self.get_account_summary_item('PreviousDayEquityWithLoanValue')
@@ -88,4 +88,8 @@ class AccountData:
         return self.margin_type == PORTFOLIO_MARGIN
 
     def get_cash_balance_value(self):
-        return self.get_account_value("CashBalance", currency='USD')
+        result, account_value = self.get_account_value("$LEDGER-CashBalance", currency='USD')
+        if result == SUCCESS:
+            return account_value
+        _, account_value = self.get_account_value("CashBalance", currency='USD')
+        return account_value

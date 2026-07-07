@@ -29,7 +29,7 @@ async def supervisor(task_factory, name, register=True):
         except asyncio.CancelledError:
             if inner_task.cancelled():
                 # Inner task was cancelled by ConnectionManager for restart — loop back immediately.
-                logger.info(f"Supervisor: {name} restarting after reconnect...")
+                    logger.info(f"Supervisor: {name} restarting after reconnect...")
             else:
                 # The supervisor itself is being shut down — propagate.
                 inner_task.cancel()

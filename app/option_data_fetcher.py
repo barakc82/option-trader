@@ -105,7 +105,7 @@ class OptionDataFetcher:
         self.last_implied_volatility_calculation_time[right] = current_time_of_the_day()
         return implied_volatility
 
-    async def get_options(self, date, reference_price):
+    async def get_options(self, date):
         options_cache = OptionCache()
         options = options_cache.load_cached_options()
 
@@ -118,29 +118,11 @@ class OptionDataFetcher:
                 call_options = [option.strike for option in options if option.right == 'C']
                 if put_options and call_options:
                     options_obtained = True
-                    maximal_put_strike = max(put_options)
-                    minimal_call_strike = min(call_options)
-                    previous_spx_index_value = (maximal_put_strike + minimal_call_strike) / 2
-
-                    if math.isnan(reference_price):
-                        logger.warning(f"The reference price for options categorization is missing")
-                    else:
-                        change_from_previous_spx_index_value = abs(reference_price - previous_spx_index_value)
-                        if change_from_previous_spx_index_value / previous_spx_index_value > 0.015:
-                            logger.info(f"Fetching option tickers as reference index price made a big change from {previous_spx_index_value} to {reference_price}")
-                            options = []
-                            options_obtained = False
                 else:
                     logger.error(f"Options could not be obtained from cache, number of options is {len(options)}")
-                for option in options:
-                    if option.strike < reference_price:
-                        put_options.append(option)
-                    else:
-                        call_options.append(option)
-                options = [option for option in options if (option.right == 'P' and option.strike < reference_price) or (option.right == 'C' and option.strike > reference_price)]
 
         if not options_obtained:
-            logger.info(f"Fetching fresh options for {date}. Reference Price: {reference_price}")
+            logger.info(f"Fetching fresh options for {date}")
             chains = await self.get_chains(self.mdf.index_manager.spx)
             chain = next(c for c in chains if c.exchange == 'CBOE' and c.tradingClass == 'SPXW')
 
@@ -151,27 +133,25 @@ class OptionDataFetcher:
                 option = Option(symbol='SPX', lastTradeDateOrContractMonth=date, strike=strike, right='P',
                                 exchange='CBOE', currency='USD', tradingClass='SPXW')
                 all_options.append(option)
-                if strike < reference_price:
-                    put_options.append(option)
+                option = Option(symbol='SPXW', lastTradeDateOrContractMonth=date, strike=strike, right='P',
+                                exchange='CBOE', currency='USD', tradingClass='SPXW')
+                all_options.append(option)
 
+                option = Option(symbol='SPX', lastTradeDateOrContractMonth=date, strike=strike, right='C',
+                                exchange='CBOE', currency='USD', tradingClass='SPXW')
+                all_options.append(option)
                 option = Option(symbol='SPXW', lastTradeDateOrContractMonth=date, strike=strike, right='C',
                                 exchange='CBOE', currency='USD', tradingClass='SPXW')
                 all_options.append(option)
-                if strike > reference_price:
-                    call_options.append(option)
 
-            logger.info(f"Before contract qualification, number of call options: {len(call_options)}, number of put options: {len(put_options)}")
-            await self.mdf.qualify(put_options + call_options)
-
-            options = [o for o in (put_options + call_options) if o.conId]
-
+            options = await self.mdf.qualify(all_options)
             put_strikes = [o.strike for o in options if o.right == 'P']
             call_strikes = [o.strike for o in options if o.right == 'C']
 
             if put_strikes:
                 logger.info(f"Minimal strike for put options: {min(put_strikes)}, Maximal strike for put options: {max(put_strikes)}")
                 logger.info(f"Minimal strike for call options: {min(call_strikes)}, Maximal strike for call options: {max(call_strikes)}")
-                options_cache.save(all_options)
+                options_cache.save(options)
                 self.mdf.options_dump_time = time.time()
             else:
                 logger.error(f"No put strikes found for {date}")
@@ -181,6 +161,4 @@ class OptionDataFetcher:
             await TradingBot().fetch_price_increments(options[0])
 
         assert options
-        options = [option for option in options if (option.right == 'P' and option.strike < reference_price) or (
-                    option.right == 'C' and option.strike > reference_price)]
         return options

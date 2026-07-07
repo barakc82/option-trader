@@ -29,7 +29,6 @@ def get_open_sell_order_expiration_time():
     return OPEN_SELL_ORDER_GENERAL_EXPIRATION_TIME
 
 req_id_to_comment = {}
-req_id_to_target_delta = {}
 
 
 @dataclass

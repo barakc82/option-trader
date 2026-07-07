@@ -103,15 +103,18 @@ class PositionsManager:
         return not is_final_hours()
 
     def on_fill(self, trade):
-        target_delta = getattr(trade, 'target_delta', None)
-        target_delta_str = f", target delta: {target_delta}" if target_delta is not None else ""
-        logger.info(f"Trade filled: {get_option_name(trade.contract)} {trade.order.action}{target_delta_str}")
+        target_delta = self.trading_bot.req_id_to_target_delta.get(trade.order.orderId)
+        logger.info(f"Trade filled: {get_option_name(trade.contract)} {trade.order.action}, target delta: {target_delta}")
         if trade.order.action.upper() == 'SELL' and target_delta is not None:
             self.update_position_entry(target_delta, trade)
         if trade.order.action.upper() == 'BUY':
             self.done_contract_ids.add(trade.contract.conId)
             c = trade.contract
             self.target_delta_map.pop((c.strike, c.right, c.lastTradeDateOrContractMonth), None)
+        if not target_delta:
+            logger.error(f"Could not find target delta entry for order ID {trade.order.orderId}, here is what we have:")
+            for order_id, td in self.trading_bot.req_id_to_target_delta.items():
+                logger.info(f"Order ID {order_id} ==> target delta of {td}")
         if trade.order.orderId in req_id_to_comment and "Margin" in req_id_to_comment[trade.order.orderId]:
             opportunity_explorer = OpportunityExplorer()
             opportunity_explorer.notify_margin_lock_resolution_attempted()

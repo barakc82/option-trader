@@ -167,6 +167,7 @@ class OptionTrader:
                 if time_passed_since_submission > max_time_passed_since_submission:
                     max_time_passed_since_submission = time_passed_since_submission
                     trade_to_cancel = open_sell_trade
+            if trade_to_cancel:
                 logger.info(
                     f"Cancelling sell of {get_option_name(trade_to_cancel.contract)} because if all the trades get filled they will lead to exposure fee")
                 self.trading_bot.cancel_trade(open_sell_trade)

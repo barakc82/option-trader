@@ -5,18 +5,18 @@ from datetime import datetime, timedelta
 from utilities.database_access import get_worksheet
 from utilities.utils import REGULAR_HOURS_END_TIME, new_york_timezone
 
-start_date = datetime(year=2026, month=6, day=30)
-history_days = 36
+start_date = datetime(year=2026, month=7, day=2)
+history_days = 34
 
 barak_sheet = get_worksheet("ברק")
 quotes_sheet = get_worksheet("$$$$")
 
-date_arr = barak_sheet.get("U47")
-history_days_arr = barak_sheet.get("V51")
-start_date_str = date_arr[0][0]
-history_days = int(history_days_arr[0][0])
-print(f"Start date: {start_date_str}")
-print(f"History days: {history_days}")
+#date_arr = barak_sheet.get("U47")
+#history_days_arr = barak_sheet.get("V51")
+#start_date_str = date_arr[0][0]
+#history_days = int(history_days_arr[0][0])
+#print(f"Start date: {start_date_str}")
+#print(f"History days: {history_days}")
 #start_date = datetime.strptime(start_date_str, "%d/%m/%y")
 
 ib = IB()
@@ -42,6 +42,8 @@ def update_short_historical_bounds():
     lowest_price = sys.float_info.max
     highest_price = 0
     for bar in bars:
+        if security_name == "SPGI":
+            print(f"barak: {bar.date} {bar.close}")
         if bar.date < history_start_date.date():
             continue
         if bar.close < lowest_price:

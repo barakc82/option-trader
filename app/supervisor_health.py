@@ -73,7 +73,7 @@ def is_process_active():
     now_israel = datetime.datetime.now(ZoneInfo("Asia/Jerusalem"))
     is_reboot_window = datetime.time(7, 10) <= now_israel.time() <= datetime.time(7, 20)
     number_of_attempts = 60 if is_reboot_window else 24
-    for _ in range(number_of_attempts):
+    for attempt_index in range(number_of_attempts):
         try:
             pid_found = False
             if os.path.exists(hb_path):
@@ -100,7 +100,7 @@ def is_process_active():
             if is_process_alive:
                 return True
 
-            logger.error(f"No heartbeat from option trader, time since last ping: {time_since_last_ping:.0f}s")
+            logger.error(f"No heartbeat from option trader, time since last ping: {time_since_last_ping:.0f}s, attempt {attempt_index}")
             if last_pid:
                 try:
                     option_trader_process = psutil.Process(last_pid)

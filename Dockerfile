@@ -22,11 +22,11 @@ RUN mkdir -p ${APP_DIR}
 COPY app ${APP_DIR}/app
 COPY utilities ${APP_DIR}/utilities
 COPY frontend/dist/option-trader-dashboard ${APP_DIR}/frontend
-COPY logs ${APP_DIR}/logs
-COPY cache ${APP_DIR}/cache
 COPY config ${APP_DIR}/config
 COPY resources ${APP_DIR}/resources
 RUN mkdir -p ${APP_DIR}/shared
+RUN mkdir -p ${APP_DIR}/cache
+RUN mkdir -p ${APP_DIR}/logs
 
 # ── Nginx config ──────────────────────────────────────────────
 COPY docker/nginx.conf /etc/nginx/sites-available/default
@@ -34,13 +34,13 @@ COPY docker/nginx.conf /etc/nginx/sites-available/default
 
 WORKDIR ${APP_DIR}
 
+COPY docker/start.sh .
 COPY docker/*.sh .
+RUN sed -i 's/\r$//' start.sh
 
 # Make the wrapper script executable
 RUN chmod +x *.sh
 RUN (crontab -l 2>/dev/null; echo "0 * * * * ${APP_DIR}/trim_log.sh") | crontab -
-
-WORKDIR ${APP_DIR}/logs
 
 RUN echo "alias showlog='less \$(ls -1 option_trader_*.log | sort | tail -1)'" > ~/.bashrc
 RUN echo "alias taillog='tail -f \$(ls -1 option_trader_*.log | sort | tail -1)'" >> ~/.bashrc
@@ -52,5 +52,7 @@ RUN echo "alias restarttrader='echo \"{\\\"should_restart_option_trader\\\": 1}\
 
 EXPOSE 8080
 
+
+WORKDIR ${APP_DIR}/logs
 # Set the wrapper script as the command to run when the container starts
 CMD ["../start.sh"]
