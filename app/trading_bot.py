@@ -34,7 +34,7 @@ class TradingBot:
             self.account_data = AccountData()
 
             self.price_increments = []
-            self.req_id_to_target_delta = {}
+            self.req_id_to_order_metadata = {}
 
             logger.info("TradingBot singleton initialized.")
             self._initialized = True
@@ -202,7 +202,7 @@ class TradingBot:
         order.tif = 'GTC'
 
         trade = self.ib.placeOrder(contract, order)
-        self.req_id_to_target_delta[trade.order.orderId] = order_metadata
+        self.req_id_to_order_metadata[trade.order.orderId] = order_metadata
 
         for _ in range(20):
             if trade.orderStatus.status not in ('PendingSubmit', 'PreSubmitted'):

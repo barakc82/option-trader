@@ -71,7 +71,6 @@
             <th *ngIf="has_spy_prices()">SPY Price</th>
             <th *ngIf="has_es_prices()">ES Price</th>
             <th>Delta</th>
-            <th>Target Delta</th>
             <th>Stop Loss</th>
             <th>Distance to Stop</th>
           </tr>
@@ -90,9 +89,30 @@
             <td *ngIf="has_spy_prices()">{{ pos.spy_price }}</td>
             <td *ngIf="has_es_prices()">{{ pos.es_price }}</td>
             <td>{{ pos.delta }}</td>
-            <td>{{ pos.target_delta }}</td>
             <td>{{ pos.stop_loss }}</td>
             <td>{{ pos.distance_to_stop }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Position Initial States</h3>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Right</th>
+            <th>Strike</th>
+            <th>Quantity</th>
+            <th>Date</th>
+            <th>Target Delta</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let pos of state.position_initial_states">
+            <td>{{ pos.right }}</td>
+            <td>{{ pos.strike }}</td>
+            <td>{{ pos.quantity }}</td>
+            <td>{{ pos.date }}</td>
+            <td>{{ pos.target_delta }}</td>
           </tr>
         </tbody>
       </table>

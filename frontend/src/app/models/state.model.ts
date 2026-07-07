@@ -7,11 +7,18 @@ export interface Position {
     spy_price?: string;
     es_price?: string;
     delta: string;
-    target_delta?: string;
     stop_loss: number;
     distance_to_stop?: string;
   }
-  
+
+  export interface PositionInitialState {
+    right: string;
+    strike: number;
+    quantity: number;
+    date: string;
+    target_delta: string;
+  }
+
   export interface Trade {
     action: string;
     right: string;
@@ -68,6 +75,7 @@ export interface Position {
     put_options_above_minimal_sell_price: boolean;
     call_options_above_minimal_sell_price: boolean;
     positions: Position[];
+    position_initial_states: PositionInitialState[];
     trades: Trade[];
     fills: Fill[];
     spx_premium: number;

@@ -147,9 +147,10 @@ class StateUpdater:
             await self.trading_bot.fetch_price_increments(positions[0].contract)
 
         state_positions = []
+        state_position_initial_states = []
         contract_id_to_delta = {}
         subscription_manager = SubscriptionManager()
-        target_delta_map = PositionsManager().target_delta_map
+        target_delta_map = PositionsManager().position_initial_state_map
         is_reg_hours = is_regular_hours()
         indices_difference = self.market_data_fetcher.calculate_spx_es_difference()
         spot_price = self.market_data_fetcher.get_spx_price() if is_reg_hours else self.market_data_fetcher.get_es_price() + indices_difference
@@ -169,15 +170,21 @@ class StateUpdater:
             distance_to_stop_roundness = 1 if distance_to_stop < 100 else 0
             distance_to_stop = round(distance_to_stop, distance_to_stop_roundness)
 
-            td_entry = target_delta_map.get((option.strike, option.right, option.lastTradeDateOrContractMonth))
+            position_date = datetime.strptime(option.lastTradeDateOrContractMonth, "%Y%m%d").strftime("%d/%m/%y")
             pos_data = {
                 'right': option.right, 'strike': option.strike, 'quantity': position.position,
-                'date': datetime.strptime(option.lastTradeDateOrContractMonth, "%Y%m%d").strftime("%d/%m/%y"),
+                'date': position_date,
                 'delta': delta, 'market_price': str(market_price) if not math.isnan(market_price) else '',
                 'stop_loss': stop_loss,
                 'distance_to_stop': distance_to_stop if not math.isnan(distance_to_stop) else '',
-                'target_delta': round(td_entry['target_delta'], 3) if td_entry else '',
             }
+
+            td_entry = target_delta_map.get((option.strike, option.right, option.lastTradeDateOrContractMonth))
+            state_position_initial_states.append({
+                'right': option.right, 'strike': option.strike, 'quantity': position.position,
+                'date': position_date,
+                'target_delta': round(td_entry['target_delta'], 3) if td_entry else '',
+            })
 
             es_options = subscription_manager.spx_to_es_map.get(option.conId)
             if es_options and len(es_options) == 2:
@@ -203,6 +210,7 @@ class StateUpdater:
             contract_id_to_delta[option.conId] = delta
 
         state['positions'] = sorted(state_positions, key=lambda x: (x['right'], x['date'], x['strike']))
+        state['position_initial_states'] = sorted(state_position_initial_states, key=lambda x: (x['right'], x['date'], x['strike']))
 
         # 4. Process open trades
         state_trades = []

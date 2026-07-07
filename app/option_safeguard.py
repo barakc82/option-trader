@@ -164,7 +164,7 @@ class OptionSafeguard:
         spot_price = self.index_price_manager.get_spot_price()
         risk_free_rate = self.market_data_fetcher.get_cached_risk_free_rate()
         distance_to_stop = calculate_distance_to_stop(option, option.ticker, stop_loss, spot_price, risk_free_rate)
-        td_entry = self.positions_manager.target_delta_map.get(
+        td_entry = self.positions_manager.position_initial_state_map.get(
             (option.strike, option.right, option.lastTradeDateOrContractMonth))
         target_delta = td_entry['target_delta'] if td_entry else ''
         csv_path = 'cache/close_events.csv'
