@@ -62,10 +62,7 @@ class MaxLossCalculator:
 
         now = time.time()
         if now - self.last_dump_time[right] >= 3600:
-            positions = self.trading_bot.get_short_options()
-            position_quantities_for_right = [-position.position for position in positions if
-                                             position.contract.right == right]
-            number_of_options = sum(position_quantities_for_right)
+            number_of_options = self.get_current_number_of_options(right)
             self.quantity[right].append((now, number_of_options))
             self.quantity[right] = [(t, v) for t, v in self.quantity[right] if now - t <= WINDOW_SECONDS]
             try:
@@ -99,8 +96,16 @@ class MaxLossCalculator:
 
         return max_loss
 
+    def get_current_number_of_options(self, right):
+        positions = self.trading_bot.get_short_options()
+        position_quantities_for_right = [-position.position for position in positions if
+                                         position.contract.right == right]
+        number_of_options = sum(position_quantities_for_right)
+        return number_of_options
 
     def get_max_number_of_options(self, right):
         if not self.quantity[right]:
             return 0
-        return max(item[1] for item in self.quantity[right])
+        historical_max = max(item[1] for item in self.quantity[right])
+        current_number_of_options = self.get_current_number_of_options(right)
+        return max(current_number_of_options, historical_max)

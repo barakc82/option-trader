@@ -181,7 +181,10 @@ class OpportunityExplorer:
 
         await self.cancel_all_buy_trades(open_trades, call_option)
 
-        position_initial_state = {'target_delta': target_delta, 'initial_delta': get_delta_for_sell(call_option.ticker)}
+        position_initial_state = {
+            'target_delta': target_delta, 'initial_delta': get_delta_for_sell(call_option.ticker),
+            'minutes_to_expiration': self.get_minutes_to_expiration(call_option)
+        }
 
         sell_option_result = await self.try_to_sell(call_option, 2, position_initial_state)
         if sell_option_result.success:
@@ -266,6 +269,11 @@ class OpportunityExplorer:
                 self.put_margin_reduction = reduction_data
                 self.last_put_margin_reduction_record_time = time.time()
 
+    def get_minutes_to_expiration(self, option):
+        expiry_date = datetime.strptime(option.lastTradeDateOrContractMonth, '%Y%m%d').date()
+        expiry_datetime = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
+        return round((expiry_datetime - datetime.now(new_york_timezone)).total_seconds() / 60)
+
     async def try_to_sell(self, option, quantity, position_initial_state):
         target_delta = position_initial_state['target_delta']
         delta = get_delta_for_sell(option.ticker)
@@ -324,7 +332,10 @@ class OpportunityExplorer:
 
         await self.cancel_all_buy_trades(open_trades, put_option)
 
-        position_initial_state = {'target_delta': target_delta, 'initial_delta': get_delta_for_sell(put_option.ticker)}
+        position_initial_state = {
+            'target_delta': target_delta, 'initial_delta': get_delta_for_sell(put_option.ticker),
+            'minutes_to_expiration': self.get_minutes_to_expiration(put_option)
+        }
 
         quantity = min(max_options_for_market_drop, 2)
         sell_option_result = await self.try_to_sell(put_option, quantity, position_initial_state)

@@ -139,6 +139,8 @@ class PositionsManager:
         existing = self.position_initial_state_map.get(key)
         if existing:
             total_qty = existing['quantity'] + new_qty
+            if total_qty == 0:
+                return
             avg_delta = (existing['target_delta'] * existing['quantity'] + target_delta * new_qty) / total_qty
             self.position_initial_state_map[key] = {
                 'target_delta': avg_delta, 'quantity': total_qty, 'initial_delta': existing.get('initial_delta', initial_delta)

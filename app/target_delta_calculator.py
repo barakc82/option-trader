@@ -136,7 +136,7 @@ class TargetDeltaCalculator:
         if is_reduced_safe_cushion_time() or is_switched_to_overnight_trading():
             target_delta *= 0.875
         target_delta = max(target_delta, 0.003)
-        logger.info(f"Target delta ({right}): {target_delta:.4f}, iv factor: {iv_factor:.2f}, max loss factor: {max_loss_factor:.2f}")
+        logger.info(f"Target delta ({right}): {target_delta:.4f}, iv factor: {iv_factor:.4f}, max loss factor: {max_loss_factor:.4f}")
         
         self.last_target_delta_calculation_time[right] = time.time()
         self.last_target_delta[right] = target_delta
