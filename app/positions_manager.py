@@ -1,7 +1,6 @@
 import asyncio
 import json
 from datetime import datetime
-from typing import Any
 
 from utilities.utils import is_trade_cancelled, write_heartbeat, get_option_name, is_final_hours, CACHED_JSON_PATH
 from utilities.ib_utils import *
@@ -132,13 +131,13 @@ class PositionsManager:
             opportunity_explorer = OpportunityExplorer()
             opportunity_explorer.notify_margin_lock_resolution_attempted()
 
-    def update_position_entry(self, position_initial_state: Any | None, trade):
+    def update_position_entry(self, position_initial_state: PositionInitialState, trade):
         c = trade.contract
         key = (c.strike, c.right, c.lastTradeDateOrContractMonth)
         new_qty = trade.order.totalQuantity
-        target_delta = position_initial_state['target_delta']
-        initial_delta = position_initial_state['initial_delta']
-        minutes_to_expiration = position_initial_state.get('minutes_to_expiration')
+        target_delta = position_initial_state.target_delta
+        initial_delta = position_initial_state.initial_delta
+        minutes_to_expiration = position_initial_state.minutes_to_expiration
         existing = self.position_initial_state_map.get(key)
         if existing:
             total_qty = existing['quantity'] + new_qty

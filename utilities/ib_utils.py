@@ -40,6 +40,13 @@ class SellOptionResult:
     initial_margin_after: float = 0
 
 
+@dataclass
+class PositionInitialState:
+    target_delta: float
+    initial_delta: float | None = None
+    minutes_to_expiration: int | None = None
+
+
 def get_time_passed_since_submission(trade: Trade) -> timedelta | Any:
     if not trade.log:
         return timedelta(0)
