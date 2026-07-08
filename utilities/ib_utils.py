@@ -45,6 +45,7 @@ class PositionInitialState:
     target_delta: float
     initial_delta: float | None = None
     minutes_to_expiration: int | None = None
+    quantity: int = 0
 
 
 def get_time_passed_since_submission(trade: Trade) -> timedelta | Any:

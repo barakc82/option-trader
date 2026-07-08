@@ -54,12 +54,12 @@ class PositionsManager:
                 quantity = pos.get('quantity')
                 initial_delta = pos.get('delta')
                 minutes_to_expiration = pos.get('minutes_to_expiration')
-                self.position_initial_state_map[key] = {
-                    'target_delta': float(target_delta) if target_delta not in (None, '') else 0.0,
-                    'quantity': int(quantity) if quantity not in (None, '') else 0,
-                    'initial_delta': float(initial_delta) if initial_delta not in (None, '') else None,
-                    'minutes_to_expiration': int(minutes_to_expiration) if minutes_to_expiration not in (None, '') else None,
-                }
+                self.position_initial_state_map[key] = PositionInitialState(
+                    target_delta=float(target_delta) if target_delta not in (None, '') else 0.0,
+                    quantity=int(quantity) if quantity not in (None, '') else 0,
+                    initial_delta=float(initial_delta) if initial_delta not in (None, '') else None,
+                    minutes_to_expiration=int(minutes_to_expiration) if minutes_to_expiration not in (None, '') else None,
+                )
             logger.info(f"Loaded {len(self.position_initial_state_map)} target delta entries from cache")
         except Exception as e:
             logger.warning(f"Could not load cached target deltas: {e}")
@@ -140,17 +140,17 @@ class PositionsManager:
         minutes_to_expiration = position_initial_state.minutes_to_expiration
         existing = self.position_initial_state_map.get(key)
         if existing:
-            total_qty = existing['quantity'] + new_qty
+            total_qty = existing.quantity + new_qty
             if total_qty == 0:
                 return
-            avg_delta = (existing['target_delta'] * existing['quantity'] + target_delta * new_qty) / total_qty
-            self.position_initial_state_map[key] = {
-                'target_delta': avg_delta, 'quantity': total_qty,
-                'initial_delta': existing.get('initial_delta', initial_delta),
-                'minutes_to_expiration': existing.get('minutes_to_expiration', minutes_to_expiration),
-            }
+            avg_delta = (existing.target_delta * existing.quantity + target_delta * new_qty) / total_qty
+            self.position_initial_state_map[key] = PositionInitialState(
+                target_delta=avg_delta, quantity=total_qty,
+                initial_delta=existing.initial_delta,
+                minutes_to_expiration=existing.minutes_to_expiration,
+            )
         else:
-            self.position_initial_state_map[key] = {
-                'target_delta': target_delta, 'quantity': new_qty,
-                'initial_delta': initial_delta, 'minutes_to_expiration': minutes_to_expiration,
-            }
+            self.position_initial_state_map[key] = PositionInitialState(
+                target_delta=target_delta, quantity=new_qty,
+                initial_delta=initial_delta, minutes_to_expiration=minutes_to_expiration,
+            )
