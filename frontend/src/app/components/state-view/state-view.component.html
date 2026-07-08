@@ -160,9 +160,10 @@
             <th>Right</th>
             <th>Strike</th>
             <th>Quantity</th>
-            <th>Expiry Date</th>
+            <th>Expiration Date</th>
             <th>Delta</th>
             <th>Target Delta</th>
+            <th>Minutes to Expiration</th>
           </tr>
         </thead>
         <tbody>
@@ -173,6 +174,7 @@
             <td>{{ pos.date }}</td>
             <td>{{ pos.delta }}</td>
             <td>{{ pos.target_delta }}</td>
+            <td>{{ pos.minutes_to_expiration }}</td>
           </tr>
         </tbody>
       </table>

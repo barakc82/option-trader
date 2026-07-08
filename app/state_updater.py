@@ -185,6 +185,7 @@ class StateUpdater:
                 'date': position_date,
                 'target_delta': round(td_entry['target_delta'], 3) if td_entry else '',
                 'delta': round(td_entry['initial_delta'], 3) if td_entry and td_entry.get('initial_delta') is not None else '',
+                'minutes_to_expiration': td_entry['minutes_to_expiration'] if td_entry and td_entry.get('minutes_to_expiration') is not None else '',
             })
 
             es_options = subscription_manager.spx_to_es_map.get(option.conId)

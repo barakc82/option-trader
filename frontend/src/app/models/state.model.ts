@@ -18,6 +18,7 @@ export interface Position {
     date: string;
     target_delta: string;
     delta: string;
+    minutes_to_expiration: number | string;
   }
 
   export interface Trade {
