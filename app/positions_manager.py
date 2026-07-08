@@ -41,13 +41,24 @@ class PositionsManager:
         try:
             with open(CACHED_JSON_PATH, 'r') as f:
                 state = json.load(f)
-            for pos in state.get('positions', []):
-                target_delta = pos.get('target_delta')
-                if not target_delta:
+            for pos in state.get('position_initial_states', []):
+                date = pos.get('date')
+                strike = pos.get('strike')
+                right = pos.get('right')
+                if not date or strike is None or not right:
                     continue
-                expiry = datetime.strptime(pos['date'], "%d/%m/%y").strftime("%Y%m%d")
-                key = (pos['strike'], pos['right'], expiry)
-                self.position_initial_state_map[key] = {'target_delta': target_delta, 'quantity': pos['quantity']}
+
+                expiry = datetime.strptime(date, "%d/%m/%y").strftime("%Y%m%d")
+                key = (strike, right, expiry)
+
+                target_delta = pos.get('target_delta')
+                quantity = pos.get('quantity')
+                initial_delta = pos.get('delta')
+                self.position_initial_state_map[key] = {
+                    'target_delta': float(target_delta) if target_delta not in (None, '') else 0.0,
+                    'quantity': int(quantity) if quantity not in (None, '') else 0,
+                    'initial_delta': float(initial_delta) if initial_delta not in (None, '') else None,
+                }
             logger.info(f"Loaded {len(self.position_initial_state_map)} target delta entries from cache")
         except Exception as e:
             logger.warning(f"Could not load cached target deltas: {e}")
@@ -103,30 +114,34 @@ class PositionsManager:
         return not is_final_hours()
 
     def on_fill(self, trade):
-        target_delta = self.trading_bot.req_id_to_order_metadata.get(trade.order.orderId)
-        logger.info(f"Trade filled: {get_option_name(trade.contract)} {trade.order.action}, target delta: {target_delta}")
-        if trade.order.action.upper() == 'SELL' and target_delta is not None:
-            self.update_position_entry(target_delta, trade)
+        position_initial_state = self.trading_bot.req_id_to_order_metadata.get(trade.order.orderId)
+        logger.info(f"Trade filled: {get_option_name(trade.contract)} {trade.order.action}, position initial state: {position_initial_state}")
+        if trade.order.action.upper() == 'SELL' and position_initial_state is not None:
+            self.update_position_entry(position_initial_state, trade)
         if trade.order.action.upper() == 'BUY':
             self.done_contract_ids.add(trade.contract.conId)
             c = trade.contract
             self.position_initial_state_map.pop((c.strike, c.right, c.lastTradeDateOrContractMonth), None)
-        if not target_delta:
+        if not position_initial_state:
             logger.error(f"Could not find target delta entry for order ID {trade.order.orderId}, here is what we have:")
-            for order_id, td in self.trading_bot.req_id_to_order_metadata.items():
-                logger.info(f"Order ID {order_id} ==> target delta of {td}")
+            for order_id, entry in self.trading_bot.req_id_to_order_metadata.items():
+                logger.info(f"Order ID {order_id} ==> {entry}")
         if trade.order.orderId in req_id_to_comment and "Margin" in req_id_to_comment[trade.order.orderId]:
             opportunity_explorer = OpportunityExplorer()
             opportunity_explorer.notify_margin_lock_resolution_attempted()
 
-    def update_position_entry(self, target_delta: Any | None, trade):
+    def update_position_entry(self, position_initial_state: Any | None, trade):
         c = trade.contract
         key = (c.strike, c.right, c.lastTradeDateOrContractMonth)
         new_qty = trade.order.totalQuantity
+        target_delta = position_initial_state['target_delta']
+        initial_delta = position_initial_state['initial_delta']
         existing = self.position_initial_state_map.get(key)
         if existing:
             total_qty = existing['quantity'] + new_qty
             avg_delta = (existing['target_delta'] * existing['quantity'] + target_delta * new_qty) / total_qty
-            self.position_initial_state_map[key] = {'target_delta': avg_delta, 'quantity': total_qty}
+            self.position_initial_state_map[key] = {
+                'target_delta': avg_delta, 'quantity': total_qty, 'initial_delta': existing.get('initial_delta', initial_delta)
+            }
         else:
-            self.position_initial_state_map[key] = {'target_delta': target_delta, 'quantity': new_qty}
+            self.position_initial_state_map[key] = {'target_delta': target_delta, 'quantity': new_qty, 'initial_delta': initial_delta}

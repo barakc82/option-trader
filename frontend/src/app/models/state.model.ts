@@ -17,6 +17,7 @@ export interface Position {
     quantity: number;
     date: string;
     target_delta: string;
+    delta: string;
   }
 
   export interface Trade {

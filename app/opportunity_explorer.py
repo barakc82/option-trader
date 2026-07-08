@@ -181,13 +181,15 @@ class OpportunityExplorer:
 
         await self.cancel_all_buy_trades(open_trades, call_option)
 
-        sell_option_result = await self.try_to_sell(call_option, 2, target_delta)
+        position_initial_state = {'target_delta': target_delta, 'initial_delta': get_delta_for_sell(call_option.ticker)}
+
+        sell_option_result = await self.try_to_sell(call_option, 2, position_initial_state)
         if sell_option_result.success:
             return sell_option_result
 
         logger.warning(f"Failed to sell 2 options of {get_option_name(call_option)}")
         logger.info(f"Testing sell 1 option of {get_option_name(call_option)}")
-        sell_option_result = await self.try_to_sell(call_option, 1, target_delta)
+        sell_option_result = await self.try_to_sell(call_option, 1, position_initial_state)
         if not sell_option_result.success:
             logger.warning(f"Failed to sell 1 options of {get_option_name(call_option)}")
 
@@ -264,7 +266,8 @@ class OpportunityExplorer:
                 self.put_margin_reduction = reduction_data
                 self.last_put_margin_reduction_record_time = time.time()
 
-    async def try_to_sell(self, option, quantity, target_delta):
+    async def try_to_sell(self, option, quantity, position_initial_state):
+        target_delta = position_initial_state['target_delta']
         delta = get_delta_for_sell(option.ticker)
         if delta > target_delta:
             logger.warning(f"Failed to sell {get_option_name(option)} since the delta has risen to {delta:.3f}, "
@@ -274,7 +277,7 @@ class OpportunityExplorer:
             return result
 
         start_time = time.time()
-        result = await self.trading_bot.try_to_sell(option, quantity, target_delta)
+        result = await self.trading_bot.try_to_sell(option, quantity, position_initial_state)
         end_time = time.time()
         duration_of_sell_operation = end_time - start_time
 
@@ -321,15 +324,17 @@ class OpportunityExplorer:
 
         await self.cancel_all_buy_trades(open_trades, put_option)
 
+        position_initial_state = {'target_delta': target_delta, 'initial_delta': get_delta_for_sell(put_option.ticker)}
+
         quantity = min(max_options_for_market_drop, 2)
-        sell_option_result = await self.try_to_sell(put_option, quantity, target_delta)
+        sell_option_result = await self.try_to_sell(put_option, quantity, position_initial_state)
         if sell_option_result.success:
             return sell_option_result
 
         logger.warning(f"Failed to sell {quantity} options of {get_option_name(put_option)}")
         if quantity == 2:
             logger.info(f"Testing sell 1 option of {get_option_name(put_option)}")
-            sell_option_result = await self.try_to_sell(put_option, 1, target_delta)
+            sell_option_result = await self.try_to_sell(put_option, 1, position_initial_state)
             if sell_option_result.success:
                 return sell_option_result
             logger.warning(f"Failed to sell 1 options of {get_option_name(put_option)}")

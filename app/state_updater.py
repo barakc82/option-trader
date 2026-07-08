@@ -150,7 +150,7 @@ class StateUpdater:
         state_position_initial_states = []
         contract_id_to_delta = {}
         subscription_manager = SubscriptionManager()
-        target_delta_map = PositionsManager().position_initial_state_map
+        position_initial_state_map = PositionsManager().position_initial_state_map
         is_reg_hours = is_regular_hours()
         indices_difference = self.market_data_fetcher.calculate_spx_es_difference()
         spot_price = self.market_data_fetcher.get_spx_price() if is_reg_hours else self.market_data_fetcher.get_es_price() + indices_difference
@@ -179,11 +179,12 @@ class StateUpdater:
                 'distance_to_stop': distance_to_stop if not math.isnan(distance_to_stop) else '',
             }
 
-            td_entry = target_delta_map.get((option.strike, option.right, option.lastTradeDateOrContractMonth))
+            td_entry = position_initial_state_map.get((option.strike, option.right, option.lastTradeDateOrContractMonth))
             state_position_initial_states.append({
                 'right': option.right, 'strike': option.strike, 'quantity': position.position,
                 'date': position_date,
                 'target_delta': round(td_entry['target_delta'], 3) if td_entry else '',
+                'delta': round(td_entry['initial_delta'], 3) if td_entry and td_entry.get('initial_delta') is not None else '',
             })
 
             es_options = subscription_manager.spx_to_es_map.get(option.conId)

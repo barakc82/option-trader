@@ -146,6 +146,6 @@ class TargetDeltaCalculator:
     def calculate_max_loss_based_target_delta(self, right) -> tuple[float, float]:
         max_loss = self.max_loss_calculator.calculate_max_loss(right)
         logger.info(f"Max loss ({right}): {max_loss:.2f}")
-        max_loss_factor = 0.0025 if right == 'C' else 0.003
+        max_loss_factor = 0.0027 if right == 'C' else 0.003
         target_delta = max_loss * max_loss_factor
         return target_delta, max_loss_factor
