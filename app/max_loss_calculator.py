@@ -14,6 +14,10 @@ DEFAULT_MAX_LOSS = 1.0
 WINDOW_SECONDS = 7 * 24 * 60 * 60  # 1 week
 STOP_LOSS_CHANGE_INTERVAL = 900
 
+INITIAL_FULL_MODE = 0
+LIMITED_MODE = 1
+LASTING_FULL_MODE = 2
+
 CALL_OPTIONS_FILE_NAME = "cache/calls.txt"
 PUT_OPTIONS_FILE_NAME = "cache/puts.txt"
 options_file_names = {'C': CALL_OPTIONS_FILE_NAME, 'P': PUT_OPTIONS_FILE_NAME}
@@ -38,6 +42,8 @@ class MaxLossCalculator:
             self.last_dump_time = {'C': 0.0, 'P': 0.0}
             self.quantity = {'C': [], 'P': []}
             self.risk_fraction = {'C': 1.0, 'P': 1.0}
+            self.operation_modes = {'C': INITIAL_FULL_MODE, 'P': INITIAL_FULL_MODE}
+
             try:
                 if os.path.exists(CALL_OPTIONS_FILE_NAME):
                     with open(CALL_OPTIONS_FILE_NAME, "r") as f:
@@ -72,12 +78,16 @@ class MaxLossCalculator:
             except Exception as e:
                 logger.error(f"{e}")
 
-        max_number_of_options = self.get_max_number_of_options(right)
+        number_of_options = 0
+        if self.operation_modes[right] == LIMITED_MODE:
+            number_of_options = self.get_max_number_of_options_before_spreads(right)
+        else:
+            number_of_options = self.get_max_number_of_options(right)
 
         max_loss = DEFAULT_MAX_LOSS
-        if max_number_of_options and len(self.quantity[right]) >= MIN_NUMBER_OF_RECORDED_OPTIONS_QUANTITIES:
+        if number_of_options and len(self.quantity[right]) >= MIN_NUMBER_OF_RECORDED_OPTIONS_QUANTITIES:
             total_cash_value = self.account_data.get_cash_balance_value()
-            extra_cash_per_contract = (total_cash_value - 1000) / max_number_of_options
+            extra_cash_per_contract = (total_cash_value - 1000) / number_of_options
             extra_cash_per_contract = max(extra_cash_per_contract, 0)
 
             extra_cash_per_option = extra_cash_per_contract / 100
@@ -87,7 +97,7 @@ class MaxLossCalculator:
             risk_fraction = min(raw_risk_fraction, 1)
 
             logger.info(f"Risk fraction for {right} is {risk_fraction:.2f}, extra cash per option: {extra_cash_per_option:.2f}, "
-                        f"total cash: {total_cash_value:.2f}, max number of options: {max_number_of_options}")
+                        f"total cash: {total_cash_value:.2f}, max number of options: {number_of_options}")
             max_loss = max(extra_cash_per_option * risk_fraction, DEFAULT_MAX_LOSS)
             self.risk_fraction[right] = risk_fraction
 
@@ -109,3 +119,17 @@ class MaxLossCalculator:
         historical_max = max(item[1] for item in self.quantity[right])
         current_number_of_options = self.get_current_number_of_options(right)
         return max(current_number_of_options, historical_max)
+
+    def get_max_number_of_options_before_spreads(self, right):
+        if not self.quantity[right]:
+            return 0
+        historical_max = max(item[1] for item in self.quantity[right])
+        current_number_of_options = self.get_current_number_of_options(right)
+        return max(current_number_of_options, historical_max)
+
+    def notify_below_minimal_price_level(self, right):
+        if self.operation_modes[right] != LASTING_FULL_MODE:
+            self.operation_modes[right] = LIMITED_MODE
+
+    def notify_spread_usage(self, right):
+        self.operation_modes[right] = LASTING_FULL_MODE

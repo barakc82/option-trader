@@ -84,22 +84,31 @@ def is_hollow(ticker):
 
 
 def get_delta(ticker):
+    deltas_to_consider = []
     if (ticker.bidGreeks and ticker.bidGreeks.delta and math.isnan(ticker.bidGreeks.delta) and
             ticker.askGreeks and ticker.askGreeks.delta and math.isnan(ticker.askGreeks.delta)):
-        return (abs(ticker.bidGreeks.delta) + abs(ticker.askGreeks.delta)) / 2
+        bid_ask_delta = (abs(ticker.bidGreeks.delta) + abs(ticker.askGreeks.delta)) / 2
+        deltas_to_consider.append(bid_ask_delta)
     if ticker.lastGreeks and ticker.lastGreeks.delta:
-        return abs(ticker.lastGreeks.delta)
+        deltas_to_consider.append(abs(ticker.lastGreeks.delta))
     if ticker.modelGreeks and ticker.modelGreeks.delta:
-        if int(time.time()) % 100:
-            logger.warning(f"Using model greeks to calculate delta for {get_option_name(ticker.contract)}")
-        return abs(ticker.modelGreeks.delta)
-    return None
+        deltas_to_consider.append(abs(ticker.modelGreeks.delta))
+    if not deltas_to_consider:
+        return None
+    return max(deltas_to_consider)
 
 
 def get_delta_for_sell(ticker):
-    if ticker.askGreeks and ticker.askGreeks.delta:
-        return abs(ticker.askGreeks.delta)
-    return None
+    deltas_to_consider = []
+    if ticker.askGreeks and ticker.askGreeks.delta is not None:
+        deltas_to_consider.append(abs(ticker.askGreeks.delta))
+    if ticker.lastGreeks and ticker.lastGreeks.delta is not None:
+        deltas_to_consider.append(abs(ticker.lastGreeks.delta))
+    if ticker.modelGreeks and ticker.modelGreeks.delta is not None:
+        deltas_to_consider.append(abs(ticker.modelGreeks.delta))
+    if not deltas_to_consider:
+        return None
+    return max(deltas_to_consider)
 
 
 def get_gamma(ticker):

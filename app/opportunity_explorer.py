@@ -48,8 +48,6 @@ class OpportunityExplorer:
             self.net_worth_calculator = NetWorthCalculator()
             self.max_loss_calculator = MaxLossCalculator()
             self.last_submit_order_attempt_time = 0
-            self.no_put_options_above_minimal_sell_price = False
-            self.no_call_options_above_minimal_sell_price = False
             self.can_submit_orders = True
             self.last_put_option_price = 0
             self.last_call_option_price = 0
@@ -198,6 +196,8 @@ class OpportunityExplorer:
 
         await self.handle_call_sell_failure(call_option, sell_option_result, call_options, open_trades)
         self.no_call_options_above_minimal_sell_price = sell_option_result.no_option_above_minimal_sell_price
+        if sell_option_result.no_option_above_minimal_sell_price:
+            self.max_loss_calculator.notify_below_minimal_price_level('C')
         return sell_option_result
 
     async def handle_call_sell_failure(self, call_option, sell_option_result, call_options, open_trades):
@@ -351,7 +351,9 @@ class OpportunityExplorer:
             logger.warning(f"Failed to sell 1 options of {get_option_name(put_option)}")
 
         await self.handle_put_sell_failure(put_option, sell_option_result, put_options, open_trades)
-        self.no_put_options_above_minimal_sell_price = sell_option_result.no_option_above_minimal_sell_price
+        if sell_option_result.no_option_above_minimal_sell_price:
+            self.max_loss_calculator.notify_below_minimal_price_level('P')
+
         return sell_option_result
 
     async def find_put_candidate(self, put_options, target_delta):
@@ -462,6 +464,7 @@ class OpportunityExplorer:
             comment = f"Margin Reduction of {round(abs(initial_margin_change))}"
             req_id_to_comment[trade.order.orderId] = comment
             self.can_submit_orders = True
+            self.max_loss_calculator.notify_spread_usage('C')
             return SUCCESS
 
         logger.info(f"Will not buy {get_option_name(available_cheap_call_option)} since the potential sell price is too low ({self.last_call_option_price})")

@@ -98,6 +98,7 @@ class ConnectionManager:
             
             logger.info(f"Initializing account data for {MY_ACCOUNT}...")
             await self.ib.reqAccountUpdatesAsync(MY_ACCOUNT)
+            logger.info(f"Initializing summery data...")
             await self.ib.reqAccountSummaryAsync()
             logger.info("Initializing data done")
 

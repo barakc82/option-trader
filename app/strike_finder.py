@@ -137,6 +137,8 @@ class StrikeFinder:
             log_message += f", model delta: {current_candidate.ticker.modelGreeks.delta:.3f}"
         if current_candidate.ticker.bidGreeks and current_candidate.ticker.bidGreeks.delta:
             log_message += f", bid delta: {current_candidate.ticker.bidGreeks.delta:.3f}"
+        if current_candidate.ticker.askGreeks and current_candidate.ticker.askGreeks.delta:
+            log_message += f", ask delta: {current_candidate.ticker.askGreeks.delta:.3f}"
         log_message += f", bid: {current_candidate.ticker.bid}, ask: {current_candidate.ticker.ask}"
         logger.info(log_message)
         return current_candidate
@@ -164,6 +166,12 @@ class StrikeFinder:
             # Calls: Lower -> Higher (needs reverse)
             # Puts: Higher -> Lower (needs reverse)
             for option in reversed(block):
+                if not hasattr(option, "ticker"):
+                    logger.error(f"Option {get_option_name(option)} has no ticker field")
+                    continue
+                if option.ticker is None:
+                    logger.error(f"Option {get_option_name(option)} has an empty ticker field")
+                    continue
                 if extract_ask(option.ticker) == 0.05:
                     return option
 
