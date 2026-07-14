@@ -14,7 +14,7 @@ from utilities.meitav.start import start
 from utilities.spreadsheet_operations import update_next_sell_in_spreadsheet, extract_next_sell_price
 
 user = Barak
-program_type = Gemel
+program_type = Hishtalmut
 
 today = datetime.now()
 start_date = None

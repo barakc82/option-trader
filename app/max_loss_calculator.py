@@ -80,9 +80,9 @@ class MaxLossCalculator:
 
         number_of_options = 0
         if self.operation_modes[right] == LIMITED_MODE:
-            number_of_options = self.get_max_number_of_options_before_spreads(right)
+            number_of_options = max(self.get_max_number_of_options_before_spreads(right), number_of_options - 1)
         else:
-            number_of_options = self.get_max_number_of_options(right)
+            number_of_options = max(self.get_max_number_of_options(right), number_of_options - 1)
 
         max_loss = DEFAULT_MAX_LOSS
         if number_of_options and len(self.quantity[right]) >= MIN_NUMBER_OF_RECORDED_OPTIONS_QUANTITIES:

@@ -8,7 +8,7 @@ from utilities.meitav.get_status import extract_status
 from utilities.spreadsheet_operations import increment_unfixed_rows
 
 user = Barak
-program_type = Hishtalmut
+program_type = Gemel
 
 person_data = users_data[user]
 

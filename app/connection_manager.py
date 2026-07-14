@@ -82,6 +82,15 @@ class ConnectionManager:
         finally:
             self.is_connecting = False
 
+    async def safe_account_updates(self, timeout=10):
+        try:
+            await asyncio.wait_for(self.ib.reqAccountUpdatesAsync(MY_ACCOUNT), timeout=timeout)
+        except asyncio.TimeoutError:
+            logging.warning(
+                "accountDownloadEnd never arrived after reconnect; "
+                "continuing — values still stream via accountValueEvent"
+            )
+
     async def initialize_data(self):
         """Initializes positions, orders, and account data after connection."""
         try:
@@ -97,7 +106,9 @@ class ConnectionManager:
             await asyncio.sleep(2)
             
             logger.info(f"Initializing account data for {MY_ACCOUNT}...")
-            await self.ib.reqAccountUpdatesAsync(MY_ACCOUNT)
+            self.ib.client.reqAccountUpdates(False, MY_ACCOUNT)  # cancel first
+            self.ib.client.reqAccountUpdates(True, MY_ACCOUNT)
+
             logger.info(f"Initializing summery data...")
             await self.ib.reqAccountSummaryAsync()
             logger.info("Initializing data done")
