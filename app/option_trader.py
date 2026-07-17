@@ -194,6 +194,10 @@ class OptionTrader:
                                 f"'{option.right}' is too low ({price_level}) for position buyback")
                     self.trading_bot.cancel_trade(buy_limit_trade)
 
+            if corresponding_position and order_limit == 0.1 and buy_limit_trade.remaining() == 1 and time_passed_since_submission > OPEN_SELL_ORDER_GENERAL_EXPIRATION_TIME:
+                logger.info(f"Cancelling {get_option_name(option)} since this margin lock resolution order has not been filled for 20 minutes")
+                self.trading_bot.cancel_trade(buy_limit_trade)
+
             if not corresponding_position and order_limit > 0.05:
                 logger.info(f"Cancelling {get_option_name(option)} because it has no corresponding "
                             f"position and it has an order limit of {order_limit}, so no reason to keep it")

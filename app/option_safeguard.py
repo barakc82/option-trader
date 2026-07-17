@@ -164,16 +164,16 @@ class OptionSafeguard:
         spot_price = self.index_price_manager.get_spot_price()
         risk_free_rate = self.market_data_fetcher.get_cached_risk_free_rate()
         distance_to_stop = calculate_distance_to_stop(option, option.ticker, stop_loss, spot_price, risk_free_rate)
-        td_entry = self.positions_manager.position_initial_state_map.get(
-            (option.strike, option.right, option.lastTradeDateOrContractMonth))
-        target_delta = td_entry.target_delta if td_entry else ''
-        csv_path = 'cache/close_events.csv'
+        td_entries = self.positions_manager.position_initial_state_map.get(option.conId) or [None]
+        csv_path = 'cache/in_the_money_events.csv'
         write_header = not os.path.exists(csv_path)
         with open(csv_path, 'a', newline='') as f:
             writer = csv.writer(f)
             if write_header:
                 writer.writerow(['datetime', 'target_delta', 'stop_loss', 'stop_loss_per_option', 'distance_to_stop'])
-            writer.writerow([datetime.now().isoformat(), target_delta, stop_loss, stop_loss_per_option, distance_to_stop])
+            for td_entry in td_entries:
+                target_delta = td_entry.target_delta if td_entry else ''
+                writer.writerow([datetime.now().isoformat(), target_delta, stop_loss, stop_loss_per_option, distance_to_stop])
 
     async def handle_current_risk(self, position, open_trades):
         if position.contract.conId in self.positions_manager.done_contract_ids:

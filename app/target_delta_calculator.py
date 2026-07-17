@@ -35,8 +35,8 @@ class TargetDeltaCalculator:
             self.market_data_fetcher = MarketDataFetcher()
             self.max_loss_calculator = MaxLossCalculator()
             self.last_target_delta = {'C': AVERAGE_TARGET_DELTA['C'], 'P': AVERAGE_TARGET_DELTA['P']}
-            self.last_target_delta_calculation_time = {'C': 0, 'P': 0}
-            self.last_target_delta_increase = {'C': 0, 'P': 0}
+            self.last_target_delta_calculation_time = {'C': 0.0, 'P': 0.0}
+            self.last_target_delta_increase = {'C': 0, 'P': 0.0}
             self.max_entries = DEFAULT_MAX_ENTRIES
             self.iv_history = {
                 'C': deque(maxlen=self.max_entries),
@@ -131,6 +131,7 @@ class TargetDeltaCalculator:
         z_score = (implied_volatility - iv_mean) / iv_std
         target_delta_std = (AVERAGE_TARGET_DELTA[right] - MIN_TARGET_DELTA[right]) / 2
         iv_factor = target_delta_std * z_score
+        iv_factor = 0
         target_delta, max_loss_factor = self.calculate_max_loss_based_target_delta(right)
         target_delta += iv_factor
         if is_reduced_safe_cushion_time() or is_switched_to_overnight_trading():
@@ -146,6 +147,6 @@ class TargetDeltaCalculator:
     def calculate_max_loss_based_target_delta(self, right) -> tuple[float, float]:
         max_loss = self.max_loss_calculator.calculate_max_loss(right)
         logger.info(f"Max loss ({right}): {max_loss:.2f}")
-        max_loss_factor = 0.0027 if right == 'C' else 0.003
+        max_loss_factor = 0.00315 if right == 'C' else 0.0034
         target_delta = max_loss * max_loss_factor
         return target_delta, max_loss_factor

@@ -147,7 +147,7 @@ class StateUpdater:
             await self.trading_bot.fetch_price_increments(positions[0].contract)
 
         state_positions = []
-        state_position_initial_states = []
+        position_initial_states = []
         contract_id_to_delta = {}
         subscription_manager = SubscriptionManager()
         position_initial_state_map = PositionsManager().position_initial_state_map
@@ -179,14 +179,22 @@ class StateUpdater:
                 'distance_to_stop': distance_to_stop if not math.isnan(distance_to_stop) else '',
             }
 
-            td_entry = position_initial_state_map.get((option.strike, option.right, option.lastTradeDateOrContractMonth))
-            state_position_initial_states.append({
-                'right': option.right, 'strike': option.strike, 'quantity': position.position,
-                'date': position_date,
-                'target_delta': round(td_entry.target_delta, 3) if td_entry else '',
-                'delta': round(td_entry.initial_delta, 3) if td_entry and td_entry.initial_delta is not None else '',
-                'minutes_to_expiration': td_entry.minutes_to_expiration if td_entry and td_entry.minutes_to_expiration is not None else '',
-            })
+            td_entries = position_initial_state_map.get(option.conId) or [None]
+            for td_entry in td_entries:
+                position_initial_states.append({
+                    'right': option.right, 'strike': option.strike, 'quantity': position.position,
+                    'date': position_date, 'contract_id': option.conId,
+                    'estimated_sell_price': round(td_entry.estimated_sell_price, 3) if td_entry else '',
+                    'stop_loss_per_option': round(td_entry.stop_loss_per_option, 3) if td_entry else '',
+                    'target_delta': round(td_entry.target_delta, 3) if td_entry else '',
+                    'bid_delta': round(td_entry.bid_delta, 3) if td_entry and td_entry.bid_delta is not None else '',
+                    'ask_delta': round(td_entry.ask_delta, 3) if td_entry and td_entry.ask_delta is not None else '',
+                    'last_delta': round(td_entry.last_delta, 3) if td_entry and td_entry.last_delta is not None else '',
+                    'model_delta': round(td_entry.model_delta, 3) if td_entry and td_entry.model_delta is not None else '',
+                    'minutes_to_expiration': td_entry.minutes_to_expiration if td_entry and td_entry.minutes_to_expiration is not None else '',
+                    'distance_to_stop_pct': round(td_entry.distance_to_stop_pct, 2) if td_entry and td_entry.distance_to_stop_pct is not None else '',
+                    'implied_volatility': round(td_entry.implied_volatility, 3) if td_entry and td_entry.implied_volatility is not None else '',
+                })
 
             es_options = subscription_manager.spx_to_es_map.get(option.conId)
             if es_options and len(es_options) == 2:
@@ -212,7 +220,7 @@ class StateUpdater:
             contract_id_to_delta[option.conId] = delta
 
         state['positions'] = sorted(state_positions, key=lambda x: (x['right'], x['date'], x['strike']))
-        state['position_initial_states'] = sorted(state_position_initial_states, key=lambda x: (x['right'], x['date'], x['strike']))
+        state['position_initial_states'] = sorted(position_initial_states, key=lambda x: (x['right'], x['date'], x['strike']))
 
         # 4. Process open trades
         state_trades = []
@@ -242,7 +250,7 @@ class StateUpdater:
                 'quantity': f.execution.shares, 'price': f.execution.price,
                 'time': f.time.timestamp(), 'comment': comment
             })
-            if f.time.astimezone(new_york_timezone).date() != today_date:
+            if f.time.astimezone(new_york_timezone).date() != today_date and REGULAR_HOURS_END_TIME < f.time.astimezone(new_york_timezone).time() < AFTER_HOURS_END_TIME:
                 has_fill_not_from_today = True
             expiry_date = datetime.strptime(f.contract.lastTradeDateOrContractMonth, '%Y%m%d').date()
             expiry_datetime = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))

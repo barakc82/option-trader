@@ -1,5 +1,7 @@
 import asyncio
+import csv
 import json
+import os
 from datetime import datetime
 
 from utilities.utils import is_trade_cancelled, write_heartbeat, get_option_name, is_final_hours, CACHED_JSON_PATH
@@ -31,12 +33,12 @@ class PositionsManager:
             self.max_loss_calculator = MaxLossCalculator()
             self.done_contract_ids = set()
             self.position_initial_state_map = {}
-            self._load_cached_target_deltas()
+            self._load_cached_position_initial_states()
             logger.info("PositionsManager singleton initialized.")
             self._initialized = True
 
 
-    def _load_cached_target_deltas(self):
+    def _load_cached_position_initial_states(self):
         try:
             with open(CACHED_JSON_PATH, 'r') as f:
                 state = json.load(f)
@@ -44,25 +46,41 @@ class PositionsManager:
                 date = pos.get('date')
                 strike = pos.get('strike')
                 right = pos.get('right')
-                if not date or strike is None or not right:
+                con_id = pos.get('contract_id')
+                if not date or strike is None or not right or not con_id:
                     continue
 
                 expiry = datetime.strptime(date, "%d/%m/%y").strftime("%Y%m%d")
-                key = (strike, right, expiry)
+                key = int(con_id)
 
                 target_delta = pos.get('target_delta')
                 quantity = pos.get('quantity')
-                initial_delta = pos.get('delta')
+                estimated_sell_price = pos.get('estimated_sell_price')
+                stop_loss_per_option = pos.get('stop_loss_per_option')
+                bid_delta = pos.get('bid_delta')
+                ask_delta = pos.get('ask_delta')
+                last_delta = pos.get('last_delta')
+                model_delta = pos.get('model_delta')
                 minutes_to_expiration = pos.get('minutes_to_expiration')
-                self.position_initial_state_map[key] = PositionInitialState(
+                distance_to_stop_pct = pos.get('distance_to_stop_pct')
+                implied_volatility = pos.get('implied_volatility')
+                self.position_initial_state_map.setdefault(key, []).append(PositionInitialState(
+                    strike=float(strike), right=right, expiry=expiry,
                     target_delta=float(target_delta) if target_delta not in (None, '') else 0.0,
                     quantity=int(quantity) if quantity not in (None, '') else 0,
-                    initial_delta=float(initial_delta) if initial_delta not in (None, '') else None,
+                    estimated_sell_price=float(estimated_sell_price) if estimated_sell_price not in (None, '') else 0.0,
+                    stop_loss_per_option=float(stop_loss_per_option) if stop_loss_per_option not in (None, '') else 0.0,
+                    bid_delta=float(bid_delta) if bid_delta not in (None, '') else None,
+                    ask_delta=float(ask_delta) if ask_delta not in (None, '') else None,
+                    last_delta=float(last_delta) if last_delta not in (None, '') else None,
+                    model_delta=float(model_delta) if model_delta not in (None, '') else None,
                     minutes_to_expiration=int(minutes_to_expiration) if minutes_to_expiration not in (None, '') else None,
-                )
+                    distance_to_stop_pct=float(distance_to_stop_pct) if distance_to_stop_pct not in (None, '') else None,
+                    implied_volatility=float(implied_volatility) if implied_volatility not in (None, '') else None,
+                ))
             logger.info(f"Loaded {len(self.position_initial_state_map)} target delta entries from cache")
         except Exception as e:
-            logger.warning(f"Could not load cached target deltas: {e}")
+            logger.warning(f"Could not load cached position initial states: {e}")
 
     def find_low_limit_buy_trade(self, option, open_buy_trades) -> Trade | None:
         for open_buy_trade in open_buy_trades:
@@ -81,6 +99,15 @@ class PositionsManager:
 
         current_con_ids = {p.contract.conId for p in positions}
         self.done_contract_ids &= current_con_ids
+
+        now_nyc = datetime.now(new_york_timezone)
+        for key, entries in list(self.position_initial_state_map.items()):
+            expiry_date = datetime.strptime(entries[0].expiry, '%Y%m%d').date()
+            expiry_datetime = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
+            if expiry_datetime < now_nyc:
+                for entry in entries:
+                    self._log_close_event(entry)
+                del self.position_initial_state_map[key]
 
         for position in positions:
             write_heartbeat()
@@ -122,7 +149,9 @@ class PositionsManager:
         if trade.order.action.upper() == 'BUY':
             self.done_contract_ids.add(trade.contract.conId)
             c = trade.contract
-            self.position_initial_state_map.pop((c.strike, c.right, c.lastTradeDateOrContractMonth), None)
+            for entry in self.position_initial_state_map.pop(c.conId, []):
+                entry.in_the_money = trade.order.lmtPrice > 0.1
+                self._log_close_event(entry)
         if not position_initial_state:
             logger.error(f"Could not find target delta entry for order ID {trade.order.orderId}, here is what we have:")
             for order_id, entry in self.trading_bot.req_id_to_order_metadata.items():
@@ -131,26 +160,33 @@ class PositionsManager:
             opportunity_explorer = OpportunityExplorer()
             opportunity_explorer.notify_margin_lock_resolution_attempted()
 
+    def _log_close_event(self, position_initial_state: PositionInitialState):
+        csv_path = 'cache/close_events.csv'
+        write_header = not os.path.exists(csv_path)
+        with open(csv_path, 'a', newline='') as f:
+            writer = csv.writer(f)
+            if write_header:
+                writer.writerow([
+                    'datetime', 'right', 'strike', 'expiration',
+                    'estimated_sell_price', 'stop_loss_per_option',
+                    'target_delta', 'bid_delta', 'ask_delta', 'last_delta', 'model_delta',
+                    'minutes_to_expiration', 'quantity', 'implied_volatility', 'distance_to_stop_pct',
+                    'in_the_money',
+                ])
+            writer.writerow([
+                datetime.now().isoformat(), position_initial_state.right, position_initial_state.strike,
+                position_initial_state.expiry,
+                position_initial_state.estimated_sell_price, position_initial_state.stop_loss_per_option,
+                position_initial_state.target_delta, position_initial_state.bid_delta,
+                position_initial_state.ask_delta, position_initial_state.last_delta,
+                position_initial_state.model_delta,
+                position_initial_state.minutes_to_expiration, position_initial_state.quantity,
+                position_initial_state.implied_volatility, position_initial_state.distance_to_stop_pct,
+                position_initial_state.in_the_money,
+            ])
+
     def update_position_entry(self, position_initial_state: PositionInitialState, trade):
         c = trade.contract
-        key = (c.strike, c.right, c.lastTradeDateOrContractMonth)
-        new_qty = trade.order.totalQuantity
-        target_delta = position_initial_state.target_delta
-        initial_delta = position_initial_state.initial_delta
-        minutes_to_expiration = position_initial_state.minutes_to_expiration
-        existing = self.position_initial_state_map.get(key)
-        if existing:
-            total_qty = existing.quantity + new_qty
-            if total_qty == 0:
-                return
-            avg_delta = (existing.target_delta * existing.quantity + target_delta * new_qty) / total_qty
-            self.position_initial_state_map[key] = PositionInitialState(
-                target_delta=avg_delta, quantity=total_qty,
-                initial_delta=existing.initial_delta,
-                minutes_to_expiration=existing.minutes_to_expiration,
-            )
-        else:
-            self.position_initial_state_map[key] = PositionInitialState(
-                target_delta=target_delta, quantity=new_qty,
-                initial_delta=initial_delta, minutes_to_expiration=minutes_to_expiration,
-            )
+        key = c.conId
+        position_initial_state.quantity = trade.order.totalQuantity
+        self.position_initial_state_map.setdefault(key, []).append(position_initial_state)

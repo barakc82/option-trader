@@ -16,9 +16,16 @@ export interface Position {
     strike: number;
     quantity: number;
     date: string;
+    estimated_sell_price: string;
+    stop_loss_per_option: string;
     target_delta: string;
-    delta: string;
+    bid_delta: string;
+    ask_delta: string;
+    last_delta: string;
+    model_delta: string;
     minutes_to_expiration: number | string;
+    distance_to_stop_pct: string;
+    implied_volatility: string;
   }
 
   export interface Trade {

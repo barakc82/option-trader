@@ -179,9 +179,15 @@ class OpportunityExplorer:
 
         await self.cancel_all_buy_trades(open_trades, call_option)
 
+        bid_delta, ask_delta, last_delta, model_delta = get_individual_deltas(call_option.ticker)
         position_initial_state = PositionInitialState(
-            target_delta=target_delta, initial_delta=get_delta_for_sell(call_option.ticker),
-            minutes_to_expiration=self.get_minutes_to_expiration(call_option)
+            strike=call_option.strike, right=call_option.right, expiry=call_option.lastTradeDateOrContractMonth,
+            estimated_sell_price=estimated_sell_price, stop_loss_per_option=stop_loss_per_option,
+            target_delta=target_delta,
+            bid_delta=bid_delta, ask_delta=ask_delta, last_delta=last_delta, model_delta=model_delta,
+            minutes_to_expiration=self.get_minutes_to_expiration(call_option),
+            implied_volatility=self.market_data_fetcher.get_cached_spx_implied_volatility('C'),
+            distance_to_stop_pct=self.get_distance_to_stop_pct(call_option, estimated_sell_price, stop_loss_per_option),
         )
 
         sell_option_result = await self.try_to_sell(call_option, 2, position_initial_state)
@@ -274,6 +280,13 @@ class OpportunityExplorer:
         expiry_datetime = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
         return round((expiry_datetime - datetime.now(new_york_timezone)).total_seconds() / 60)
 
+    def get_distance_to_stop_pct(self, option, estimated_sell_price, stop_loss_per_option):
+        indices_difference = self.market_data_fetcher.calculate_spx_es_difference()
+        spot_price = self.market_data_fetcher.get_spx_price() if is_regular_hours() else self.market_data_fetcher.get_es_price() + indices_difference
+        r = self.market_data_fetcher.get_cached_risk_free_rate()
+        raw_stop_loss = estimated_sell_price + stop_loss_per_option
+        return calculate_distance_to_stop_pct(option, option.ticker, raw_stop_loss, spot_price, r)
+
     async def try_to_sell(self, option, quantity, position_initial_state: PositionInitialState):
         target_delta = position_initial_state.target_delta
         delta = get_delta_for_sell(option.ticker)
@@ -332,9 +345,15 @@ class OpportunityExplorer:
 
         await self.cancel_all_buy_trades(open_trades, put_option)
 
+        bid_delta, ask_delta, last_delta, model_delta = get_individual_deltas(put_option.ticker)
         position_initial_state = PositionInitialState(
-            target_delta=target_delta, initial_delta=get_delta_for_sell(put_option.ticker),
-            minutes_to_expiration=self.get_minutes_to_expiration(put_option)
+            strike=put_option.strike, right=put_option.right, expiry=put_option.lastTradeDateOrContractMonth,
+            estimated_sell_price=estimated_sell_price, stop_loss_per_option=stop_loss_per_option,
+            target_delta=target_delta,
+            bid_delta=bid_delta, ask_delta=ask_delta, last_delta=last_delta, model_delta=model_delta,
+            minutes_to_expiration=self.get_minutes_to_expiration(put_option),
+            implied_volatility=self.market_data_fetcher.get_cached_spx_implied_volatility('P'),
+            distance_to_stop_pct=self.get_distance_to_stop_pct(put_option, estimated_sell_price, stop_loss_per_option),
         )
 
         quantity = min(max_options_for_market_drop, 2)

@@ -42,10 +42,21 @@ class SellOptionResult:
 
 @dataclass
 class PositionInitialState:
+    strike: float
+    right: str
+    expiry: str
+    estimated_sell_price: float
+    stop_loss_per_option: float
     target_delta: float
-    initial_delta: float | None = None
+    bid_delta: float | None = None
+    ask_delta: float | None = None
+    last_delta: float | None = None
+    model_delta: float | None = None
     minutes_to_expiration: int | None = None
     quantity: int = 0
+    implied_volatility: float | None = None
+    distance_to_stop_pct: float | None = None
+    in_the_money: int = 0
 
 
 def get_time_passed_since_submission(trade: Trade) -> timedelta | Any:
@@ -96,6 +107,14 @@ def get_delta(ticker):
     if not deltas_to_consider:
         return None
     return max(deltas_to_consider)
+
+
+def get_individual_deltas(ticker):
+    bid_delta = abs(ticker.bidGreeks.delta) if ticker.bidGreeks and ticker.bidGreeks.delta is not None else None
+    ask_delta = abs(ticker.askGreeks.delta) if ticker.askGreeks and ticker.askGreeks.delta is not None else None
+    last_delta = abs(ticker.lastGreeks.delta) if ticker.lastGreeks and ticker.lastGreeks.delta is not None else None
+    model_delta = abs(ticker.modelGreeks.delta) if ticker.modelGreeks and ticker.modelGreeks.delta is not None else None
+    return bid_delta, ask_delta, last_delta, model_delta
 
 
 def get_delta_for_sell(ticker):
@@ -213,3 +232,11 @@ def calculate_distance_to_stop(option, ticker, stop_loss, spot_price, r):
 
     S_star = (S_low + S_high) / 2
     return spot_price - S_star if right == 'P' else S_star - spot_price
+
+
+def calculate_distance_to_stop_pct(option, ticker, stop_loss, spot_price, r):
+    """Return distance to the stop-loss level as a percentage of spot_price, instead of points."""
+    distance = calculate_distance_to_stop(option, ticker, stop_loss, spot_price, r)
+    if math.isnan(distance) or spot_price == 0:
+        return math.nan
+    return distance / spot_price * 100
