@@ -150,7 +150,7 @@ class PositionsManager:
             self.done_contract_ids.add(trade.contract.conId)
             c = trade.contract
             for entry in self.position_initial_state_map.pop(c.conId, []):
-                entry.in_the_money = trade.order.lmtPrice > 0.1
+                entry.stop_loss_activated = trade.order.lmtPrice > 0.1
                 self._log_close_event(entry)
         if not position_initial_state:
             logger.error(f"Could not find target delta entry for order ID {trade.order.orderId}, here is what we have:")
@@ -171,7 +171,7 @@ class PositionsManager:
                     'estimated_sell_price', 'stop_loss_per_option',
                     'target_delta', 'bid_delta', 'ask_delta', 'last_delta', 'model_delta',
                     'minutes_to_expiration', 'quantity', 'implied_volatility', 'distance_to_stop_pct',
-                    'in_the_money',
+                    'stop_loss_activated',
                 ])
             writer.writerow([
                 datetime.now().isoformat(), position_initial_state.right, position_initial_state.strike,
@@ -182,7 +182,7 @@ class PositionsManager:
                 position_initial_state.model_delta,
                 position_initial_state.minutes_to_expiration, position_initial_state.quantity,
                 position_initial_state.implied_volatility, position_initial_state.distance_to_stop_pct,
-                position_initial_state.in_the_money,
+                position_initial_state.stop_loss_activated,
             ])
 
     def update_position_entry(self, position_initial_state: PositionInitialState, trade):

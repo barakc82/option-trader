@@ -153,7 +153,10 @@ class OptionDataFetcher:
                                 exchange='CBOE', currency='USD', tradingClass='SPXW')
                 all_options.append(option)
 
-            options = await self.mdf.qualify(all_options)
+            options = []
+            for i in range(0, len(all_options), 50):
+                batch = all_options[i:i + 50]
+                options.extend(await self.mdf.qualify(batch))
             put_strikes = [o.strike for o in options if o.right == 'P']
             call_strikes = [o.strike for o in options if o.right == 'C']
 

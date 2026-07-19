@@ -214,7 +214,8 @@ class StrikeFinder:
         
         # Check if we need to fetch more blocks based on liquidity/price
         if right == 'C':
-            if extract_ask(options_block[-1].ticker) == 0.05 and h_idx + 1 < num_strikes:
+            logger.info(f"barak: the ask value of the first option is: {extract_ask(options_block[0].ticker)}, {get_option_name(options_block[-1])}")
+            if extract_ask(options_block[0].ticker) == 0.05 and h_idx + 1 < num_strikes:
                 available_cheap = options_block[-1]
                 logger.info(f"Fetching {right} option block (edge): {relevant_strikes[h_idx+1]} -> {relevant_strikes[num_strikes-1]}, indices: {h_idx+1} -> {num_strikes-1}")
                 options_block = await self.fetch_options_block(h_idx + 1, num_strikes - 1, strike_to_option, relevant_strikes)

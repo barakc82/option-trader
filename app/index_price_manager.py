@@ -72,7 +72,7 @@ class IndexPriceManager:
     async def fetch_es_future(self):
         today_str = datetime.now().strftime('%Y%m%d')
         if not self.es or self.es.lastTradeDateOrContractMonth < today_str:
-            es_incomplete = Future('ES', '20260918', exchange='CME', currency='USD')
+            es_incomplete = Future('ES', exchange='CME', currency='USD')
             logger.info(f"Requesting the details of the closest ES future for {today_str}")
             es_details = await self.ib.reqContractDetailsAsync(es_incomplete)
             contracts = [es_detail.contract for es_detail in es_details if es_detail.contract.lastTradeDateOrContractMonth >= today_str]

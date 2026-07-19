@@ -56,7 +56,7 @@ class PositionInitialState:
     quantity: int = 0
     implied_volatility: float | None = None
     distance_to_stop_pct: float | None = None
-    in_the_money: int = 0
+    stop_loss_activated: int = 0
 
 
 def get_time_passed_since_submission(trade: Trade) -> timedelta | Any:
