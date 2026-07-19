@@ -137,7 +137,16 @@ class OptionSafeguard:
         open_trades = self.trading_bot.get_open_trades()
 
         if positions:
-            await asyncio.gather(*(self.handle_current_risk(position, open_trades) for position in positions))
+            results = await asyncio.gather(
+                *(self.handle_current_risk(position, open_trades) for position in positions),
+                return_exceptions=True,
+            )
+            for position, result in zip(positions, results):
+                if isinstance(result, Exception):
+                    logger.exception(
+                        f"OptionSafeguard: Error handling risk for {get_option_name(position.contract)}:",
+                        exc_info=result,
+                    )
 
     async def _ensure_ticker(self, option) -> int:
         """Ensure the option has a valid, non-hollow ticker, fetching it if needed."""
