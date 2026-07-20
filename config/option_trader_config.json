@@ -7,5 +7,5 @@
     "alternative_valuation": "SPY",
     "spreadsheet_id": "1u2uLtVFnRCimMfymDMYygqg2zk2eK2TrQ4Bl18j8Uwc",
     "iv_history_max_entries": 20000,
-    "number_of_samples_per_day": 1
+    "number_of_samples_per_day": 2
 }

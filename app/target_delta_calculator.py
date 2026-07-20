@@ -98,7 +98,7 @@ class TargetDeltaCalculator:
         max_loss_per_option = 0
         if self.last_target_delta_calculation_time[right] < self.market_data_fetcher.options_dump_time:
             max_loss_per_option = self.max_loss_calculator.calculate_max_loss(right)
-            logger.info(f"Max loss ({right}): {max_loss:.2f}")
+            logger.info(f"Max loss ({right}): {max_loss_per_option:.2f}")
             target_delta, _ = self.calculate_max_loss_based_target_delta(right, max_loss_per_option)
             self.last_target_delta[right] = target_delta
 

@@ -2,7 +2,9 @@ import asyncio
 import json
 import os
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
+
+from ib_insync import Option
 
 from utilities.utils import *
 from utilities.ib_utils import *
@@ -12,6 +14,7 @@ from .target_delta_calculator import TargetDeltaCalculator
 from .strike_finder import StrikeFinder
 from .opportunity_explorer import OpportunityExplorer
 from .market_data_fetcher import MarketDataFetcher
+from .positions_manager import PositionsManager
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +124,86 @@ class OptionSampler:
             f"from {start_time} to {expiration_time}")
         logger.info(self.sample_times)
 
+    async def check_stop_loss_activated(self, sample: PositionInitialState) -> bool:
+        """Page historical BID_ASK ticks for the sample's expiration day and check whether
+        the ask ever reached/exceeded the stop-loss level. To avoid pulling the full day of
+        ticks, first scan cheap 5-minute midpoint bars; only for bars whose midpoint exceeds
+        10% of the stop-loss level do we pull ticks, and adjacent/overlapping candidate bars
+        are merged into contiguous periods first so the same ticks aren't fetched twice."""
+        option = Option(
+            symbol='SPX', lastTradeDateOrContractMonth=sample.expiry, strike=sample.strike,
+            right=sample.right, exchange='CBOE', currency='USD', tradingClass='SPXW',
+        )
+        qualified = await self.market_data_fetcher.qualify([option])
+        if not qualified:
+            logger.error(f"Could not qualify {get_option_name(option)} to check stop loss activation")
+            return False
+        option = qualified[0]
+
+        stop_loss_limit = sample.estimated_sell_price + sample.stop_loss_per_option
+        expiry_date = datetime.strptime(sample.expiry, '%Y%m%d').date()
+        day_end = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
+
+        minutes_to_expiration = sample.minutes_to_expiration or 0
+        duration_seconds = max(int(minutes_to_expiration * 60), 60)
+
+        bars = await self.market_data_fetcher.ib.reqHistoricalDataAsync(
+            option,
+            endDateTime=day_end,
+            durationStr=f"{duration_seconds} S",
+            barSizeSetting='5 mins',
+            whatToShow='MIDPOINT',
+            useRTH=False,
+        )
+
+        candidate_threshold = 0.1 * stop_loss_limit
+        candidate_bars = [bar for bar in bars if bar.high > candidate_threshold]
+        if any(bar.high >= stop_loss_limit for bar in candidate_bars):
+            return True
+
+        # Map candidate bars to the contiguous [start, end) periods that need a tick-by-tick
+        # check, merging adjacent/overlapping bars so the same ticks aren't fetched twice.
+        periods = []
+        for bar in candidate_bars:
+            bar_start = bar.date
+            if bar_start.tzinfo is None:
+                bar_start = new_york_timezone.localize(bar_start)
+            bar_end = bar_start + timedelta(minutes=5)
+
+            if periods and bar_start <= periods[-1][1]:
+                periods[-1] = (periods[-1][0], max(periods[-1][1], bar_end))
+            else:
+                periods.append((bar_start, bar_end))
+
+        for period_start, period_end in periods:
+            cursor = period_start
+            last_time = None
+
+            while cursor < period_end:
+                raw_ticks = await self.market_data_fetcher.ib.reqHistoricalTicksAsync(
+                    option,
+                    startDateTime=cursor,
+                    endDateTime='',
+                    numberOfTicks=1000,
+                    whatToShow='BID_ASK',
+                    useRth=False,
+                )
+                if not raw_ticks:
+                    break
+
+                new_ticks = [t for t in raw_ticks if (last_time is None or t.time > last_time) and t.time < period_end]
+                if any(tick.priceAsk >= stop_loss_limit for tick in new_ticks):
+                    return True
+
+                last_time = raw_ticks[-1].time
+                if len(raw_ticks) < 1000 or last_time >= period_end:
+                    break
+
+                cursor = last_time
+                await asyncio.sleep(1)
+
+        return False
+
     async def run(self):
         logger.info("Starting sampling loop...")
         while True:
@@ -130,6 +213,18 @@ class OptionSampler:
                 now_nyc = datetime.now(new_york_timezone)
                 cal = get_nyse_calendar()
                 is_trading_day = cal.is_session(now_nyc.date().strftime('%Y-%m-%d'))
+
+                if is_night_break():
+                    remaining_samples = []
+                    for sample in self.collected_samples:
+                        expiry_date = datetime.strptime(sample.expiry, '%Y%m%d').date()
+                        expiry_datetime = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
+                        if expiry_datetime < now_nyc:
+                            sample.stop_loss_activated = int(await self.check_stop_loss_activated(sample))
+                            PositionsManager()._log_close_event(sample)
+                        else:
+                            remaining_samples.append(sample)
+                    self.collected_samples = remaining_samples
 
                 if not self.sample_times:
                     self.build_schedule(now_nyc)
