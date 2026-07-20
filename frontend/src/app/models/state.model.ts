@@ -85,6 +85,7 @@ export interface Position {
     call_options_above_minimal_sell_price: boolean;
     positions: Position[];
     position_initial_states: PositionInitialState[];
+    random_states: PositionInitialState[];
     trades: Trade[];
     fills: Fill[];
     spx_premium: number;

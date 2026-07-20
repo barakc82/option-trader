@@ -21,6 +21,7 @@ from .trading_bot import TradingBot
 from .opportunity_explorer import OpportunityExplorer
 from .subscription_manager import SubscriptionManager
 from .positions_manager import PositionsManager
+from .option_sampler import OptionSampler
 
 
 TEMP_PATH = 'shared/state_temp.json'
@@ -221,6 +222,26 @@ class StateUpdater:
 
         state['positions'] = sorted(state_positions, key=lambda x: (x['right'], x['date'], x['strike']))
         state['position_initial_states'] = sorted(position_initial_states, key=lambda x: (x['right'], x['date'], x['strike']))
+
+        # 3b. Gather randomly collected samples from OptionSampler
+        random_states = []
+        for sample in OptionSampler().collected_samples:
+            sample_date = datetime.strptime(sample.expiry, '%Y%m%d').strftime('%d/%m/%y')
+            random_states.append({
+                'right': sample.right, 'strike': sample.strike, 'quantity': sample.quantity,
+                'date': sample_date,
+                'estimated_sell_price': round(sample.estimated_sell_price, 3),
+                'stop_loss_per_option': round(sample.stop_loss_per_option, 3),
+                'target_delta': round(sample.target_delta, 3),
+                'bid_delta': round(sample.bid_delta, 3) if sample.bid_delta is not None else '',
+                'ask_delta': round(sample.ask_delta, 3) if sample.ask_delta is not None else '',
+                'last_delta': round(sample.last_delta, 3) if sample.last_delta is not None else '',
+                'model_delta': round(sample.model_delta, 3) if sample.model_delta is not None else '',
+                'minutes_to_expiration': sample.minutes_to_expiration if sample.minutes_to_expiration is not None else '',
+                'distance_to_stop_pct': round(sample.distance_to_stop_pct, 2) if sample.distance_to_stop_pct is not None else '',
+                'implied_volatility': round(sample.implied_volatility, 3) if sample.implied_volatility is not None else '',
+            })
+        state['random_states'] = sorted(random_states, key=lambda x: (x['right'], x['date'], x['strike']))
 
         # 4. Process open trades
         state_trades = []

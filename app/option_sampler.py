@@ -38,7 +38,52 @@ class OptionSampler:
             self.number_of_samples_per_day = DEFAULT_NUMBER_OF_SAMPLES_PER_DAY
             self.schedule_date = None
             self.sample_times = []
+            self.collected_samples = []
+            self._load_cached_collected_samples()
             self._initialized = True
+
+    def _load_cached_collected_samples(self):
+        try:
+            with open(CACHED_JSON_PATH, 'r') as f:
+                state = json.load(f)
+            for sample in state.get('random_states', []):
+                date = sample.get('date')
+                strike = sample.get('strike')
+                right = sample.get('right')
+                if not date or strike is None or not right:
+                    continue
+
+                expiry = datetime.strptime(date, "%d/%m/%y").strftime("%Y%m%d")
+
+                target_delta = sample.get('target_delta')
+                quantity = sample.get('quantity')
+                estimated_sell_price = sample.get('estimated_sell_price')
+                stop_loss_per_option = sample.get('stop_loss_per_option')
+                bid_delta = sample.get('bid_delta')
+                ask_delta = sample.get('ask_delta')
+                last_delta = sample.get('last_delta')
+                model_delta = sample.get('model_delta')
+                minutes_to_expiration = sample.get('minutes_to_expiration')
+                distance_to_stop_pct = sample.get('distance_to_stop_pct')
+                implied_volatility = sample.get('implied_volatility')
+                self.collected_samples.append(PositionInitialState(
+                    is_executed=0,
+                    strike=float(strike), right=right, expiry=expiry,
+                    target_delta=float(target_delta) if target_delta not in (None, '') else 0.0,
+                    quantity=int(quantity) if quantity not in (None, '') else 0,
+                    estimated_sell_price=float(estimated_sell_price) if estimated_sell_price not in (None, '') else 0.0,
+                    stop_loss_per_option=float(stop_loss_per_option) if stop_loss_per_option not in (None, '') else 0.0,
+                    bid_delta=float(bid_delta) if bid_delta not in (None, '') else None,
+                    ask_delta=float(ask_delta) if ask_delta not in (None, '') else None,
+                    last_delta=float(last_delta) if last_delta not in (None, '') else None,
+                    model_delta=float(model_delta) if model_delta not in (None, '') else None,
+                    minutes_to_expiration=int(minutes_to_expiration) if minutes_to_expiration not in (None, '') else None,
+                    distance_to_stop_pct=float(distance_to_stop_pct) if distance_to_stop_pct not in (None, '') else None,
+                    implied_volatility=float(implied_volatility) if implied_volatility not in (None, '') else None,
+                ))
+            logger.info(f"Loaded {len(self.collected_samples)} random samples from cache")
+        except Exception as e:
+            logger.warning(f"Could not load cached random samples: {e}")
 
     def load_config(self):
         """Reads configuration from OPTION_TRADER_CONFIG_PATH."""
@@ -64,6 +109,9 @@ class OptionSampler:
         period_length = (expiration_time - start_time) / self.number_of_samples_per_day
         self.sample_times = [start_time + i * period_length for i in range(self.number_of_samples_per_day)]
         self.schedule_date = now_nyc.date()
+
+        number_of_collected_samples = len(self.collected_samples)
+        self.sample_times = self.sample_times[number_of_collected_samples:]
 
         if not self.sample_times:
             return
@@ -91,6 +139,7 @@ class OptionSampler:
                     if is_market_open():
                         self.collect_sample()
 
+
             except Exception:
                 logger.exception("OptionSampler: Loop error:")
 
@@ -109,7 +158,7 @@ class OptionSampler:
 
         estimated_sell_price = self.opportunity_explorer.estimate_sell_price(option)
         bid_delta, ask_delta, last_delta, model_delta = get_individual_deltas(option.ticker)
-        position_initial_state = PositionInitialState(
+        random_sample = PositionInitialState(
             is_executed=0,
             strike=option.strike, right=option.right, expiry=option.lastTradeDateOrContractMonth,
             estimated_sell_price=estimated_sell_price, stop_loss_per_option=stop_loss_per_option,
@@ -119,3 +168,5 @@ class OptionSampler:
             implied_volatility=self.market_data_fetcher.get_cached_spx_implied_volatility(right),
             distance_to_stop_pct=get_distance_to_stop_pct(option, estimated_sell_price, stop_loss_per_option, self.market_data_fetcher),
         )
+
+        self.collected_samples.append(random_sample)
