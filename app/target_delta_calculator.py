@@ -53,7 +53,7 @@ class TargetDeltaCalculator:
         return f"cache/{name}_iv_log.txt"
 
     def load_config(self):
-        config_path = "config/option_trader_config.json"
+        config_path = OPTION_TRADER_CONFIG_PATH
         try:
             if os.path.exists(config_path):
                 with open(config_path, "r") as f:
@@ -95,8 +95,11 @@ class TargetDeltaCalculator:
     async def calculate_target_delta(self, right):
         self.load_config()
 
+        max_loss_per_option = 0
         if self.last_target_delta_calculation_time[right] < self.market_data_fetcher.options_dump_time:
-            target_delta, _ = self.calculate_max_loss_based_target_delta(right)
+            max_loss_per_option = self.max_loss_calculator.calculate_max_loss(right)
+            logger.info(f"Max loss ({right}): {max_loss:.2f}")
+            target_delta, _ = self.calculate_max_loss_based_target_delta(right, max_loss_per_option)
             self.last_target_delta[right] = target_delta
 
         if time.time() - self.last_target_delta_calculation_time[right] < 60:
@@ -132,21 +135,20 @@ class TargetDeltaCalculator:
         target_delta_std = (AVERAGE_TARGET_DELTA[right] - MIN_TARGET_DELTA[right]) / 2
         iv_factor = target_delta_std * z_score
         iv_factor = 0
-        target_delta, max_loss_factor = self.calculate_max_loss_based_target_delta(right)
+        max_loss_per_option = max_loss_per_option if max_loss_per_option else self.max_loss_calculator.calculate_max_loss(right)
+        logger.info(f"Max loss ({right}): {max_loss_per_option:.2f}")
+        target_delta, max_loss_factor = self.calculate_max_loss_based_target_delta(right, max_loss_per_option)
         target_delta += iv_factor
         if is_reduced_safe_cushion_time() or is_switched_to_overnight_trading():
             target_delta *= 0.875
         target_delta = max(target_delta, 0.003)
         logger.info(f"Target delta ({right}): {target_delta:.4f}, iv factor: {iv_factor:.4f}, max loss factor: {max_loss_factor:.4f}")
-        
         self.last_target_delta_calculation_time[right] = time.time()
         self.last_target_delta[right] = target_delta
         self.last_target_delta_increase[right] = iv_factor
         return target_delta
 
-    def calculate_max_loss_based_target_delta(self, right) -> tuple[float, float]:
-        max_loss = self.max_loss_calculator.calculate_max_loss(right)
-        logger.info(f"Max loss ({right}): {max_loss:.2f}")
+    def calculate_max_loss_based_target_delta(self, right, max_loss_per_option) -> tuple[float, float]:
         max_loss_factor = 0.00315 if right == 'C' else 0.0034
-        target_delta = max_loss * max_loss_factor
+        target_delta = max_loss_per_option * max_loss_factor
         return target_delta, max_loss_factor

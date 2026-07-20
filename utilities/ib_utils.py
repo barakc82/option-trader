@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import Any
 from ib_insync import Trade
 
-from utilities.utils import get_option_name, is_after_hours, new_york_timezone, REGULAR_HOURS_END_TIME
+from utilities.utils import get_option_name, is_after_hours, is_regular_hours, new_york_timezone, REGULAR_HOURS_END_TIME
 from utilities.tws_connection import TwsConnection
 
 
@@ -42,6 +42,7 @@ class SellOptionResult:
 
 @dataclass
 class PositionInitialState:
+    is_executed: int
     strike: float
     right: str
     expiry: str
@@ -240,3 +241,17 @@ def calculate_distance_to_stop_pct(option, ticker, stop_loss, spot_price, r):
     if math.isnan(distance) or spot_price == 0:
         return math.nan
     return distance / spot_price * 100
+
+
+def get_minutes_to_expiration(option):
+    expiry_date = datetime.strptime(option.lastTradeDateOrContractMonth, '%Y%m%d').date()
+    expiry_datetime = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
+    return round((expiry_datetime - datetime.now(new_york_timezone)).total_seconds() / 60)
+
+
+def get_distance_to_stop_pct(option, estimated_sell_price, stop_loss_per_option, market_data_fetcher):
+    indices_difference = market_data_fetcher.calculate_spx_es_difference()
+    spot_price = market_data_fetcher.get_spx_price() if is_regular_hours() else market_data_fetcher.get_es_price() + indices_difference
+    r = market_data_fetcher.get_cached_risk_free_rate()
+    raw_stop_loss = estimated_sell_price + stop_loss_per_option
+    return calculate_distance_to_stop_pct(option, option.ticker, raw_stop_loss, spot_price, r)

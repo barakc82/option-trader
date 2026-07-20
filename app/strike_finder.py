@@ -105,11 +105,6 @@ class StrikeFinder:
             if delta is None or math.isnan(delta): continue
             delta = abs(delta)
 
-            # Liquidity check for specific strikes
-            if option.strike % 100 in [5, 15, 35, 45, 55, 65, 85, 95]:
-                if (target_delta * 0.875) < delta < target_delta:
-                    continue
-
             if highest_delta_under_target < delta < target_delta:
                 highest_delta_under_target = delta
                 current_candidate = option
@@ -255,3 +250,104 @@ class StrikeFinder:
             return None
             
         return available_cheap
+
+    def get_cached_low_delta_option(self, target_delta, right):
+        options_block = self.middle_fetched_block[right]
+        if not options_block:
+            return None
+
+        strike_to_option = {option.strike: option for option in options_block}
+        strikes = sorted(strike_to_option.keys(), reverse=(right == 'C'))
+
+        number_of_strikes = len(strikes)
+        middle_idx = number_of_strikes // 2
+        lower_idx = max(middle_idx - OPTIONS_BLOCK_LOWER_PART_SIZE, 0)
+        higher_idx = min(middle_idx + OPTIONS_BLOCK_HIGHER_PART_SIZE, number_of_strikes - 1)
+
+        lowest_delta, highest_delta = 1.0, 0.0
+        highest_delta_option = None
+
+        for option in options_block:
+            if not hasattr(option, "ticker"):
+                logger.error(f"Option {get_option_name(option)} has no ticker field")
+                ticker = self.market_data_fetcher.get_ticker(option)
+                option.ticker = ticker
+            if option.ticker is None:
+                logger.error(f"Option {get_option_name(option)} has an empty ticker field")
+                continue
+            delta = get_delta_for_sell(option.ticker)
+            if delta is None or math.isnan(delta): continue
+            delta = abs(delta)
+            if delta < lowest_delta: lowest_delta = delta
+            if delta > highest_delta:
+                highest_delta = delta
+                highest_delta_option = option
+
+        if lowest_delta > highest_delta:
+            logger.error(f"No delta data available for {right} options")
+            return None
+
+        current_candidate = None
+        if lowest_delta > target_delta:
+            current_candidate = options_block[0] if right == 'P' else options_block[-1]
+            logger.info(f"Initial block deltas too high for {right}. Lowest: {lowest_delta:.3f}")
+            if right == 'P':
+                options_block = self.edge_fetched_block[right]
+            else:
+                if higher_idx + 1 < number_of_strikes:
+                    options_block = self.edge_fetched_block[right]
+
+        elif highest_delta < target_delta:
+            current_candidate = highest_delta_option
+            logger.info(f"Initial block deltas too low for {right}. Highest: {highest_delta:.3f}")
+            options_block = self.edge_fetched_block[right]
+
+        if not options_block:
+            return None
+
+        highest_delta_under_target = 0
+        for option in options_block:
+            if not hasattr(option, "ticker"):
+                logger.error(f"Option {get_option_name(option)} has no ticker field")
+                ticker = self.market_data_fetcher.get_ticker(option)
+                option.ticker = ticker
+            if option.ticker is None:
+                logger.error(f"Option {get_option_name(option)} has an empty ticker field")
+                continue
+            delta = get_delta_for_sell(option.ticker)
+            if delta is None or math.isnan(delta): continue
+            delta = abs(delta)
+
+            if highest_delta_under_target < delta < target_delta:
+                highest_delta_under_target = delta
+                current_candidate = option
+
+        if not current_candidate:
+            logger.error(f"No {right} option candidate found")
+            return None
+
+        final_delta = get_delta_for_sell(current_candidate.ticker)
+        if final_delta is None:
+            logger.error(f"No delta data available for the candidate option {get_option_name(current_candidate)}")
+            return None
+
+        if current_candidate == options_block[0] and final_delta < 0.0001:
+            return None
+
+        if final_delta > target_delta:
+            logger.error(
+                f"The selected option ({get_option_name(current_candidate)}) has a delta of {final_delta:.3f}, which is higher than the target delta ({target_delta:.3f}), thus no option selected")
+            return None
+
+        log_message = f"Selected option: {get_option_name(current_candidate)}, delta: {final_delta:.3f}, target: {target_delta:.3f}"
+        if current_candidate.ticker.lastGreeks and current_candidate.ticker.lastGreeks.delta:
+            log_message += f", last delta: {current_candidate.ticker.lastGreeks.delta:.3f}"
+        if current_candidate.ticker.modelGreeks and current_candidate.ticker.modelGreeks.delta:
+            log_message += f", model delta: {current_candidate.ticker.modelGreeks.delta:.3f}"
+        if current_candidate.ticker.bidGreeks and current_candidate.ticker.bidGreeks.delta:
+            log_message += f", bid delta: {current_candidate.ticker.bidGreeks.delta:.3f}"
+        if current_candidate.ticker.askGreeks and current_candidate.ticker.askGreeks.delta:
+            log_message += f", ask delta: {current_candidate.ticker.askGreeks.delta:.3f}"
+        log_message += f", bid: {current_candidate.ticker.bid}, ask: {current_candidate.ticker.ask}"
+        logger.info(log_message)
+        return current_candidate

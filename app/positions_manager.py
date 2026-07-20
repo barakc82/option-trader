@@ -53,6 +53,7 @@ class PositionsManager:
                 expiry = datetime.strptime(date, "%d/%m/%y").strftime("%Y%m%d")
                 key = int(con_id)
 
+                is_executed = pos.get('is_executed')
                 target_delta = pos.get('target_delta')
                 quantity = pos.get('quantity')
                 estimated_sell_price = pos.get('estimated_sell_price')
@@ -65,6 +66,7 @@ class PositionsManager:
                 distance_to_stop_pct = pos.get('distance_to_stop_pct')
                 implied_volatility = pos.get('implied_volatility')
                 self.position_initial_state_map.setdefault(key, []).append(PositionInitialState(
+                    is_executed=int(is_executed) if is_executed not in (None, '') else 1,
                     strike=float(strike), right=right, expiry=expiry,
                     target_delta=float(target_delta) if target_delta not in (None, '') else 0.0,
                     quantity=int(quantity) if quantity not in (None, '') else 0,
@@ -167,14 +169,15 @@ class PositionsManager:
             writer = csv.writer(f)
             if write_header:
                 writer.writerow([
-                    'datetime', 'right', 'strike', 'expiration',
+                    'datetime', 'is_executed', 'right', 'strike', 'expiration',
                     'estimated_sell_price', 'stop_loss_per_option',
                     'target_delta', 'bid_delta', 'ask_delta', 'last_delta', 'model_delta',
                     'minutes_to_expiration', 'quantity', 'implied_volatility', 'distance_to_stop_pct',
                     'stop_loss_activated',
                 ])
             writer.writerow([
-                datetime.now().isoformat(), position_initial_state.right, position_initial_state.strike,
+                datetime.now().isoformat(), position_initial_state.is_executed,
+                position_initial_state.right, position_initial_state.strike,
                 position_initial_state.expiry,
                 position_initial_state.estimated_sell_price, position_initial_state.stop_loss_per_option,
                 position_initial_state.target_delta, position_initial_state.bid_delta,

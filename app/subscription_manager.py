@@ -25,7 +25,8 @@ class SubscriptionManager:
 
     def __init__(self):
         if not self._initialized:
-            self.ib = ConnectionManager().ib
+            self.connection_manager = ConnectionManager()
+            self.ib = self.connection_manager.ib
             self.trading_bot = TradingBot()
             self.market_data_fetcher = MarketDataFetcher()
             
@@ -47,7 +48,7 @@ class SubscriptionManager:
                     await asyncio.sleep(0)
                     continue
 
-                if self.ib.isConnected():
+                if self.connection_manager.is_connected():
                     logger.info("Running subscription maintenance")
                     # 1. Maintain tickers for positions and open trades
                     await self.maintain_tickers()

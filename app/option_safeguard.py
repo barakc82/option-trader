@@ -119,7 +119,7 @@ class OptionSafeguard:
                 await asyncio.sleep(sleep_time)
 
     def load_config(self):
-        config_path = "config/option_trader_config.json"
+        config_path = OPTION_TRADER_CONFIG_PATH
         try:
             if os.path.exists(config_path):
                 with open(config_path, "r") as f:

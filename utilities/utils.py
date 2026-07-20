@@ -39,6 +39,7 @@ MY_ACCOUNT = 'U15897350'
 SHARED_JSON_PATH = 'shared/state.json'
 CACHED_JSON_PATH = 'cache/state.json'
 SUPERVISOR_JSON_PATH = 'shared/supervisor_state.json'
+OPTION_TRADER_CONFIG_PATH = 'config/option_trader_config.json'
 
 SUCCESS = 0
 ERROR = 1

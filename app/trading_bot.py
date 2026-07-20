@@ -181,7 +181,7 @@ class TradingBot:
         return result
 
 
-    async def calculate_limit(self, contract, bid, ask):
+    def calculate_limit(self, contract, bid, ask):
         assert not math.isnan(bid)
         assert not math.isnan(ask)
 
@@ -194,7 +194,7 @@ class TradingBot:
     async def sell(self, contract, quantity, order_metadata):
         ticker = contract.ticker
         assert ticker
-        limit = await self.calculate_limit(contract, ticker.bid, ticker.ask)
+        limit = self.calculate_limit(contract, ticker.bid, ticker.ask)
 
         order = LimitOrder('SELL', quantity, limit, account=MY_ACCOUNT)
         order.usePriceMgmtAlgo = False
@@ -230,7 +230,7 @@ class TradingBot:
             logger.info(f"Sell of {get_option_name(contract)} failed: bid={ticker.bid}, ask={ticker.ask}")
             return result
 
-        limit = await self.calculate_limit(contract, ticker.bid, ticker.ask)
+        limit = self.calculate_limit(contract, ticker.bid, ticker.ask)
         minimal_sell_price = self.calculate_minimal_sell_price(ticker.last, contract.lastTradeDateOrContractMonth)
         if limit < minimal_sell_price:
             logger.info(f"Sell of {get_option_name(contract)} limit ({limit}) < min price ({minimal_sell_price})")

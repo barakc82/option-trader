@@ -158,3 +158,6 @@ class ConnectionManager:
         if self.ib.isConnected():
             self.ib.disconnect()
             logger.info("Disconnected from IB.")
+
+    def is_connected(self):
+        return not self.is_connecting

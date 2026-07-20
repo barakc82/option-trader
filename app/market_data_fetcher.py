@@ -229,4 +229,8 @@ class MarketDataFetcher:
         return self.option_fetcher.last_implied_volatility[right]
 
     async def qualify(self, contracts):
-        return await self.ib.qualifyContractsAsync(*contracts)
+        try:
+            return await asyncio.wait_for(self.ib.qualifyContractsAsync(*contracts), timeout=30)
+        except asyncio.TimeoutError:
+            logger.error(f"Timeout while qualifying {len(contracts)} contract(s)")
+            raise

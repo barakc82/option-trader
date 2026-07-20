@@ -11,6 +11,7 @@ from .option_trader import OptionTrader
 from .option_safeguard import OptionSafeguard
 from .subscription_manager import SubscriptionManager
 from .state_updater import StateUpdater
+from .option_sampler import OptionSampler
 
 OPTION_TRADER_CLIENT_ID = 1
 
@@ -51,6 +52,7 @@ async def main():
     safeguard = OptionSafeguard()
     subscription_manager = SubscriptionManager()
     state_updater = StateUpdater()
+    option_sampler = OptionSampler()
 
     try:
         # Run everything concurrently under supervision
@@ -59,7 +61,8 @@ async def main():
             supervisor(trader.run, "OptionTrader"),
             supervisor(safeguard.run, "OptionSafeguard"),
             supervisor(subscription_manager.run, "SubscriptionManager"),
-            supervisor(state_updater.run, "StateUpdater")
+            supervisor(state_updater.run, "StateUpdater"),
+            supervisor(option_sampler.run, "OptionSampler")
         )
     except asyncio.CancelledError:
         logger.info("Tasks were cancelled during shutdown.")

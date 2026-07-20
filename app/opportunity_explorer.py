@@ -65,8 +65,8 @@ class OpportunityExplorer:
             self._initialized = True
 
     def load_config(self):
-        """Reads configuration from config/option_trader_config.json."""
-        config_path = "config/option_trader_config.json"
+        """Reads configuration from OPTION_TRADER_CONFIG_PATH."""
+        config_path = OPTION_TRADER_CONFIG_PATH
         try:
             if os.path.exists(config_path):
                 with open(config_path, "r") as f:
@@ -161,7 +161,7 @@ class OpportunityExplorer:
         if not call_option:
             return SellOptionResult()
 
-        estimated_sell_price = await self.estimate_sell_price(call_option)
+        estimated_sell_price = self.estimate_sell_price(call_option)
         if estimated_sell_price < 0:
             logger.error("Failed to estimate selling price")
             return SellOptionResult()
@@ -181,13 +181,14 @@ class OpportunityExplorer:
 
         bid_delta, ask_delta, last_delta, model_delta = get_individual_deltas(call_option.ticker)
         position_initial_state = PositionInitialState(
+            is_executed=1,
             strike=call_option.strike, right=call_option.right, expiry=call_option.lastTradeDateOrContractMonth,
             estimated_sell_price=estimated_sell_price, stop_loss_per_option=stop_loss_per_option,
             target_delta=target_delta,
             bid_delta=bid_delta, ask_delta=ask_delta, last_delta=last_delta, model_delta=model_delta,
-            minutes_to_expiration=self.get_minutes_to_expiration(call_option),
+            minutes_to_expiration=get_minutes_to_expiration(call_option),
             implied_volatility=self.market_data_fetcher.get_cached_spx_implied_volatility('C'),
-            distance_to_stop_pct=self.get_distance_to_stop_pct(call_option, estimated_sell_price, stop_loss_per_option),
+            distance_to_stop_pct=get_distance_to_stop_pct(call_option, estimated_sell_price, stop_loss_per_option, self.market_data_fetcher),
         )
 
         sell_option_result = await self.try_to_sell(call_option, 2, position_initial_state)
@@ -275,18 +276,6 @@ class OpportunityExplorer:
                 self.put_margin_reduction = reduction_data
                 self.last_put_margin_reduction_record_time = time.time()
 
-    def get_minutes_to_expiration(self, option):
-        expiry_date = datetime.strptime(option.lastTradeDateOrContractMonth, '%Y%m%d').date()
-        expiry_datetime = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
-        return round((expiry_datetime - datetime.now(new_york_timezone)).total_seconds() / 60)
-
-    def get_distance_to_stop_pct(self, option, estimated_sell_price, stop_loss_per_option):
-        indices_difference = self.market_data_fetcher.calculate_spx_es_difference()
-        spot_price = self.market_data_fetcher.get_spx_price() if is_regular_hours() else self.market_data_fetcher.get_es_price() + indices_difference
-        r = self.market_data_fetcher.get_cached_risk_free_rate()
-        raw_stop_loss = estimated_sell_price + stop_loss_per_option
-        return calculate_distance_to_stop_pct(option, option.ticker, raw_stop_loss, spot_price, r)
-
     async def try_to_sell(self, option, quantity, position_initial_state: PositionInitialState):
         target_delta = position_initial_state.target_delta
         delta = get_delta_for_sell(option.ticker)
@@ -328,7 +317,7 @@ class OpportunityExplorer:
         if not put_option:
             return SellOptionResult()
 
-        estimated_sell_price = await self.estimate_sell_price(put_option)
+        estimated_sell_price = self.estimate_sell_price(put_option)
         if estimated_sell_price < 0:
             logger.error("Failed to estimate selling price")
             return SellOptionResult()
@@ -347,13 +336,14 @@ class OpportunityExplorer:
 
         bid_delta, ask_delta, last_delta, model_delta = get_individual_deltas(put_option.ticker)
         position_initial_state = PositionInitialState(
+            is_executed=1,
             strike=put_option.strike, right=put_option.right, expiry=put_option.lastTradeDateOrContractMonth,
             estimated_sell_price=estimated_sell_price, stop_loss_per_option=stop_loss_per_option,
             target_delta=target_delta,
             bid_delta=bid_delta, ask_delta=ask_delta, last_delta=last_delta, model_delta=model_delta,
-            minutes_to_expiration=self.get_minutes_to_expiration(put_option),
+            minutes_to_expiration=get_minutes_to_expiration(put_option),
             implied_volatility=self.market_data_fetcher.get_cached_spx_implied_volatility('P'),
-            distance_to_stop_pct=self.get_distance_to_stop_pct(put_option, estimated_sell_price, stop_loss_per_option),
+            distance_to_stop_pct=get_distance_to_stop_pct(put_option, estimated_sell_price, stop_loss_per_option, self.market_data_fetcher),
         )
 
         quantity = min(max_options_for_market_drop, 2)
@@ -550,10 +540,10 @@ class OpportunityExplorer:
         logger.info(f"Will not buy {get_option_name(available_cheap_put_option)} since the potential sell price is too low ({self.last_put_option_price})")
         return FAILED
 
-    async def estimate_sell_price(self, option):
+    def estimate_sell_price(self, option):
         if math.isnan(option.ticker.bid) or math.isnan(option.ticker.ask):
             return option.ticker.last
-        return await self.trading_bot.calculate_limit(option, option.ticker.bid, option.ticker.ask)
+        return self.trading_bot.calculate_limit(option, option.ticker.bid, option.ticker.ask)
 
     async def try_to_resolve_margin_lock(self, candidate_option, missing_sum):
         if time.time() - self.last_margin_lock_resolution_attempt_time < 15 * 60:

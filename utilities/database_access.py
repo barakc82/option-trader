@@ -3,9 +3,11 @@ from pathlib import Path
 import gspread
 from google.oauth2.service_account import Credentials
 
+from utilities.utils import OPTION_TRADER_CONFIG_PATH
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SERVICE_ACCOUNT_FILE = str(PROJECT_ROOT / "resources" / "service_account.json")
-CONFIG_FILE = PROJECT_ROOT / "config" / "option_trader_config.json"
+CONFIG_FILE = PROJECT_ROOT / OPTION_TRADER_CONFIG_PATH
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 _client = None
