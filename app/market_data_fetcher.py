@@ -30,6 +30,7 @@ class MarketDataFetcher:
             self.ib = ConnectionManager().ib
             self.market_data_state = LIVE_DATA
             self.registered_contracts = {}
+            self.last_tick_times = {}
             self.options_dump_time = 0
             
             self.index_manager = IndexPriceManager( )
@@ -122,9 +123,6 @@ class MarketDataFetcher:
         if now - last_tick_time < throttle_interval:
             return
         self.last_tick_times[contract.conId] = now
-        stale_con_ids = [con_id for con_id, last_tick in self.last_tick_times.items() if now - last_tick > 10 * 3600]
-        for con_id in stale_con_ids:
-            del self.last_tick_times[con_id]
 
         if ticker.contract in [self.spx, self.es]:
             self.index_manager.on_index_ticker_update()
@@ -137,6 +135,14 @@ class MarketDataFetcher:
     def get_last_tick_time(self, con_id):
         """Return the timestamp of the last tick received for the given contract id, or 0 if unknown."""
         return getattr(self, 'last_tick_times', {}).get(con_id, 0)
+
+    def notify_switch_to_new_options(self):
+        """Called when switching to a new day's option chain; drop tick records for contracts
+        that haven't ticked in the last 10 hours."""
+        now = time.time()
+        stale_con_ids = [con_id for con_id, last_tick in self.last_tick_times.items() if now - last_tick > 10 * 3600]
+        for con_id in stale_con_ids:
+            del self.last_tick_times[con_id]
 
     async def request_subscriptions(self, contracts):
         if not contracts:
@@ -226,9 +232,6 @@ class MarketDataFetcher:
 
     def get_reference_price(self):
         return self.index_manager.get_spot_price()
-
-    async def get_chains(self, underlying):
-        return await self.option_fetcher.get_chains(underlying)
 
     async def get_spx_implied_volatility(self, right):
         return await self.option_fetcher.get_spx_implied_volatility(right)

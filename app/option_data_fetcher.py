@@ -167,6 +167,7 @@ class OptionDataFetcher:
                 self.mdf.options_dump_time = time.time()
             else:
                 logger.error(f"No put strikes found for {date}")
+            self.mdf.notify_switch_to_new_options()
 
         if options:
             from .trading_bot import TradingBot
