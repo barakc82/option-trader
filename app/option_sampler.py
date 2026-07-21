@@ -244,7 +244,8 @@ class OptionSampler:
         right = random.choice(['C', 'P'])
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss(right)
         stop_loss_per_option = random.uniform(stop_loss_per_option / 2, stop_loss_per_option * 2)
-        target_delta, _ = self.target_delta_calculator.calculate_max_loss_based_target_delta(right, stop_loss_per_option)
+        target_delta_base, _ = self.target_delta_calculator.calculate_max_loss_based_target_delta(right, stop_loss_per_option)
+        target_delta = random.uniform(target_delta_base / 2, target_delta_base * 2)
         option = self.strike_finder.get_cached_low_delta_option(target_delta, right)
         if option is None:
             return

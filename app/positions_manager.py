@@ -150,7 +150,7 @@ class PositionsManager:
             self.done_contract_ids.add(trade.contract.conId)
             c = trade.contract
             for entry in self.position_initial_state_map.pop(c.conId, []):
-                entry.stop_loss_activated = trade.order.lmtPrice > 0.1
+                entry.stop_loss_activated = int(trade.order.lmtPrice > 0.1)
                 asyncio.get_running_loop().run_in_executor(None, self._log_close_event, entry)
         if not position_initial_state:
             logger.error(f"Could not find target delta entry for order ID {trade.order.orderId}, here is what we have:")
