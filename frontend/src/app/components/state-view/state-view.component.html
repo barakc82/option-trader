@@ -159,7 +159,6 @@
           <tr>
             <th>Right</th>
             <th>Strike</th>
-            <th>Quantity</th>
             <th>Expiration Date</th>
             <th>Estimated Sell Price</th>
             <th>Stop Loss Per Option</th>
@@ -177,7 +176,6 @@
           <tr *ngFor="let pos of state.position_initial_states">
             <td>{{ pos.right }}</td>
             <td>{{ pos.strike }}</td>
-            <td>{{ pos.quantity }}</td>
             <td>{{ pos.date }}</td>
             <td>{{ pos.estimated_sell_price }}</td>
             <td>{{ pos.stop_loss_per_option }}</td>
@@ -199,7 +197,6 @@
           <tr>
             <th>Right</th>
             <th>Strike</th>
-            <th>Quantity</th>
             <th>Expiration Date</th>
             <th>Estimated Sell Price</th>
             <th>Stop Loss Per Option</th>
@@ -217,7 +214,6 @@
           <tr *ngFor="let pos of state.random_states">
             <td>{{ pos.right }}</td>
             <td>{{ pos.strike }}</td>
-            <td>{{ pos.quantity }}</td>
             <td>{{ pos.date }}</td>
             <td>{{ pos.estimated_sell_price }}</td>
             <td>{{ pos.stop_loss_per_option }}</td>

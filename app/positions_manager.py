@@ -55,7 +55,6 @@ class PositionsManager:
 
                 is_executed = pos.get('is_executed')
                 target_delta = pos.get('target_delta')
-                quantity = pos.get('quantity')
                 estimated_sell_price = pos.get('estimated_sell_price')
                 stop_loss_per_option = pos.get('stop_loss_per_option')
                 bid_delta = pos.get('bid_delta')
@@ -69,7 +68,6 @@ class PositionsManager:
                     is_executed=int(is_executed) if is_executed not in (None, '') else 1,
                     strike=float(strike), right=right, expiry=expiry,
                     target_delta=float(target_delta) if target_delta not in (None, '') else 0.0,
-                    quantity=int(quantity) if quantity not in (None, '') else 0,
                     estimated_sell_price=float(estimated_sell_price) if estimated_sell_price not in (None, '') else 0.0,
                     stop_loss_per_option=float(stop_loss_per_option) if stop_loss_per_option not in (None, '') else 0.0,
                     bid_delta=float(bid_delta) if bid_delta not in (None, '') else None,
@@ -172,7 +170,7 @@ class PositionsManager:
                     'datetime', 'is_executed', 'right', 'strike', 'expiration',
                     'estimated_sell_price', 'stop_loss_per_option',
                     'target_delta', 'bid_delta', 'ask_delta', 'last_delta', 'model_delta',
-                    'minutes_to_expiration', 'quantity', 'implied_volatility', 'distance_to_stop_pct',
+                    'minutes_to_expiration', 'implied_volatility', 'distance_to_stop_pct',
                     'stop_loss_activated',
                 ])
             writer.writerow([
@@ -183,7 +181,7 @@ class PositionsManager:
                 position_initial_state.target_delta, position_initial_state.bid_delta,
                 position_initial_state.ask_delta, position_initial_state.last_delta,
                 position_initial_state.model_delta,
-                position_initial_state.minutes_to_expiration, position_initial_state.quantity,
+                position_initial_state.minutes_to_expiration,
                 position_initial_state.implied_volatility, position_initial_state.distance_to_stop_pct,
                 position_initial_state.stop_loss_activated,
             ])
@@ -191,5 +189,4 @@ class PositionsManager:
     def update_position_entry(self, position_initial_state: PositionInitialState, trade):
         c = trade.contract
         key = c.conId
-        position_initial_state.quantity = trade.order.totalQuantity
         self.position_initial_state_map.setdefault(key, []).append(position_initial_state)

@@ -14,7 +14,6 @@ export interface Position {
   export interface PositionInitialState {
     right: string;
     strike: number;
-    quantity: number;
     date: string;
     estimated_sell_price: string;
     stop_loss_per_option: string;

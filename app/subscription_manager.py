@@ -60,6 +60,20 @@ class SubscriptionManager:
             # Sleep for 1 minute before the next cycle
             await asyncio.sleep(60)
 
+    STALE_TICK_THRESHOLD_SECONDS = 4 * 3600
+
+    def _unsubscribe_if_stale(self, contract, threshold_seconds=STALE_TICK_THRESHOLD_SECONDS):
+        """Unsubscribe market data for contract if no tick has been received within threshold_seconds.
+        Returns True if the contract was unsubscribed."""
+        now = time.time()
+        last_tick_time = self.market_data_fetcher.get_last_tick_time(contract.conId)
+        if now - last_tick_time > threshold_seconds:
+            label = get_option_name(contract) if getattr(contract, 'right', None) is not None else contract.symbol
+            logger.info(f"Unsubscribing {label} since more than {threshold_seconds / 3600:.0f} hours have passed since the last tick")
+            self.market_data_fetcher.cancel_market_data(contract)
+            return True
+        return False
+
     async def maintain_tickers(self):
 
         """Transverse positions and open trades to ensure tickers are attached to contracts."""
@@ -122,7 +136,11 @@ class SubscriptionManager:
                 else:
                     logger.info(f"Unsubscribing option {get_option_name(active_contract)} since the required contract changed")
                 self.market_data_fetcher.cancel_market_data(active_contract)
+            else: # the active contract is the required contract object
+                self._unsubscribe_if_stale(active_contract)
 
+        for active_index in active_indices:
+            self._unsubscribe_if_stale(active_index)
 
     async def manage_es_subscriptions(self):
         """Check current SPX positions and update ES subscriptions."""
@@ -196,7 +214,7 @@ class SubscriptionManager:
                 if not is_in_use:
                     self.market_data_fetcher.cancel_market_data(es_contract)
 
-        # 3. Warn about stale ES tickers
+        # 3. Unsubscribe stale ES tickers, and warn about ones that are merely getting old
         active_tickers = self.ib.wrapper.ticker2ReqId['mktData'].keys()
         active_es_con_ids = {ticker.contract.conId for ticker in active_tickers
                              if ticker.contract.symbol == 'ES' and ticker.contract.secType == 'FOP'}
@@ -204,6 +222,8 @@ class SubscriptionManager:
             for es_contract in es_contracts:
                 if es_contract.conId not in active_es_con_ids:
                     logger.warning(f"ES ticker {get_es_option_name(es_contract)} is not in active subscriptions")
+                    continue
+                if self._unsubscribe_if_stale(es_contract):
                     continue
                 ticker = self.market_data_fetcher.get_ticker(es_contract)
                 if ticker and ticker.time:

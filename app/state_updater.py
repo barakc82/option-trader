@@ -183,7 +183,7 @@ class StateUpdater:
             td_entries = position_initial_state_map.get(option.conId) or [None]
             for td_entry in td_entries:
                 position_initial_states.append({
-                    'right': option.right, 'strike': option.strike, 'quantity': position.position,
+                    'right': option.right, 'strike': option.strike,
                     'date': position_date, 'contract_id': option.conId,
                     'estimated_sell_price': round(td_entry.estimated_sell_price, 3) if td_entry else '',
                     'stop_loss_per_option': round(td_entry.stop_loss_per_option, 3) if td_entry else '',
@@ -228,7 +228,7 @@ class StateUpdater:
         for sample in OptionSampler().collected_samples:
             sample_date = datetime.strptime(sample.expiry, '%Y%m%d').strftime('%d/%m/%y')
             random_states.append({
-                'right': sample.right, 'strike': sample.strike, 'quantity': sample.quantity,
+                'right': sample.right, 'strike': sample.strike,
                 'date': sample_date,
                 'estimated_sell_price': round(sample.estimated_sell_price, 3),
                 'stop_loss_per_option': round(sample.stop_loss_per_option, 3),

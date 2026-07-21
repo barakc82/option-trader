@@ -59,7 +59,6 @@ class OptionSampler:
                 expiry = datetime.strptime(date, "%d/%m/%y").strftime("%Y%m%d")
 
                 target_delta = sample.get('target_delta')
-                quantity = sample.get('quantity')
                 estimated_sell_price = sample.get('estimated_sell_price')
                 stop_loss_per_option = sample.get('stop_loss_per_option')
                 bid_delta = sample.get('bid_delta')
@@ -73,7 +72,6 @@ class OptionSampler:
                     is_executed=0,
                     strike=float(strike), right=right, expiry=expiry,
                     target_delta=float(target_delta) if target_delta not in (None, '') else 0.0,
-                    quantity=int(quantity) if quantity not in (None, '') else 0,
                     estimated_sell_price=float(estimated_sell_price) if estimated_sell_price not in (None, '') else 0.0,
                     stop_loss_per_option=float(stop_loss_per_option) if stop_loss_per_option not in (None, '') else 0.0,
                     bid_delta=float(bid_delta) if bid_delta not in (None, '') else None,

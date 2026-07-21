@@ -54,7 +54,6 @@ class PositionInitialState:
     last_delta: float | None = None
     model_delta: float | None = None
     minutes_to_expiration: int | None = None
-    quantity: int = 0
     implied_volatility: float | None = None
     distance_to_stop_pct: float | None = None
     stop_loss_activated: int = 0

@@ -105,11 +105,12 @@ class MarketDataFetcher:
     def on_ticker_update(self, ticker):
         """Handle real-time updates for options, with throttling."""
         now = time.time()
-        last_time = getattr(ticker, 'last_processed_time', 0)
+        contract = ticker.contract
+
+        last_tick_time = self.get_last_tick_time(contract.conId)
         
         gamma = get_gamma(ticker)
         price = ticker.last
-        contract = ticker.contract
 
         # Slower updates for low-gamma options (further out of money or illiquid)
         throttle_interval = 0.5 if contract.symbol == 'SPX' else 1.0
@@ -118,9 +119,12 @@ class MarketDataFetcher:
         if math.isnan(price):
             throttle_interval = 20.0 if contract.symbol == 'SPX' else 40.0
 
-        if now - last_time < throttle_interval:
+        if now - last_tick_time < throttle_interval:
             return
-        ticker.last_processed_time = now
+        self.last_tick_times[contract.conId] = now
+        stale_con_ids = [con_id for con_id, last_tick in self.last_tick_times.items() if now - last_tick > 10 * 3600]
+        for con_id in stale_con_ids:
+            del self.last_tick_times[con_id]
 
         if ticker.contract in [self.spx, self.es]:
             self.index_manager.on_index_ticker_update()
@@ -129,6 +133,10 @@ class MarketDataFetcher:
         delta_str = f"{abs(delta):.3f}" if delta is not None else "N/A"
         gamma_str = f"{gamma:.3f}" if not math.isnan(gamma) else "N/A"
         logger.info(f"Update: {contract.symbol} {get_option_name(contract)} | Price: {price} | Delta: {delta_str} | Gamma: {gamma_str}")
+
+    def get_last_tick_time(self, con_id):
+        """Return the timestamp of the last tick received for the given contract id, or 0 if unknown."""
+        return getattr(self, 'last_tick_times', {}).get(con_id, 0)
 
     async def request_subscriptions(self, contracts):
         if not contracts:
