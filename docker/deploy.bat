@@ -52,5 +52,5 @@
     )
 
     :send_files_successful
-        gcloud compute ssh %VM_NAME% --command "sudo docker cp option-trader:/home/option-trader/cache /tmp && sudo docker rm -f option-trader && sudo docker system prune -af && cd ../barakc82 && sudo docker load -i option-trader-image.tar && sudo docker run -d --env-file /home/barakc82/option-trader.env -p 8080:8080 -v /home/barakc82/logs:/home/option-trader/logs --device-write-bps /dev/sda:50mb --device-read-bps /dev/sda:50mb --name option-trader option-trader-image && sudo docker cp /tmp/cache/. option-trader:/home/option-trader/cache"
+        gcloud compute ssh %VM_NAME% --command "sudo docker cp option-trader:/home/option-trader/cache /tmp && sudo docker rm -f option-trader && sudo docker system prune -af && cd ../barakc82 && sudo docker load -i option-trader-image.tar && sudo docker run -d --env-file /home/barakc82/option-trader.env -p 8080:8080 -v /home/barakc82/logs:/home/option-trader/logs --device-write-bps /dev/sda:50mb --device-read-bps /dev/sda:50mb --cpus=1.5 --name option-trader option-trader-image && sudo docker cp /tmp/cache/. option-trader:/home/option-trader/cache"
     echo Current time: %TIME%

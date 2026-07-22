@@ -18,7 +18,7 @@ from .positions_manager import PositionsManager
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_NUMBER_OF_SAMPLES_PER_DAY = 1
+DEFAULT_NUMBER_OF_SAMPLES_PER_DAY = 3
 
 
 class OptionSampler:
@@ -97,6 +97,7 @@ class OptionSampler:
                 if new_number_of_samples_per_day != self.number_of_samples_per_day:
                     logger.info(f"OptionSampler: number_of_samples_per_day changed from {self.number_of_samples_per_day} to {new_number_of_samples_per_day}")
                     self.number_of_samples_per_day = new_number_of_samples_per_day
+                    self.schedule_date = None
         except Exception as e:
             logger.error(f"OptionSampler: Error reading config: {e}")
 
@@ -104,23 +105,28 @@ class OptionSampler:
         """Divide [previous SPX expiration close, next SPX expiration close) into number_of_samples_per_day periods."""
         cal = get_nyse_calendar()
         start_time = cal.previous_close(now_nyc).astimezone(new_york_timezone)
-        next_expiration_date = datetime.strptime(get_current_trading_day(), '%Y%m%d').date()
+        current_trading_day = get_current_trading_day()
+        next_expiration_date = datetime.strptime(current_trading_day, '%Y%m%d').date()
         expiration_time = new_york_timezone.localize(datetime.combine(next_expiration_date, REGULAR_HOURS_END_TIME))
 
         period_length = (expiration_time - start_time) / self.number_of_samples_per_day
         self.sample_times = [start_time + i * period_length for i in range(self.number_of_samples_per_day)]
-        self.schedule_date = now_nyc.date()
+        self.schedule_date = current_trading_day
 
-        number_of_collected_samples = len(self.collected_samples)
+        number_of_collected_samples = sum(
+            1 for sample in self.collected_samples
+            if new_york_timezone.localize(datetime.combine(datetime.strptime(sample.expiry, '%Y%m%d').date(), REGULAR_HOURS_END_TIME)) >= now_nyc
+        )
         self.sample_times = self.sample_times[number_of_collected_samples:]
 
         if not self.sample_times:
             return
 
         logger.info(
-            f"Built a schedule of {self.number_of_samples_per_day} samples "
+            f"Built a schedule of {len(self.sample_times)} samples "
             f"from {start_time} to {expiration_time}")
-        logger.info(self.sample_times)
+        formatted_sample_times = [t.strftime('%d/%m/%Y %H:%M') for t in self.sample_times]
+        logger.info(f"Sample times: {formatted_sample_times}")
 
     async def check_stop_loss_activated(self, sample: PositionInitialState) -> bool:
         """Page historical BID_ASK ticks for the sample's expiration day and check whether
@@ -209,8 +215,6 @@ class OptionSampler:
                 self.load_config()
 
                 now_nyc = datetime.now(new_york_timezone)
-                cal = get_nyse_calendar()
-                is_trading_day = cal.is_session(now_nyc.date().strftime('%Y-%m-%d'))
 
                 if is_night_break():
                     remaining_samples = []
@@ -224,7 +228,7 @@ class OptionSampler:
                             remaining_samples.append(sample)
                     self.collected_samples = remaining_samples
 
-                if not self.sample_times:
+                if self.schedule_date != get_current_trading_day():
                     self.build_schedule(now_nyc)
 
                 if self.sample_times and now_nyc >= self.sample_times[0]:
@@ -239,8 +243,6 @@ class OptionSampler:
             await asyncio.sleep(300)
 
     def collect_sample(self):
-        logger.info("Time to sample")
-
         right = random.choice(['C', 'P'])
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss(right)
         stop_loss_per_option = random.uniform(stop_loss_per_option / 2, stop_loss_per_option * 2)

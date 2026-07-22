@@ -42,8 +42,6 @@ def update_short_historical_bounds():
     lowest_price = sys.float_info.max
     highest_price = 0
     for bar in bars:
-        if security_name == "SPGI":
-            print(f"barak: {bar.date} {bar.close}")
         if bar.date < history_start_date.date():
             continue
         if bar.close < lowest_price:

@@ -37,6 +37,9 @@ def analyze_option_trader_log():
             if "Task is waiting for IB connection" in last_line or "No position were found" in last_line:
                 logger.error(f"No IB connection detected on {latest_log}")
                 return IBGATEWAY_RESTART_REQUIRED
+            if "IB Error 321" in last_line:
+                logger.error(f"IBGateway not configured correctly detected on {latest_log}")
+                return IBGATEWAY_RESTART_REQUIRED
     except Exception as e:
         logger.error(f"Error analyzing log {latest_log}: {e}")
 

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import random
 from ib_insync import IB
 from utilities.utils import is_in_docker, MY_ACCOUNT
@@ -132,6 +133,10 @@ class ConnectionManager:
         asyncio.create_task(self.reconnect())
 
     def on_error(self, reqId, errorCode, errorString, contract):
+        if errorCode == 321:
+            logger.critical(f"IB Error 321 ({errorString}); It means that IBGateway requires a restart, so exiting")
+            os._exit(1)
+
         # Specific IB error codes that indicate connection issues
         # 1100: Connectivity between IB and Trader Workstation has been lost.
         # 2110: Connectivity between Trader Workstation and server is broken.
