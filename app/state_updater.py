@@ -281,8 +281,9 @@ class StateUpdater:
             if datetime.now(new_york_timezone) < expiry_datetime:
                 sign = 1 if f.execution.side == 'SLD' else -1
                 daily_profit += sign * f.execution.price * f.execution.shares * 100
-            else:
+            elif f.execution.price > 0:
                 has_expired_fill = True
+
         state['fills'] = sorted(state_fills, key=lambda x: x['time'], reverse=True)
 
         state['daily_profit'] = round(daily_profit)
