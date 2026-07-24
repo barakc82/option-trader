@@ -308,3 +308,4 @@ class TradingBot:
         limit_buy_trade.order.transmit = True
         trade = self.ib.placeOrder(limit_buy_trade.contract, limit_buy_trade.order)
         return trade
+

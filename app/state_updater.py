@@ -192,6 +192,7 @@ class StateUpdater:
                     'ask_delta': round(td_entry.ask_delta, 3) if td_entry and td_entry.ask_delta is not None else '',
                     'last_delta': round(td_entry.last_delta, 3) if td_entry and td_entry.last_delta is not None else '',
                     'model_delta': round(td_entry.model_delta, 3) if td_entry and td_entry.model_delta is not None else '',
+                    'gamma': round(td_entry.gamma, 4) if td_entry and td_entry.gamma is not None else '',
                     'minutes_to_expiration': td_entry.minutes_to_expiration if td_entry and td_entry.minutes_to_expiration is not None else '',
                     'distance_to_stop_pct': round(td_entry.distance_to_stop_pct, 2) if td_entry and td_entry.distance_to_stop_pct is not None else '',
                     'implied_volatility': round(td_entry.implied_volatility, 3) if td_entry and td_entry.implied_volatility is not None else '',
@@ -237,6 +238,7 @@ class StateUpdater:
                 'ask_delta': round(sample.ask_delta, 3) if sample.ask_delta is not None else '',
                 'last_delta': round(sample.last_delta, 3) if sample.last_delta is not None else '',
                 'model_delta': round(sample.model_delta, 3) if sample.model_delta is not None else '',
+                'gamma': round(sample.gamma, 4) if sample.gamma is not None else '',
                 'minutes_to_expiration': sample.minutes_to_expiration if sample.minutes_to_expiration is not None else '',
                 'distance_to_stop_pct': round(sample.distance_to_stop_pct, 2) if sample.distance_to_stop_pct is not None else '',
                 'implied_volatility': round(sample.implied_volatility, 3) if sample.implied_volatility is not None else '',
@@ -261,7 +263,8 @@ class StateUpdater:
         fills = self.trading_bot.ib.fills()
         state_fills = []
         daily_profit = 0
-        has_fill_not_from_today = False
+        # has_fill_not_from_today = False
+        has_expired_fill = False
         today_date = datetime.now(new_york_timezone).date()
         for f in fills:
             if f.contract.secType != 'OPT': continue
@@ -271,13 +274,15 @@ class StateUpdater:
                 'quantity': f.execution.shares, 'price': f.execution.price,
                 'time': f.time.timestamp(), 'comment': comment
             })
-            if f.time.astimezone(new_york_timezone).date() != today_date and REGULAR_HOURS_END_TIME < f.time.astimezone(new_york_timezone).time() < AFTER_HOURS_END_TIME:
-                has_fill_not_from_today = True
+            # if f.time.astimezone(new_york_timezone).date() != today_date and REGULAR_HOURS_END_TIME < f.time.astimezone(new_york_timezone).time() < AFTER_HOURS_END_TIME:
+            #     has_fill_not_from_today = True
             expiry_date = datetime.strptime(f.contract.lastTradeDateOrContractMonth, '%Y%m%d').date()
             expiry_datetime = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
             if datetime.now(new_york_timezone) < expiry_datetime:
                 sign = 1 if f.execution.side == 'SLD' else -1
                 daily_profit += sign * f.execution.price * f.execution.shares * 100
+            else:
+                has_expired_fill = True
         state['fills'] = sorted(state_fills, key=lambda x: x['time'], reverse=True)
 
         state['daily_profit'] = round(daily_profit)
@@ -285,7 +290,7 @@ class StateUpdater:
             state['after_hours_profit'] = round(daily_profit)
         else:
             state['after_hours_profit'] = self._read_cached_after_hours_profit()
-            if not has_fill_not_from_today:
+            if not has_expired_fill:
                 state['daily_profit'] += state['after_hours_profit']
 
 

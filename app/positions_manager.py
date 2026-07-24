@@ -61,6 +61,7 @@ class PositionsManager:
                 ask_delta = pos.get('ask_delta')
                 last_delta = pos.get('last_delta')
                 model_delta = pos.get('model_delta')
+                gamma = pos.get('gamma')
                 minutes_to_expiration = pos.get('minutes_to_expiration')
                 distance_to_stop_pct = pos.get('distance_to_stop_pct')
                 implied_volatility = pos.get('implied_volatility')
@@ -74,6 +75,7 @@ class PositionsManager:
                     ask_delta=float(ask_delta) if ask_delta not in (None, '') else None,
                     last_delta=float(last_delta) if last_delta not in (None, '') else None,
                     model_delta=float(model_delta) if model_delta not in (None, '') else None,
+                    gamma=float(gamma) if gamma not in (None, '') else None,
                     minutes_to_expiration=int(minutes_to_expiration) if minutes_to_expiration not in (None, '') else None,
                     distance_to_stop_pct=float(distance_to_stop_pct) if distance_to_stop_pct not in (None, '') else None,
                     implied_volatility=float(implied_volatility) if implied_volatility not in (None, '') else None,
@@ -153,7 +155,7 @@ class PositionsManager:
                 entry.stop_loss_activated = int(trade.order.lmtPrice > 0.1)
                 asyncio.get_running_loop().run_in_executor(None, self._log_close_event, entry)
         if not position_initial_state:
-            logger.error(f"Could not find target delta entry for order ID {trade.order.orderId}, here is what we have:")
+            logger.error(f"Could not find position initial state entry for order ID {trade.order.orderId}, here is what we have:")
             for order_id, entry in self.trading_bot.req_id_to_order_metadata.items():
                 logger.info(f"Order ID {order_id} ==> {entry}")
         if trade.order.orderId in req_id_to_comment and "Margin" in req_id_to_comment[trade.order.orderId]:
@@ -185,6 +187,34 @@ class PositionsManager:
                 position_initial_state.implied_volatility, position_initial_state.distance_to_stop_pct,
                 position_initial_state.stop_loss_activated,
             ])
+        self._log_close_event_with_gamma(position_initial_state)
+
+    def _log_close_event_with_gamma(self, position_initial_state: PositionInitialState):
+        csv_path = 'cache/close_events_with_gamma.csv'
+        write_header = not os.path.exists(csv_path)
+        with open(csv_path, 'a', newline='') as f:
+            writer = csv.writer(f)
+            if write_header:
+                writer.writerow([
+                    'datetime', 'is_executed', 'right', 'strike', 'expiration',
+                    'estimated_sell_price', 'stop_loss_per_option',
+                    'target_delta', 'bid_delta', 'ask_delta', 'last_delta', 'model_delta', 'gamma',
+                    'minutes_to_expiration', 'implied_volatility', 'distance_to_stop_pct',
+                    'stop_loss_activated',
+                ])
+            writer.writerow([
+                datetime.now().isoformat(), position_initial_state.is_executed,
+                position_initial_state.right, position_initial_state.strike,
+                position_initial_state.expiry,
+                position_initial_state.estimated_sell_price, position_initial_state.stop_loss_per_option,
+                position_initial_state.target_delta, position_initial_state.bid_delta,
+                position_initial_state.ask_delta, position_initial_state.last_delta,
+                position_initial_state.model_delta, position_initial_state.gamma,
+                position_initial_state.minutes_to_expiration,
+                position_initial_state.implied_volatility, position_initial_state.distance_to_stop_pct,
+                position_initial_state.stop_loss_activated,
+            ])
+
 
     def update_position_entry(self, position_initial_state: PositionInitialState, trade):
         c = trade.contract

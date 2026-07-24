@@ -68,23 +68,26 @@ class SubscriptionManager:
         now = time.time()
         last_tick_time = self.market_data_fetcher.get_last_tick_time(contract.conId)
         if now - last_tick_time > threshold_seconds:
-            label = get_option_name(contract) if getattr(contract, 'right', None) is not None else contract.symbol
+            if contract.symbol == 'ES' and getattr(contract, 'right', None) is not None:
+                label = get_es_option_name(contract)
+            elif getattr(contract, 'right', None) is not None:
+                label = get_option_name(contract)
+            else:
+                label = contract.symbol
             logger.info(f"Unsubscribing {label} since more than {threshold_seconds / 3600:.0f} hours have passed since the last tick")
             self.market_data_fetcher.cancel_market_data(contract)
+
+            stale_spx_con_ids = [spx_con_id for spx_con_id, es_contracts in self.spx_to_es_map.items() if contract in es_contracts]
+            for spx_con_id in stale_spx_con_ids:
+                logger.info(f"Removing SPX {spx_con_id} from spx_to_es_map since its ES hedge {label} was unsubscribed")
+                del self.spx_to_es_map[spx_con_id]
+
             return True
         return False
 
     async def maintain_tickers(self):
 
-        """Transverse positions and open trades to ensure tickers are attached to contracts."""
-        positions = self.trading_bot.get_short_options()
-        open_trades = self.trading_bot.get_open_trades()
-
-        # Combine unique contracts from positions and open trades
-        required_contracts = {p.contract.conId: p.contract for p in positions}
-        for trade in open_trades:
-            if trade.contract.conId not in required_contracts:
-                required_contracts[trade.contract.conId] = trade.contract
+        required_contracts = await self.collect_required_spx_contracts()
 
         contracts_missing_tickers = []
         active_tickers = self.ib.wrapper.ticker2ReqId['mktData'].keys()
@@ -142,6 +145,18 @@ class SubscriptionManager:
         for active_index in active_indices:
             self._unsubscribe_if_stale(active_index)
 
+    async def collect_required_spx_contracts(self):
+        """Transverse positions and open trades to ensure tickers are attached to contracts."""
+        positions = self.trading_bot.get_short_options()
+        open_trades = self.trading_bot.get_open_trades()
+
+        # Combine unique contracts from positions and open trades
+        required_contracts = {p.contract.conId: p.contract for p in positions}
+        for trade in open_trades:
+            if trade.contract.conId not in required_contracts:
+                required_contracts[trade.contract.conId] = trade.contract
+        return required_contracts
+
     async def manage_es_subscriptions(self):
         """Check current SPX positions and update ES subscriptions."""
         positions = self.trading_bot.get_short_options()
@@ -158,10 +173,11 @@ class SubscriptionManager:
                 es_contracts = await self.create_matching_es_contracts(spx_contract)
                 new_es_contracts_batch.append((spx_contract, es_contracts))
 
-        if new_es_contracts_batch:
-            active_tickers = self.ib.wrapper.ticker2ReqId['mktData'].keys()
-            active_es_options = [ticker.contract for ticker in active_tickers if ticker.contract.symbol == 'ES' and ticker.contract.secType == 'FOP']
+        active_tickers = self.ib.wrapper.ticker2ReqId['mktData'].keys()
+        active_es_options = [ticker.contract for ticker in active_tickers if
+                             ticker.contract.symbol == 'ES' and ticker.contract.secType == 'FOP']
 
+        if new_es_contracts_batch:
             # Deduplicate all ES contracts by (strike, right, lastTradeDateOrContractMonth)
             unique_new_es = {}
             for _, es_contracts in new_es_contracts_batch:
@@ -201,6 +217,7 @@ class SubscriptionManager:
                             f"Subscribed to {get_es_option_name(qualified_es)} for SPX {get_option_name(spx_contract)}")
                     else:
                         logger.error(f"Failed to subscribe matching ES option {qualified_es.strike} for {get_option_name(spx_contract)}")
+
                 if qualified_es_list:
                     self.spx_to_es_map[spx_contract.conId] = qualified_es_list
 
@@ -218,7 +235,7 @@ class SubscriptionManager:
         active_tickers = self.ib.wrapper.ticker2ReqId['mktData'].keys()
         active_es_con_ids = {ticker.contract.conId for ticker in active_tickers
                              if ticker.contract.symbol == 'ES' and ticker.contract.secType == 'FOP'}
-        for es_contracts in self.spx_to_es_map.values():
+        for es_contracts in list(self.spx_to_es_map.values()):
             for es_contract in es_contracts:
                 if es_contract.conId not in active_es_con_ids:
                     logger.warning(f"ES ticker {get_es_option_name(es_contract)} is not in active subscriptions")

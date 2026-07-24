@@ -53,6 +53,7 @@ class PositionInitialState:
     ask_delta: float | None = None
     last_delta: float | None = None
     model_delta: float | None = None
+    gamma: float | None = None
     minutes_to_expiration: int | None = None
     implied_volatility: float | None = None
     distance_to_stop_pct: float | None = None
@@ -115,6 +116,10 @@ def get_individual_deltas(ticker):
     last_delta = abs(ticker.lastGreeks.delta) if ticker.lastGreeks and ticker.lastGreeks.delta is not None else None
     model_delta = abs(ticker.modelGreeks.delta) if ticker.modelGreeks and ticker.modelGreeks.delta is not None else None
     return bid_delta, ask_delta, last_delta, model_delta
+
+
+def get_model_gamma(ticker):
+    return ticker.modelGreeks.gamma if ticker.modelGreeks and ticker.modelGreeks.gamma is not None else None
 
 
 def get_delta_for_sell(ticker):

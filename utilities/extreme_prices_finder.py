@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from utilities.database_access import get_worksheet
 from utilities.utils import REGULAR_HOURS_END_TIME, new_york_timezone
 
-start_date = datetime(year=2026, month=7, day=22)
+start_date = datetime(year=2026, month=7, day=23)
 history_days = 36
 
 barak_sheet = get_worksheet("ברק")

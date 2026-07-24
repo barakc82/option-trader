@@ -15,10 +15,11 @@ from .strike_finder import StrikeFinder
 from .opportunity_explorer import OpportunityExplorer
 from .market_data_fetcher import MarketDataFetcher
 from .positions_manager import PositionsManager
+from .trading_bot import TradingBot
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_NUMBER_OF_SAMPLES_PER_DAY = 3
+DEFAULT_NUMBER_OF_SAMPLES_PER_DAY = 4
 
 
 class OptionSampler:
@@ -32,11 +33,12 @@ class OptionSampler:
 
     def __init__(self):
         if not self._initialized:
+            self.market_data_fetcher = MarketDataFetcher()
             self.max_loss_calculator = MaxLossCalculator()
             self.target_delta_calculator = TargetDeltaCalculator()
             self.strike_finder = StrikeFinder()
+            self.trading_bot = TradingBot()
             self.opportunity_explorer = OpportunityExplorer()
-            self.market_data_fetcher = MarketDataFetcher()
 
             self.number_of_samples_per_day = DEFAULT_NUMBER_OF_SAMPLES_PER_DAY
             self.schedule_date = None
@@ -65,6 +67,7 @@ class OptionSampler:
                 ask_delta = sample.get('ask_delta')
                 last_delta = sample.get('last_delta')
                 model_delta = sample.get('model_delta')
+                gamma = sample.get('gamma')
                 minutes_to_expiration = sample.get('minutes_to_expiration')
                 distance_to_stop_pct = sample.get('distance_to_stop_pct')
                 implied_volatility = sample.get('implied_volatility')
@@ -78,6 +81,7 @@ class OptionSampler:
                     ask_delta=float(ask_delta) if ask_delta not in (None, '') else None,
                     last_delta=float(last_delta) if last_delta not in (None, '') else None,
                     model_delta=float(model_delta) if model_delta not in (None, '') else None,
+                    gamma=float(gamma) if gamma not in (None, '') else None,
                     minutes_to_expiration=int(minutes_to_expiration) if minutes_to_expiration not in (None, '') else None,
                     distance_to_stop_pct=float(distance_to_stop_pct) if distance_to_stop_pct not in (None, '') else None,
                     implied_volatility=float(implied_volatility) if implied_volatility not in (None, '') else None,
@@ -230,12 +234,18 @@ class OptionSampler:
 
                 if self.schedule_date != get_current_trading_day():
                     self.build_schedule(now_nyc)
+                elif is_after_hours():
+                    logger.warning(f"barak: Not calling build_schedule because current trading day is {get_current_trading_day()}")
 
                 if self.sample_times and now_nyc >= self.sample_times[0]:
-                    self.sample_times.pop(0)
+                    logger.info("Checking next sample...")
                     if is_market_open():
-                        self.collect_sample()
-
+                        result = self.collect_sample()
+                    else:
+                        logger.warning("Market is closed, skipping this sample")
+                        result = SUCCESS
+                    if result == SUCCESS:
+                        self.sample_times.pop(0)
 
             except Exception:
                 logger.exception("OptionSampler: Loop error:")
@@ -243,6 +253,7 @@ class OptionSampler:
             await asyncio.sleep(300)
 
     def collect_sample(self):
+        logger.info("Collecting the next sample...")
         right = random.choice(['C', 'P'])
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss(right)
         stop_loss_per_option = random.uniform(stop_loss_per_option / 2, stop_loss_per_option * 2)
@@ -250,9 +261,15 @@ class OptionSampler:
         target_delta = random.uniform(target_delta_base / 2, target_delta_base * 2)
         option = self.strike_finder.get_cached_low_delta_option(target_delta, right)
         if option is None:
-            return
+            logger.warning("No option could be found for sample collection")
+            return FAILED
 
         estimated_sell_price = self.opportunity_explorer.estimate_sell_price(option)
+        minimal_sell_price = self.trading_bot.calculate_minimal_sell_price(option.ticker.last, option.lastTradeDateOrContractMonth)
+        if estimated_sell_price < minimal_sell_price:
+            logger.warning(f"Sampled option is sold for {estimated_sell_price} but the minimal sell price is {minimal_sell_price}")
+            return FAILED
+
         bid_delta, ask_delta, last_delta, model_delta = get_individual_deltas(option.ticker)
         random_sample = PositionInitialState(
             is_executed=0,
@@ -260,9 +277,11 @@ class OptionSampler:
             estimated_sell_price=estimated_sell_price, stop_loss_per_option=stop_loss_per_option,
             target_delta=target_delta,
             bid_delta=bid_delta, ask_delta=ask_delta, last_delta=last_delta, model_delta=model_delta,
+            gamma=get_model_gamma(option.ticker),
             minutes_to_expiration=get_minutes_to_expiration(option),
             implied_volatility=self.market_data_fetcher.get_cached_spx_implied_volatility(right),
             distance_to_stop_pct=get_distance_to_stop_pct(option, estimated_sell_price, stop_loss_per_option, self.market_data_fetcher),
         )
 
         self.collected_samples.append(random_sample)
+        return SUCCESS
