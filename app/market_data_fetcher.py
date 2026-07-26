@@ -63,6 +63,7 @@ class MarketDataFetcher:
             ticker.updateEvent += self.on_ticker_update
             self.registered_contracts[con_id] = ticker
             logger.info(f"Registered update handler for {ticker.contract.symbol} {get_option_name(ticker.contract)}")
+            self.last_tick_times[con_id] = time.time()
 
     def get_spx_price(self):
         return self.index_manager.get_spx_price()
@@ -134,6 +135,11 @@ class MarketDataFetcher:
 
     def get_last_tick_time(self, con_id):
         """Return the timestamp of the last tick received for the given contract id, or 0 if unknown."""
+        now_nyc = datetime.now(new_york_timezone)
+        premarket_end = now_nyc.replace(hour=PREMARKET_END_TIME.hour, minute=PREMARKET_END_TIME.minute,
+                                         second=0, microsecond=0)
+        if now_nyc - premarket_end > timedelta(seconds=STALE_TICK_THRESHOLD_SECONDS):
+            return time.time()
         return getattr(self, 'last_tick_times', {}).get(con_id, 0)
 
     def notify_switch_to_new_options(self):

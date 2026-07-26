@@ -59,6 +59,7 @@ class PositionsManager:
                 stop_loss_per_option = pos.get('stop_loss_per_option')
                 bid_delta = pos.get('bid_delta')
                 ask_delta = pos.get('ask_delta')
+                last_ask = pos.get('last_ask')
                 last_delta = pos.get('last_delta')
                 model_delta = pos.get('model_delta')
                 gamma = pos.get('gamma')
@@ -73,6 +74,7 @@ class PositionsManager:
                     stop_loss_per_option=float(stop_loss_per_option) if stop_loss_per_option not in (None, '') else 0.0,
                     bid_delta=float(bid_delta) if bid_delta not in (None, '') else None,
                     ask_delta=float(ask_delta) if ask_delta not in (None, '') else None,
+                    last_ask=float(last_ask) if last_ask not in (None, '') else None,
                     last_delta=float(last_delta) if last_delta not in (None, '') else None,
                     model_delta=float(model_delta) if model_delta not in (None, '') else None,
                     gamma=float(gamma) if gamma not in (None, '') else None,

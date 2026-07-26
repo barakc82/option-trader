@@ -20,6 +20,7 @@ export interface Position {
     target_delta: string;
     bid_delta: string;
     ask_delta: string;
+    last_ask: string;
     last_delta: string;
     model_delta: string;
     gamma: string;

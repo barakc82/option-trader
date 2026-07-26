@@ -46,6 +46,7 @@ ERROR = 1
 FAILED = 2
 
 SAFEGUARD_MAX_CADENCE = 1.0
+STALE_TICK_THRESHOLD_SECONDS = 20 * 60  # 20 minutes
 
 log_file_name = datetime.now().strftime("logs\\option_trader_%Y-%m-%d_%H-%M-%S.log")
 logger = logging.getLogger(__name__)

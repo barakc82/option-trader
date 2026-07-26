@@ -10,7 +10,7 @@ from utilities.ib_utils import get_es_option_name
 from .connection_manager import ConnectionManager
 from .trading_bot import TradingBot
 from .market_data_fetcher import MarketDataFetcher
-from utilities.utils import get_option_name, SAFEGUARD_MAX_CADENCE
+from utilities.utils import get_option_name, SAFEGUARD_MAX_CADENCE, STALE_TICK_THRESHOLD_SECONDS
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +60,6 @@ class SubscriptionManager:
             # Sleep for 1 minute before the next cycle
             await asyncio.sleep(60)
 
-    STALE_TICK_THRESHOLD_SECONDS = 4 * 3600
-
     def _unsubscribe_if_stale(self, contract, threshold_seconds=STALE_TICK_THRESHOLD_SECONDS):
         """Unsubscribe market data for contract if no tick has been received within threshold_seconds.
         Returns True if the contract was unsubscribed."""
@@ -74,7 +72,7 @@ class SubscriptionManager:
                 label = get_option_name(contract)
             else:
                 label = contract.symbol
-            logger.info(f"Unsubscribing {label} since more than {threshold_seconds / 3600:.0f} hours have passed since the last tick")
+            logger.info(f"Unsubscribing {label} since more than {threshold_seconds / 60:.0f} minutes have passed since the last tick")
             self.market_data_fetcher.cancel_market_data(contract)
 
             stale_spx_con_ids = [spx_con_id for spx_con_id, es_contracts in self.spx_to_es_map.items() if contract in es_contracts]

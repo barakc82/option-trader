@@ -251,6 +251,21 @@ class StrikeFinder:
             
         return available_cheap
 
+
+    def get_cached_options(self):
+        cached_options = {}
+
+        for right in ['C', 'P']:
+            strike_to_option = {}
+            if self.edge_fetched_block[right]:
+                strike_to_option = {option.strike: option for option in self.edge_fetched_block[right]}
+            if self.middle_fetched_block[right]:
+                strike_to_option.update({option.strike: option for option in self.middle_fetched_block[right]})
+
+            cached_options[right] = strike_to_option
+
+        return cached_options
+
     def get_cached_low_delta_option(self, target_delta, right):
         options_block = self.middle_fetched_block[right]
         if not options_block:

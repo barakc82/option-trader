@@ -51,6 +51,7 @@ class PositionInitialState:
     target_delta: float
     bid_delta: float | None = None
     ask_delta: float | None = None
+    last_ask: float | None = None
     last_delta: float | None = None
     model_delta: float | None = None
     gamma: float | None = None

@@ -65,6 +65,7 @@ class OptionSampler:
                 stop_loss_per_option = sample.get('stop_loss_per_option')
                 bid_delta = sample.get('bid_delta')
                 ask_delta = sample.get('ask_delta')
+                last_ask = sample.get('last_ask')
                 last_delta = sample.get('last_delta')
                 model_delta = sample.get('model_delta')
                 gamma = sample.get('gamma')
@@ -79,6 +80,7 @@ class OptionSampler:
                     stop_loss_per_option=float(stop_loss_per_option) if stop_loss_per_option not in (None, '') else 0.0,
                     bid_delta=float(bid_delta) if bid_delta not in (None, '') else None,
                     ask_delta=float(ask_delta) if ask_delta not in (None, '') else None,
+                    last_ask=float(last_ask) if last_ask not in (None, '') else None,
                     last_delta=float(last_delta) if last_delta not in (None, '') else None,
                     model_delta=float(model_delta) if model_delta not in (None, '') else None,
                     gamma=float(gamma) if gamma not in (None, '') else None,
@@ -105,16 +107,56 @@ class OptionSampler:
         except Exception as e:
             logger.error(f"OptionSampler: Error reading config: {e}")
 
+    def _get_closed_periods(self, cal, start_time, expiration_time):
+        """Returns the sorted (start, end) NYC-localized closed-market intervals that fall between
+        consecutive trading sessions in [start_time, expiration_time). When those sessions are on
+        consecutive calendar days this is just that day's nightly break; when a holiday or weekend
+        separates them, the interval spans the whole non-trading gap."""
+        sessions = cal.sessions_in_range(start_time.date(), expiration_time.date())
+        closed_periods = []
+        for prev_session, next_session in zip(sessions[:-1], sessions[1:]):
+            period_start = new_york_timezone.localize(datetime.combine(prev_session.date(), AFTER_HOURS_END_TIME))
+            period_end = new_york_timezone.localize(
+                datetime.combine(next_session.date() - timedelta(days=1), PREMARKET_START_TIME))
+            if period_end > period_start:
+                closed_periods.append((period_start, period_end))
+        return closed_periods
+
+    def _skip_closed_periods(self, start_time, elapsed_open, closed_periods):
+        """Maps an elapsed "market open" duration measured from start_time to the actual wall-clock
+        time, skipping over any closed_periods encountered along the way."""
+        cursor = start_time
+        remaining = elapsed_open
+        for period_start, period_end in closed_periods:
+            if period_start <= cursor:
+                continue
+            gap = period_start - cursor
+            if remaining <= gap:
+                return cursor + remaining
+            remaining -= gap
+            cursor = period_end
+        return cursor + remaining
+
     def build_schedule(self, now_nyc):
-        """Divide [previous SPX expiration close, next SPX expiration close) into number_of_samples_per_day periods."""
+        """Divide [previous SPX expiration close, next SPX expiration close) into number_of_samples_per_day
+        periods, considering only the time the market is actually open (excluding nightly breaks and any
+        holiday/weekend closures in between)."""
         cal = get_nyse_calendar()
         start_time = cal.previous_close(now_nyc).astimezone(new_york_timezone)
         current_trading_day = get_current_trading_day()
         next_expiration_date = datetime.strptime(current_trading_day, '%Y%m%d').date()
         expiration_time = new_york_timezone.localize(datetime.combine(next_expiration_date, REGULAR_HOURS_END_TIME))
 
-        period_length = (expiration_time - start_time) / self.number_of_samples_per_day
-        self.sample_times = [start_time + i * period_length for i in range(self.number_of_samples_per_day)]
+        closed_periods = self._get_closed_periods(cal, start_time, expiration_time)
+        total_closed = sum((end - start for start, end in closed_periods), timedelta())
+        open_duration = (expiration_time - start_time) - total_closed
+
+        period_length = open_duration / self.number_of_samples_per_day
+        self.sample_times = [
+            self._skip_closed_periods(start_time, i * period_length, closed_periods)
+            for i in range(self.number_of_samples_per_day)
+        ]
+        logger.info(f"barak: setting schedule date to {current_trading_day}")
         self.schedule_date = current_trading_day
 
         number_of_collected_samples = sum(
@@ -124,6 +166,7 @@ class OptionSampler:
         self.sample_times = self.sample_times[number_of_collected_samples:]
 
         if not self.sample_times:
+            logger.warning(f"Will not build a schedule since all slots were already used")
             return
 
         logger.info(
@@ -235,7 +278,7 @@ class OptionSampler:
                 if self.schedule_date != get_current_trading_day():
                     self.build_schedule(now_nyc)
                 elif is_after_hours():
-                    logger.warning(f"barak: Not calling build_schedule because current trading day is {get_current_trading_day()}")
+                    logger.warning(f"barak: Not calling build_schedule because current trading day is {get_current_trading_day()} and schedule data is {self.schedule_date}")
 
                 if self.sample_times and now_nyc >= self.sample_times[0]:
                     logger.info("Checking next sample...")
@@ -247,6 +290,13 @@ class OptionSampler:
                     if result == SUCCESS:
                         self.sample_times.pop(0)
 
+                if is_market_open() and self.collected_samples:
+                    cached_options = self.strike_finder.get_cached_options()
+                    for sample in self.collected_samples:
+                        cached_option = cached_options[sample.right].get(sample.strike)
+                        if cached_option:
+                            sample.last_ask = extract_ask(cached_option.ticker)
+
             except Exception:
                 logger.exception("OptionSampler: Loop error:")
 
@@ -256,9 +306,9 @@ class OptionSampler:
         logger.info("Collecting the next sample...")
         right = random.choice(['C', 'P'])
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss(right)
-        stop_loss_per_option = random.uniform(stop_loss_per_option / 2, stop_loss_per_option * 2)
+        stop_loss_per_option = random.uniform(stop_loss_per_option * 0.75, stop_loss_per_option * 1.5)
         target_delta_base, _ = self.target_delta_calculator.calculate_max_loss_based_target_delta(right, stop_loss_per_option)
-        target_delta = random.uniform(target_delta_base / 2, target_delta_base * 2)
+        target_delta = random.uniform(target_delta_base * 0.75, target_delta_base * 2.5)
         option = self.strike_finder.get_cached_low_delta_option(target_delta, right)
         if option is None:
             logger.warning("No option could be found for sample collection")
