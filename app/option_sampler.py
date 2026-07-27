@@ -204,15 +204,26 @@ class OptionSampler:
         minutes_to_expiration = sample.minutes_to_expiration or 0
         duration_seconds = max(int(minutes_to_expiration * 60), 60)
 
-        logger.info(f"barak: calling reqHistoricalDataAsync with {duration_seconds} seconds")
-        bars = await self.market_data_fetcher.ib.reqHistoricalDataAsync(
-            option,
-            endDateTime=day_end,
-            durationStr=f"{duration_seconds} S",
-            barSizeSetting='5 mins',
-            whatToShow='MIDPOINT',
-            useRTH=False,
-        )
+        # IB caps a single 5-min-bar request at 86400 seconds (24h), so page backwards from
+        # day_end in <=24h chunks and stitch the results back into chronological order.
+        bars = []
+        remaining_seconds = duration_seconds
+        request_end = day_end
+        while remaining_seconds > 0:
+            chunk_seconds = min(remaining_seconds, 86400)
+            logger.info(f"barak: calling reqHistoricalDataAsync with {chunk_seconds} seconds, endDateTime {request_end}")
+            chunk_bars = await self.market_data_fetcher.ib.reqHistoricalDataAsync(
+                option,
+                endDateTime=request_end,
+                durationStr=f"{chunk_seconds} S",
+                barSizeSetting='5 mins',
+                whatToShow='MIDPOINT',
+                useRTH=False,
+            )
+            bars = chunk_bars + bars
+            remaining_seconds -= chunk_seconds
+            request_end = request_end - timedelta(seconds=chunk_seconds)
+            await asyncio.sleep(1)
         logger.info(f"barak: reqHistoricalDataAsync ended successfully")
 
         candidate_threshold = 0.1 * stop_loss_limit
@@ -240,7 +251,6 @@ class OptionSampler:
             last_time = None
 
             while cursor < period_end:
-                logger.info(f"barak: calling reqHistoricalTicksAsync, cursor={cursor}")
                 raw_ticks = await self.market_data_fetcher.ib.reqHistoricalTicksAsync(
                     option,
                     startDateTime=cursor,
@@ -249,7 +259,6 @@ class OptionSampler:
                     whatToShow='BID_ASK',
                     useRth=False,
                 )
-                logger.info(f"barak: reqHistoricalTicksAsync ended successfully")
                 if not raw_ticks:
                     break
 
@@ -285,6 +294,7 @@ class OptionSampler:
                             PositionsManager()._log_close_event(sample)
                         else:
                             remaining_samples.append(sample)
+                    logger.info("Done storing the expired samples")
                     self.collected_samples = remaining_samples
 
                 if self.schedule_date != get_current_trading_day() and not (
