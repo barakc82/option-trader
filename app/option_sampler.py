@@ -181,6 +181,7 @@ class OptionSampler:
         ticks, first scan cheap 5-minute midpoint bars; only for bars whose midpoint exceeds
         10% of the stop-loss level do we pull ticks, and adjacent/overlapping candidate bars
         are merged into contiguous periods first so the same ticks aren't fetched twice."""
+
         if sample.stop_loss_activated:
             return True
 
@@ -188,6 +189,8 @@ class OptionSampler:
             symbol='SPX', lastTradeDateOrContractMonth=sample.expiry, strike=sample.strike,
             right=sample.right, exchange='CBOE', currency='USD', tradingClass='SPXW',
         )
+        logger.info(f"Checking whether {get_option_name(option)} required stop loss activation")
+
         qualified = await self.market_data_fetcher.qualify([option])
         if not qualified:
             logger.error(f"Could not qualify {get_option_name(option)} to check stop loss activation")
@@ -201,6 +204,7 @@ class OptionSampler:
         minutes_to_expiration = sample.minutes_to_expiration or 0
         duration_seconds = max(int(minutes_to_expiration * 60), 60)
 
+        logger.info(f"barak: calling reqHistoricalDataAsync with {duration_seconds} seconds")
         bars = await self.market_data_fetcher.ib.reqHistoricalDataAsync(
             option,
             endDateTime=day_end,
@@ -209,6 +213,7 @@ class OptionSampler:
             whatToShow='MIDPOINT',
             useRTH=False,
         )
+        logger.info(f"barak: reqHistoricalDataAsync ended successfully")
 
         candidate_threshold = 0.1 * stop_loss_limit
         candidate_bars = [bar for bar in bars if bar.high > candidate_threshold]
@@ -230,10 +235,12 @@ class OptionSampler:
                 periods.append((bar_start, bar_end))
 
         for period_start, period_end in periods:
+            logger.info(f"Checking tick-by-tick period {period_start} to {period_end} for {get_option_name(option)}")
             cursor = period_start
             last_time = None
 
             while cursor < period_end:
+                logger.info(f"barak: calling reqHistoricalTicksAsync, cursor={cursor}")
                 raw_ticks = await self.market_data_fetcher.ib.reqHistoricalTicksAsync(
                     option,
                     startDateTime=cursor,
@@ -242,6 +249,7 @@ class OptionSampler:
                     whatToShow='BID_ASK',
                     useRth=False,
                 )
+                logger.info(f"barak: reqHistoricalTicksAsync ended successfully")
                 if not raw_ticks:
                     break
 
@@ -273,6 +281,7 @@ class OptionSampler:
                         expiry_datetime = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
                         if expiry_datetime < now_nyc:
                             sample.stop_loss_activated = int(await self.check_stop_loss_activated(sample))
+                            logger.info(f"Storing an expired sample for {get_option_name(sample)}")
                             PositionsManager()._log_close_event(sample)
                         else:
                             remaining_samples.append(sample)
@@ -314,7 +323,7 @@ class OptionSampler:
         logger.info("Collecting the next sample...")
         right = random.choice(['C', 'P'])
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss(right)
-        stop_loss_per_option = random.uniform(stop_loss_per_option * 0.75, stop_loss_per_option * 1.5)
+        stop_loss_per_option = random.uniform(stop_loss_per_option * 0.50, stop_loss_per_option * 1.5)
         target_delta_base, _ = self.target_delta_calculator.calculate_max_loss_based_target_delta(right, stop_loss_per_option)
         target_delta = random.uniform(target_delta_base * 0.75, target_delta_base * 3)
         option = self.strike_finder.get_cached_low_delta_option(target_delta, right)
