@@ -244,6 +244,7 @@ class StateUpdater:
                 'minutes_to_expiration': sample.minutes_to_expiration if sample.minutes_to_expiration is not None else '',
                 'distance_to_stop_pct': round(sample.distance_to_stop_pct, 2) if sample.distance_to_stop_pct is not None else '',
                 'implied_volatility': round(sample.implied_volatility, 3) if sample.implied_volatility is not None else '',
+                'stop_loss_activated': sample.stop_loss_activated,
             })
         state['random_states'] = sorted(random_states, key=lambda x: (x['right'], x['date'], x['strike']))
 

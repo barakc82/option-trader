@@ -181,6 +181,9 @@ class OptionSampler:
         ticks, first scan cheap 5-minute midpoint bars; only for bars whose midpoint exceeds
         10% of the stop-loss level do we pull ticks, and adjacent/overlapping candidate bars
         are merged into contiguous periods first so the same ticks aren't fetched twice."""
+        if sample.stop_loss_activated:
+            return True
+
         option = Option(
             symbol='SPX', lastTradeDateOrContractMonth=sample.expiry, strike=sample.strike,
             right=sample.right, exchange='CBOE', currency='USD', tradingClass='SPXW',

@@ -217,7 +217,9 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let pos of state.random_states">
+          <tr *ngFor="let pos of state.random_states" [ngClass]="{
+            'last-ask-alert-row': !!pos.stop_loss_activated || (pos.last_ask !== '' && +pos.last_ask > (+pos.estimated_sell_price + +pos.stop_loss_per_option) / 2)
+          }">
             <td>{{ pos.right }}</td>
             <td>{{ pos.strike }}</td>
             <td>{{ pos.date }}</td>

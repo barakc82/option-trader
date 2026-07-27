@@ -27,6 +27,7 @@ export interface Position {
     minutes_to_expiration: number | string;
     distance_to_stop_pct: string;
     implied_volatility: string;
+    stop_loss_activated?: number;
   }
 
   export interface Trade {
