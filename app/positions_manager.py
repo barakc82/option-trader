@@ -111,7 +111,7 @@ class PositionsManager:
             if expiry_datetime < now_nyc:
                 for entry in entries:
                     self._log_close_event(entry)
-            del self.position_initial_state_map[key]
+                del self.position_initial_state_map[key]
 
         for position in positions:
             write_heartbeat()
@@ -221,4 +221,5 @@ class PositionsManager:
     def update_position_entry(self, position_initial_state: PositionInitialState, trade):
         c = trade.contract
         key = c.conId
+        logger.info(f"barak: storing in position_initial_state_map a position_initial_state object for {get_option_name(c)} with estimated sell price of {position_initial_state.estimated_sell_price}")
         self.position_initial_state_map.setdefault(key, []).append(position_initial_state)

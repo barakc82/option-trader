@@ -63,7 +63,7 @@ class MaxLossCalculator:
         if current_time > end_time_timestamp >= self.last_calculation_time[right]:
             self.last_calculation_time[right] = 0
 
-        if time.time() - self.last_calculation_time[right] < 60:
+        if time.time() - self.last_calculation_time[right] < 60 and self.last_calculation_time[right] > 0:
             return self.last_max_loss[right]
 
         now = time.time()

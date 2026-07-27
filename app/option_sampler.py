@@ -311,7 +311,7 @@ class OptionSampler:
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss(right)
         stop_loss_per_option = random.uniform(stop_loss_per_option * 0.75, stop_loss_per_option * 1.5)
         target_delta_base, _ = self.target_delta_calculator.calculate_max_loss_based_target_delta(right, stop_loss_per_option)
-        target_delta = random.uniform(target_delta_base * 0.75, target_delta_base * 2.5)
+        target_delta = random.uniform(target_delta_base * 0.75, target_delta_base * 3)
         option = self.strike_finder.get_cached_low_delta_option(target_delta, right)
         if option is None:
             logger.warning("No option could be found for sample collection")

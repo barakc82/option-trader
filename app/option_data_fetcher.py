@@ -49,7 +49,7 @@ class OptionDataFetcher:
         reference_price = self.mdf.get_reference_price()
         if self._iv_reference_price_debug_count < 10:
             self._iv_reference_price_debug_count += 1
-            print(f"[get_spx_implied_volatility] call #{self._iv_reference_price_debug_count} ({right}): reference_price={reference_price}")
+            logger.info(f"[get_spx_implied_volatility] call #{self._iv_reference_price_debug_count} ({right}): reference_price={reference_price}")
 
         if math.isnan(reference_price):
             logger.error(f"The reference price is NaN")
@@ -67,7 +67,7 @@ class OptionDataFetcher:
 
         if self._iv_reference_price_debug_count < 10:
             self._iv_reference_price_debug_count += 1
-            print(f"[get_spx_implied_volatility] call #{self._iv_reference_price_debug_count} ({right}): last Trade Date = {sample_option.lastTradeDateOrContractMonth}")
+            logger.info(f"[get_spx_implied_volatility] call #{self._iv_reference_price_debug_count} ({right}): last Trade Date = {sample_option.lastTradeDateOrContractMonth}")
 
         if (expiration_date < now_nyc.date() or
                 (expiration_date == now_nyc.date() and now_nyc.time() > REGULAR_HOURS_END_TIME)):
