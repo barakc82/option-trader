@@ -278,7 +278,8 @@ class OptionSampler:
                             remaining_samples.append(sample)
                     self.collected_samples = remaining_samples
 
-                if self.schedule_date != get_current_trading_day():
+                if self.schedule_date != get_current_trading_day() and not (
+                        NEW_OPTION_EXPLORATION_START_TIME < now_nyc.time() < REGULAR_HOURS_END_TIME):
                     self.build_schedule(now_nyc)
                 elif is_after_hours():
                     logger.warning(f"barak: Not calling build_schedule because current trading day is {get_current_trading_day()} and schedule data is {self.schedule_date}")
@@ -296,6 +297,10 @@ class OptionSampler:
                 if is_market_open() and self.collected_samples:
                     cached_options = self.strike_finder.get_cached_options()
                     for sample in self.collected_samples:
+                        expiry_date = datetime.strptime(sample.expiry, '%Y%m%d').date()
+                        expiry_datetime = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
+                        if expiry_datetime < now_nyc:
+                            continue
                         cached_option = cached_options[sample.right].get(sample.strike)
                         if cached_option:
                             sample.last_ask = extract_ask(cached_option.ticker)
