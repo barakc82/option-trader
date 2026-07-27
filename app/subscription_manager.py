@@ -233,10 +233,11 @@ class SubscriptionManager:
         active_tickers = self.ib.wrapper.ticker2ReqId['mktData'].keys()
         active_es_con_ids = {ticker.contract.conId for ticker in active_tickers
                              if ticker.contract.symbol == 'ES' and ticker.contract.secType == 'FOP'}
-        for es_contracts in list(self.spx_to_es_map.values()):
+        for spx_con_id, es_contracts in list(self.spx_to_es_map.items()):
             for es_contract in es_contracts:
                 if es_contract.conId not in active_es_con_ids:
                     logger.warning(f"ES ticker {get_es_option_name(es_contract)} is not in active subscriptions")
+                    del self.spx_to_es_map[spx_con_id]
                     continue
                 if self._unsubscribe_if_stale(es_contract):
                     continue
