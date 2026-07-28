@@ -20,6 +20,7 @@ from .trading_bot import TradingBot
 logger = logging.getLogger(__name__)
 
 DEFAULT_NUMBER_OF_SAMPLES_PER_DAY = 4
+DEFAULT_TARGET_DELTA_TOP_MULTIPLIER = 3
 
 
 class OptionSampler:
@@ -41,6 +42,7 @@ class OptionSampler:
             self.opportunity_explorer = OpportunityExplorer()
 
             self.number_of_samples_per_day = DEFAULT_NUMBER_OF_SAMPLES_PER_DAY
+            self.target_delta_top_multiplier = DEFAULT_TARGET_DELTA_TOP_MULTIPLIER
             self.schedule_date = None
             self.sample_times = []
             self.collected_samples = []
@@ -104,6 +106,11 @@ class OptionSampler:
                     logger.info(f"OptionSampler: number_of_samples_per_day changed from {self.number_of_samples_per_day} to {new_number_of_samples_per_day}")
                     self.number_of_samples_per_day = new_number_of_samples_per_day
                     self.schedule_date = None
+
+                new_target_delta_top_multiplier = config.get("target_delta_top_multiplier", DEFAULT_TARGET_DELTA_TOP_MULTIPLIER)
+                if new_target_delta_top_multiplier != self.target_delta_top_multiplier:
+                    logger.info(f"OptionSampler: target_delta_top_multiplier changed from {self.target_delta_top_multiplier} to {new_target_delta_top_multiplier}")
+                    self.target_delta_top_multiplier = new_target_delta_top_multiplier
         except Exception as e:
             logger.error(f"OptionSampler: Error reading config: {e}")
 
@@ -332,7 +339,7 @@ class OptionSampler:
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss(right)
         stop_loss_per_option = random.uniform(stop_loss_per_option * 0.50, stop_loss_per_option * 1.5)
         target_delta_base, _ = self.target_delta_calculator.calculate_max_loss_based_target_delta(right, stop_loss_per_option)
-        target_delta = random.uniform(target_delta_base * 0.75, target_delta_base * 3)
+        target_delta = random.uniform(target_delta_base * 0.75, target_delta_base * self.target_delta_top_multiplier)
         option = self.strike_finder.get_cached_low_delta_option(target_delta, right)
         if option is None:
             logger.warning("No option could be found for sample collection")
