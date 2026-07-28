@@ -40,6 +40,11 @@ def analyze_option_trader_log():
             if "IB Error 321" in last_line:
                 logger.error(f"IBGateway not configured correctly detected on {latest_log}")
                 return IBGATEWAY_RESTART_REQUIRED
+            if "Timed out requesting ES future contract details" in last_line:
+                logger.error(f"Could not fetch the details of ES future contract on {latest_log}, "
+                             f"it seems that an IBGateway restart is required")
+                return IBGATEWAY_RESTART_REQUIRED
+
     except Exception as e:
         logger.error(f"Error analyzing log {latest_log}: {e}")
 

@@ -284,18 +284,15 @@ class OptionSampler:
                 now_nyc = datetime.now(new_york_timezone)
 
                 if is_night_break():
-                    remaining_samples = []
-                    for sample in self.collected_samples:
+                    for sample in list(self.collected_samples):
                         expiry_date = datetime.strptime(sample.expiry, '%Y%m%d').date()
                         expiry_datetime = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
                         if expiry_datetime < now_nyc:
                             sample.stop_loss_activated = int(await self.check_stop_loss_activated(sample))
                             logger.info(f"Storing an expired sample for {get_option_name(sample)}")
                             PositionsManager()._log_close_event(sample)
-                        else:
-                            remaining_samples.append(sample)
+                            self.collected_samples.remove(sample)
                     logger.info("Done storing the expired samples")
-                    self.collected_samples = remaining_samples
 
                 if self.schedule_date != get_current_trading_day() and not (
                         NEW_OPTION_EXPLORATION_START_TIME < now_nyc.time() < REGULAR_HOURS_END_TIME):

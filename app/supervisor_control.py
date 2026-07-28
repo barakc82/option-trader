@@ -174,6 +174,31 @@ def restart_ibgateway(post_current_state_callback, timeout: int = 30):
     except Exception as e:
         logger.error(f"Failed to stop IB Gateway: {e}")
 
+    running_run_sh = []
+    for proc in psutil.process_iter(['pid', 'cmdline']):
+        try:
+            cmdline = proc.info['cmdline']
+            if cmdline and any('run.sh' in arg for arg in cmdline):
+                running_run_sh.append(proc)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+
+    if running_run_sh:
+        logger.warning(f"Found {len(running_run_sh)} lingering run.sh process(es), terminating them...")
+        for proc in running_run_sh:
+            try:
+                proc.terminate()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+
+        gone, alive = psutil.wait_procs(running_run_sh, timeout=5)
+        for proc in alive:
+            try:
+                logger.warning(f"run.sh process {proc.pid} did not terminate after 5s. Killing it...")
+                proc.kill()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+
     logger.info("Running run.sh...")
     try:
         subprocess.Popen(['/home/ibgateway/scripts/run.sh'], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

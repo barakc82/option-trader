@@ -1,3 +1,4 @@
+import asyncio
 import math
 import os
 import json
@@ -74,7 +75,13 @@ class IndexPriceManager:
         if not self.es or self.es.lastTradeDateOrContractMonth < today_str:
             es_incomplete = Future('ES', exchange='CME', currency='USD')
             logger.info(f"Requesting the details of the closest ES future for {today_str}")
-            es_details = await self.ib.reqContractDetailsAsync(es_incomplete)
+            try:
+                es_details = await asyncio.wait_for(self.ib.reqContractDetailsAsync(es_incomplete), timeout=20)
+            except asyncio.TimeoutError:
+                logger.error("Timed out requesting ES future contract details")
+                logger.critical(f"Timed out requesting ES future contract details. It means that IBGateway requires a restart, so exiting")
+                os._exit(1)
+                return self.es
             contracts = [es_detail.contract for es_detail in es_details if es_detail.contract.lastTradeDateOrContractMonth >= today_str]
             contracts.sort(key=lambda c: c.lastTradeDateOrContractMonth)
             closest_es_future = contracts[0]
