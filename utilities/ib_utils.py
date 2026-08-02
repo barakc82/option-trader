@@ -52,12 +52,13 @@ class PositionInitialState:
     bid_delta: float | None = None
     ask_delta: float | None = None
     last_ask: float | None = None
+    max_ask: float | None = None
     last_delta: float | None = None
     model_delta: float | None = None
     gamma: float | None = None
     minutes_to_expiration: int | None = None
     implied_volatility: float | None = None
-    distance_to_stop_pct: float | None = None
+    distance_to_strike_pct: float | None = None
     stop_loss_activated: int = 0
 
 
@@ -240,11 +241,12 @@ def calculate_distance_to_stop(option, ticker, stop_loss, spot_price, r):
     return spot_price - S_star if right == 'P' else S_star - spot_price
 
 
-def calculate_distance_to_stop_pct(option, ticker, stop_loss, spot_price, r):
-    """Return distance to the stop-loss level as a percentage of spot_price, instead of points."""
-    distance = calculate_distance_to_stop(option, ticker, stop_loss, spot_price, r)
-    if math.isnan(distance) or spot_price == 0:
+def calculate_distance_to_strike_pct(option, spot_price):
+    """Return the distance between spot_price and the option's strike, as a percentage of
+    spot_price. Positive means the strike is still out of the money."""
+    if spot_price == 0:
         return math.nan
+    distance = spot_price - option.strike if option.right == 'P' else option.strike - spot_price
     return distance / spot_price * 100
 
 
@@ -254,9 +256,7 @@ def get_minutes_to_expiration(option):
     return round((expiry_datetime - datetime.now(new_york_timezone)).total_seconds() / 60)
 
 
-def get_distance_to_stop_pct(option, estimated_sell_price, stop_loss_per_option, market_data_fetcher):
+def get_distance_to_strike_pct(option, market_data_fetcher):
     indices_difference = market_data_fetcher.calculate_spx_es_difference()
     spot_price = market_data_fetcher.get_spx_price() if is_regular_hours() else market_data_fetcher.get_es_price() + indices_difference
-    r = market_data_fetcher.get_cached_risk_free_rate()
-    raw_stop_loss = estimated_sell_price + stop_loss_per_option
-    return calculate_distance_to_stop_pct(option, option.ticker, raw_stop_loss, spot_price, r)
+    return calculate_distance_to_strike_pct(option, spot_price)

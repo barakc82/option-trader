@@ -72,7 +72,7 @@ class OptionSampler:
                 model_delta = sample.get('model_delta')
                 gamma = sample.get('gamma')
                 minutes_to_expiration = sample.get('minutes_to_expiration')
-                distance_to_stop_pct = sample.get('distance_to_stop_pct')
+                distance_to_strike_pct = sample.get('distance_to_strike_pct')
                 implied_volatility = sample.get('implied_volatility')
                 self.collected_samples.append(PositionInitialState(
                     is_executed=0,
@@ -87,7 +87,7 @@ class OptionSampler:
                     model_delta=float(model_delta) if model_delta not in (None, '') else None,
                     gamma=float(gamma) if gamma not in (None, '') else None,
                     minutes_to_expiration=int(minutes_to_expiration) if minutes_to_expiration not in (None, '') else None,
-                    distance_to_stop_pct=float(distance_to_stop_pct) if distance_to_stop_pct not in (None, '') else None,
+                    distance_to_strike_pct=float(distance_to_strike_pct) if distance_to_strike_pct not in (None, '') else None,
                     implied_volatility=float(implied_volatility) if implied_volatility not in (None, '') else None,
                 ))
             logger.info(f"Loaded {len(self.collected_samples)} random samples from cache")
@@ -113,6 +113,24 @@ class OptionSampler:
                     self.target_delta_top_multiplier = new_target_delta_top_multiplier
         except Exception as e:
             logger.error(f"OptionSampler: Error reading config: {e}")
+
+    def _adjust_target_delta_top_multiplier(self, some_stop_loss_activated):
+        """Nudges target_delta_top_multiplier in OPTION_TRADER_CONFIG_PATH by +-0.1 depending on
+        whether any of the samples dumped this cycle had their stop loss activated."""
+        new_multiplier = round(self.target_delta_top_multiplier + (0.1 if some_stop_loss_activated else -0.1), 2)
+        try:
+            config = {}
+            if os.path.exists(OPTION_TRADER_CONFIG_PATH):
+                with open(OPTION_TRADER_CONFIG_PATH, "r") as f:
+                    config = json.load(f)
+            config["target_delta_top_multiplier"] = new_multiplier
+            with open(OPTION_TRADER_CONFIG_PATH, "w") as f:
+                json.dump(config, f, indent=4)
+            logger.info(
+                f"OptionSampler: adjusted target_delta_top_multiplier to {new_multiplier} in config "
+                f"(some_stop_loss_activated={some_stop_loss_activated})")
+        except Exception as e:
+            logger.error(f"OptionSampler: Error writing target_delta_top_multiplier to config: {e}")
 
     def _get_closed_periods(self, cal, start_time, expiration_time):
         """Returns the sorted (start, end) NYC-localized closed-market intervals that fall between
@@ -163,7 +181,6 @@ class OptionSampler:
             self._skip_closed_periods(start_time, i * period_length, closed_periods)
             for i in range(self.number_of_samples_per_day)
         ]
-        logger.info(f"barak: setting schedule date to {current_trading_day}")
         self.schedule_date = current_trading_day
 
         number_of_collected_samples = sum(
@@ -190,6 +207,7 @@ class OptionSampler:
         are merged into contiguous periods first so the same ticks aren't fetched twice."""
 
         if sample.stop_loss_activated:
+            logger.info("The sample is already set as stop-loss activated")
             return True
 
         option = Option(
@@ -230,12 +248,13 @@ class OptionSampler:
             bars = chunk_bars + bars
             remaining_seconds -= chunk_seconds
             request_end = request_end - timedelta(seconds=chunk_seconds)
+            logger.info(f"barak: reqHistoricalDataAsync ended successfully")
             await asyncio.sleep(1)
-        logger.info(f"barak: reqHistoricalDataAsync ended successfully")
 
         candidate_threshold = 0.1 * stop_loss_limit
         candidate_bars = [bar for bar in bars if bar.high > candidate_threshold]
         if any(bar.high >= stop_loss_limit for bar in candidate_bars):
+            logger.info("The stop-loss was found to be activated after going over the historical bars")
             return True
 
         # Map candidate bars to the contiguous [start, end) periods that need a tick-by-tick
@@ -258,6 +277,8 @@ class OptionSampler:
             last_time = None
 
             while cursor < period_end:
+                logger.info(
+                    f"barak: Checking {cursor}")
                 raw_ticks = await self.market_data_fetcher.ib.reqHistoricalTicksAsync(
                     option,
                     startDateTime=cursor,
@@ -271,6 +292,7 @@ class OptionSampler:
 
                 new_ticks = [t for t in raw_ticks if (last_time is None or t.time > last_time) and t.time < period_end]
                 if any(tick.priceAsk >= stop_loss_limit for tick in new_ticks):
+                    logger.info("The stop-loss was found to be activated after going over the historical ticks")
                     return True
 
                 last_time = raw_ticks[-1].time
@@ -291,21 +313,26 @@ class OptionSampler:
                 now_nyc = datetime.now(new_york_timezone)
 
                 if is_night_break():
+                    some_stop_loss_activated = False
+                    processed_any_sample = False
                     for sample in list(self.collected_samples):
                         expiry_date = datetime.strptime(sample.expiry, '%Y%m%d').date()
                         expiry_datetime = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
                         if expiry_datetime < now_nyc:
                             sample.stop_loss_activated = int(await self.check_stop_loss_activated(sample))
+                            some_stop_loss_activated |= sample.stop_loss_activated
+                            processed_any_sample = True
                             logger.info(f"Storing an expired sample for {get_option_name(sample)}")
                             PositionsManager()._log_close_event(sample)
                             self.collected_samples.remove(sample)
                     logger.info("Done storing the expired samples")
 
+                    if processed_any_sample:
+                        self._adjust_target_delta_top_multiplier(some_stop_loss_activated)
+
                 if self.schedule_date != get_current_trading_day() and not (
                         NEW_OPTION_EXPLORATION_START_TIME < now_nyc.time() < REGULAR_HOURS_END_TIME):
                     self.build_schedule(now_nyc)
-                elif is_after_hours():
-                    logger.warning(f"barak: Not calling build_schedule because current trading day is {get_current_trading_day()} and schedule data is {self.schedule_date}")
 
                 if self.sample_times and now_nyc >= self.sample_times[0]:
                     logger.info("Checking next sample...")
@@ -361,7 +388,7 @@ class OptionSampler:
             gamma=get_model_gamma(option.ticker),
             minutes_to_expiration=get_minutes_to_expiration(option),
             implied_volatility=self.market_data_fetcher.get_cached_spx_implied_volatility(right),
-            distance_to_stop_pct=get_distance_to_stop_pct(option, estimated_sell_price, stop_loss_per_option, self.market_data_fetcher),
+            distance_to_strike_pct=get_distance_to_strike_pct(option, self.market_data_fetcher),
         )
 
         self.collected_samples.append(random_sample)

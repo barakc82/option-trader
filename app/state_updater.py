@@ -195,8 +195,9 @@ class StateUpdater:
                     'model_delta': round(td_entry.model_delta, 3) if td_entry and td_entry.model_delta is not None else '',
                     'gamma': round(td_entry.gamma, 4) if td_entry and td_entry.gamma is not None else '',
                     'minutes_to_expiration': td_entry.minutes_to_expiration if td_entry and td_entry.minutes_to_expiration is not None else '',
-                    'distance_to_stop_pct': round(td_entry.distance_to_stop_pct, 2) if td_entry and td_entry.distance_to_stop_pct is not None else '',
+                    'distance_to_strike_pct': round(td_entry.distance_to_strike_pct, 2) if td_entry and td_entry.distance_to_strike_pct is not None else '',
                     'implied_volatility': round(td_entry.implied_volatility, 3) if td_entry and td_entry.implied_volatility is not None else '',
+                    'max_ask': round(td_entry.max_ask, 3) if td_entry and td_entry.max_ask is not None else '',
                 })
 
             es_options = subscription_manager.spx_to_es_map.get(option.conId)
@@ -242,7 +243,7 @@ class StateUpdater:
                 'model_delta': round(sample.model_delta, 3) if sample.model_delta is not None else '',
                 'gamma': round(sample.gamma, 4) if sample.gamma is not None else '',
                 'minutes_to_expiration': sample.minutes_to_expiration if sample.minutes_to_expiration is not None else '',
-                'distance_to_stop_pct': round(sample.distance_to_stop_pct, 2) if sample.distance_to_stop_pct is not None else '',
+                'distance_to_strike_pct': round(sample.distance_to_strike_pct, 2) if sample.distance_to_strike_pct is not None else '',
                 'implied_volatility': round(sample.implied_volatility, 3) if sample.implied_volatility is not None else '',
                 'stop_loss_activated': sample.stop_loss_activated,
             })

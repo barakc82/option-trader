@@ -7,7 +7,7 @@ import exchange_calendars as ecals
 import yfinance as yf
 from ib_insync import Index, Future
 from utilities.utils import *
-from utilities.ib_utils import get_delta
+from utilities.ib_utils import get_delta, extract_ask
 
 from .connection_manager import ConnectionManager
 from .market_data_utils import LIVE_DATA, FROZEN_DATA, SPXESPair, get_gamma
@@ -109,8 +109,15 @@ class MarketDataFetcher:
         now = time.time()
         contract = ticker.contract
 
+        from .positions_manager import PositionsManager
+        current_ask = extract_ask(ticker)
+        if current_ask is not None:
+            for entry in PositionsManager().position_initial_state_map.get(contract.conId, []):
+                if entry.max_ask is None or current_ask > entry.max_ask:
+                    entry.max_ask = current_ask
+
         last_tick_time = self.get_last_tick_time(contract.conId)
-        
+
         gamma = get_gamma(ticker)
         price = ticker.last
 

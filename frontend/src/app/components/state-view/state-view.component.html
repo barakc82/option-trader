@@ -153,46 +153,6 @@
         </tbody>
       </table>
 
-      <h3>Position Initial States</h3>
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Right</th>
-            <th>Strike</th>
-            <th>Expiration Date</th>
-            <th>Estimated Sell Price</th>
-            <th>Stop Loss Per Option</th>
-            <th>Bid Delta</th>
-            <th>Ask Delta</th>
-            <th>Last Delta</th>
-            <th>Model Delta</th>
-            <th>Gamma</th>
-            <th>Target Delta</th>
-            <th>Minutes to Expiration</th>
-            <th>Distance to Stop (%)</th>
-            <th>Implied Volatility</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr *ngFor="let pos of state.position_initial_states">
-            <td>{{ pos.right }}</td>
-            <td>{{ pos.strike }}</td>
-            <td>{{ pos.date }}</td>
-            <td>{{ pos.estimated_sell_price }}</td>
-            <td>{{ pos.stop_loss_per_option }}</td>
-            <td>{{ pos.bid_delta }}</td>
-            <td>{{ pos.ask_delta }}</td>
-            <td>{{ pos.last_delta }}</td>
-            <td>{{ pos.model_delta }}</td>
-            <td>{{ pos.gamma }}</td>
-            <td>{{ pos.target_delta }}</td>
-            <td>{{ pos.minutes_to_expiration }}</td>
-            <td>{{ pos.distance_to_stop_pct }}</td>
-            <td>{{ pos.implied_volatility }}</td>
-          </tr>
-        </tbody>
-      </table>
-
       <h3>Random States</h3>
       <table class="table">
         <thead>
@@ -209,7 +169,7 @@
             <th>Gamma</th>
             <th>Target Delta</th>
             <th>Minutes to Expiration</th>
-            <th>Distance to Stop (%)</th>
+            <th>Distance to Strike (%)</th>
             <th>Implied Volatility</th>
             <th>Last Ask</th>
           </tr>
@@ -230,9 +190,51 @@
             <td>{{ pos.gamma }}</td>
             <td>{{ pos.target_delta }}</td>
             <td>{{ pos.minutes_to_expiration }}</td>
-            <td>{{ pos.distance_to_stop_pct }}</td>
+            <td>{{ pos.distance_to_strike_pct }}</td>
             <td>{{ pos.implied_volatility }}</td>
             <td>{{ pos.last_ask }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Position Initial States</h3>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Right</th>
+            <th>Strike</th>
+            <th>Expiration Date</th>
+            <th>Estimated Sell Price</th>
+            <th>Stop Loss Per Option</th>
+            <th>Bid Delta</th>
+            <th>Ask Delta</th>
+            <th>Last Delta</th>
+            <th>Model Delta</th>
+            <th>Gamma</th>
+            <th>Target Delta</th>
+            <th>Minutes to Expiration</th>
+            <th>Distance to Strike (%)</th>
+            <th>Implied Volatility</th>
+            <th>Max Ask</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let pos of state.position_initial_states">
+            <td>{{ pos.right }}</td>
+            <td>{{ pos.strike }}</td>
+            <td>{{ pos.date }}</td>
+            <td>{{ pos.estimated_sell_price }}</td>
+            <td>{{ pos.stop_loss_per_option }}</td>
+            <td>{{ pos.bid_delta }}</td>
+            <td>{{ pos.ask_delta }}</td>
+            <td>{{ pos.last_delta }}</td>
+            <td>{{ pos.model_delta }}</td>
+            <td>{{ pos.gamma }}</td>
+            <td>{{ pos.target_delta }}</td>
+            <td>{{ pos.minutes_to_expiration }}</td>
+            <td>{{ pos.distance_to_strike_pct }}</td>
+            <td>{{ pos.implied_volatility }}</td>
+            <td>{{ pos.max_ask }}</td>
           </tr>
         </tbody>
       </table>

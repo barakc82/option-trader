@@ -7,6 +7,7 @@ import requests
 import asyncio
 from zoneinfo import ZoneInfo
 from datetime import datetime
+from logging.handlers import TimedRotatingFileHandler
 
 from utilities.utils import is_in_docker, acquire_single_instance_lock, SUCCESS, ERROR, REGULAR_HOURS_END_TIME, new_york_timezone
 from .state_updater import update_supervisor_state_async, post_current_state
@@ -26,7 +27,13 @@ console_formatter = logging.Formatter('%(asctime)s %(message)s', datefmt='%Y-%m-
 console_handler.setFormatter(console_formatter)
 
 # File handler
-file_handler = logging.FileHandler(f'{LOGS_DIR}/supervisor.log')
+file_handler = TimedRotatingFileHandler(
+    filename=f"{LOGS_DIR}/supervisor.log",
+    when="midnight",
+    interval=1,
+    backupCount=3,
+    encoding="utf-8",
+)
 file_handler.setLevel(logging.INFO)
 file_formatter = logging.Formatter('%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 file_handler.setFormatter(file_formatter)
@@ -183,7 +190,10 @@ def monitor(interval=5):
                 monitor_option_trader()
                 status = check_ib_gateway_health()
                 if not status["is_healthy"]:
-                    logger.error(f"ibgateway unhealthy: {status}")
+                    logger.error(f"IBGateway unhealthy: {status}")
+                if not status["process_found"]:
+                    logger.error("IBGateway process not found, trying to start it...")
+                    restart_ibgateway(post_current_state)
 
                 if check_sunday_expiration():
                     state = RESTART_PLATFORM_STATE

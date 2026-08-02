@@ -186,10 +186,11 @@ class OpportunityExplorer:
             estimated_sell_price=estimated_sell_price, stop_loss_per_option=stop_loss_per_option,
             target_delta=target_delta,
             bid_delta=bid_delta, ask_delta=ask_delta, last_delta=last_delta, model_delta=model_delta,
+            max_ask=extract_ask(call_option.ticker),
             gamma=get_model_gamma(call_option.ticker),
             minutes_to_expiration=get_minutes_to_expiration(call_option),
             implied_volatility=self.market_data_fetcher.get_cached_spx_implied_volatility('C'),
-            distance_to_stop_pct=get_distance_to_stop_pct(call_option, estimated_sell_price, stop_loss_per_option, self.market_data_fetcher),
+            distance_to_strike_pct=get_distance_to_strike_pct(call_option, self.market_data_fetcher),
         )
 
         sell_option_result = await self.try_to_sell(call_option, 2, position_initial_state)
@@ -342,10 +343,11 @@ class OpportunityExplorer:
             estimated_sell_price=estimated_sell_price, stop_loss_per_option=stop_loss_per_option,
             target_delta=target_delta,
             bid_delta=bid_delta, ask_delta=ask_delta, last_delta=last_delta, model_delta=model_delta,
+            max_ask=extract_ask(put_option.ticker),
             gamma=get_model_gamma(put_option.ticker),
             minutes_to_expiration=get_minutes_to_expiration(put_option),
             implied_volatility=self.market_data_fetcher.get_cached_spx_implied_volatility('P'),
-            distance_to_stop_pct=get_distance_to_stop_pct(put_option, estimated_sell_price, stop_loss_per_option, self.market_data_fetcher),
+            distance_to_strike_pct=get_distance_to_strike_pct(put_option, self.market_data_fetcher),
         )
 
         quantity = min(max_options_for_market_drop, 2)

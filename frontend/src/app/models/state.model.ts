@@ -25,9 +25,10 @@ export interface Position {
     model_delta: string;
     gamma: string;
     minutes_to_expiration: number | string;
-    distance_to_stop_pct: string;
+    distance_to_strike_pct: string;
     implied_volatility: string;
     stop_loss_activated?: number;
+    max_ask?: string;
   }
 
   export interface Trade {
