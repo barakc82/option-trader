@@ -161,7 +161,6 @@
             <th>Strike</th>
             <th>Expiration Date</th>
             <th>Estimated Sell Price</th>
-            <th>Stop Loss Per Option</th>
             <th>Bid Delta</th>
             <th>Ask Delta</th>
             <th>Last Delta</th>
@@ -176,13 +175,12 @@
         </thead>
         <tbody>
           <tr *ngFor="let pos of state.random_states" [ngClass]="{
-            'last-ask-alert-row': !!pos.stop_loss_activated || (pos.last_ask !== '' && +pos.last_ask > (+pos.estimated_sell_price + +pos.stop_loss_per_option) / 2)
+            'last-ask-alert-row': pos.last_ask !== '' && +pos.last_ask >= 2 * +pos.estimated_sell_price
           }">
             <td>{{ pos.right }}</td>
             <td>{{ pos.strike }}</td>
             <td>{{ pos.date }}</td>
             <td>{{ pos.estimated_sell_price }}</td>
-            <td>{{ pos.stop_loss_per_option }}</td>
             <td>{{ pos.bid_delta }}</td>
             <td>{{ pos.ask_delta }}</td>
             <td>{{ pos.last_delta }}</td>
@@ -205,7 +203,6 @@
             <th>Strike</th>
             <th>Expiration Date</th>
             <th>Estimated Sell Price</th>
-            <th>Stop Loss Per Option</th>
             <th>Bid Delta</th>
             <th>Ask Delta</th>
             <th>Last Delta</th>
@@ -224,7 +221,6 @@
             <td>{{ pos.strike }}</td>
             <td>{{ pos.date }}</td>
             <td>{{ pos.estimated_sell_price }}</td>
-            <td>{{ pos.stop_loss_per_option }}</td>
             <td>{{ pos.bid_delta }}</td>
             <td>{{ pos.ask_delta }}</td>
             <td>{{ pos.last_delta }}</td>

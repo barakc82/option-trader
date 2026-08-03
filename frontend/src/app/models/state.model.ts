@@ -16,7 +16,6 @@ export interface Position {
     strike: number;
     date: string;
     estimated_sell_price: string;
-    stop_loss_per_option: string;
     target_delta: string;
     bid_delta: string;
     ask_delta: string;
@@ -27,7 +26,6 @@ export interface Position {
     minutes_to_expiration: number | string;
     distance_to_strike_pct: string;
     implied_volatility: string;
-    stop_loss_activated?: number;
     max_ask?: string;
   }
 

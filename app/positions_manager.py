@@ -56,7 +56,6 @@ class PositionsManager:
                 is_executed = pos.get('is_executed')
                 target_delta = pos.get('target_delta')
                 estimated_sell_price = pos.get('estimated_sell_price')
-                stop_loss_per_option = pos.get('stop_loss_per_option')
                 bid_delta = pos.get('bid_delta')
                 ask_delta = pos.get('ask_delta')
                 last_ask = pos.get('last_ask')
@@ -72,7 +71,6 @@ class PositionsManager:
                     strike=float(strike), right=right, expiry=expiry,
                     target_delta=float(target_delta) if target_delta not in (None, '') else 0.0,
                     estimated_sell_price=float(estimated_sell_price) if estimated_sell_price not in (None, '') else 0.0,
-                    stop_loss_per_option=float(stop_loss_per_option) if stop_loss_per_option not in (None, '') else 0.0,
                     bid_delta=float(bid_delta) if bid_delta not in (None, '') else None,
                     ask_delta=float(ask_delta) if ask_delta not in (None, '') else None,
                     last_ask=float(last_ask) if last_ask not in (None, '') else None,
@@ -155,9 +153,7 @@ class PositionsManager:
         if trade.order.action.upper() == 'BUY':
             self.done_contract_ids.add(trade.contract.conId)
             c = trade.contract
-            for entry in self.position_initial_state_map.pop(c.conId, []):
-                entry.stop_loss_activated = int(trade.order.lmtPrice > 0.1)
-                # asyncio.get_running_loop().run_in_executor(None, self._log_close_event, entry)
+            self.position_initial_state_map.pop(c.conId, [])
         if not position_initial_state:
             logger.error(f"Could not find position initial state entry for order ID {trade.order.orderId}, here is what we have:")
             for order_id, entry in self.trading_bot.req_id_to_order_metadata.items():
@@ -174,49 +170,20 @@ class PositionsManager:
             if write_header:
                 writer.writerow([
                     'datetime', 'is_executed', 'right', 'strike', 'expiration',
-                    'estimated_sell_price', 'stop_loss_per_option',
-                    'target_delta', 'bid_delta', 'ask_delta', 'last_delta', 'model_delta',
-                    'minutes_to_expiration', 'implied_volatility', 'distance_to_strike_pct',
-                    'stop_loss_activated',
-                ])
-            writer.writerow([
-                datetime.now().isoformat(), position_initial_state.is_executed,
-                position_initial_state.right, position_initial_state.strike,
-                position_initial_state.expiry,
-                position_initial_state.estimated_sell_price, position_initial_state.stop_loss_per_option,
-                position_initial_state.target_delta, position_initial_state.bid_delta,
-                position_initial_state.ask_delta, position_initial_state.last_delta,
-                position_initial_state.model_delta,
-                position_initial_state.minutes_to_expiration,
-                position_initial_state.implied_volatility, position_initial_state.distance_to_strike_pct,
-                position_initial_state.stop_loss_activated,
-            ])
-        self._log_close_event_with_gamma(position_initial_state)
-
-    def _log_close_event_with_gamma(self, position_initial_state: PositionInitialState):
-        csv_path = 'cache/close_events_with_gamma.csv'
-        write_header = not os.path.exists(csv_path)
-        with open(csv_path, 'a', newline='') as f:
-            writer = csv.writer(f)
-            if write_header:
-                writer.writerow([
-                    'datetime', 'is_executed', 'right', 'strike', 'expiration',
-                    'estimated_sell_price', 'stop_loss_per_option',
+                    'estimated_sell_price',
                     'target_delta', 'bid_delta', 'ask_delta', 'last_delta', 'model_delta', 'gamma',
                     'minutes_to_expiration', 'implied_volatility', 'distance_to_strike_pct',
-                    'stop_loss_activated',
                 ])
             writer.writerow([
                 datetime.now().isoformat(), position_initial_state.is_executed,
                 position_initial_state.right, position_initial_state.strike,
                 position_initial_state.expiry,
-                position_initial_state.estimated_sell_price, position_initial_state.stop_loss_per_option,
+                position_initial_state.estimated_sell_price,
                 position_initial_state.target_delta, position_initial_state.bid_delta,
                 position_initial_state.ask_delta, position_initial_state.last_delta,
                 position_initial_state.model_delta, position_initial_state.gamma,
                 position_initial_state.minutes_to_expiration,
                 position_initial_state.implied_volatility, position_initial_state.distance_to_strike_pct,
-                position_initial_state.stop_loss_activated,
             ])
 
 

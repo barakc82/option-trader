@@ -47,7 +47,6 @@ class PositionInitialState:
     right: str
     expiry: str
     estimated_sell_price: float
-    stop_loss_per_option: float
     target_delta: float
     bid_delta: float | None = None
     ask_delta: float | None = None
@@ -59,7 +58,6 @@ class PositionInitialState:
     minutes_to_expiration: int | None = None
     implied_volatility: float | None = None
     distance_to_strike_pct: float | None = None
-    stop_loss_activated: int = 0
 
 
 def get_time_passed_since_submission(trade: Trade) -> timedelta | Any:

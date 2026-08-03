@@ -183,7 +183,7 @@ class OpportunityExplorer:
         position_initial_state = PositionInitialState(
             is_executed=1,
             strike=call_option.strike, right=call_option.right, expiry=call_option.lastTradeDateOrContractMonth,
-            estimated_sell_price=estimated_sell_price, stop_loss_per_option=stop_loss_per_option,
+            estimated_sell_price=estimated_sell_price,
             target_delta=target_delta,
             bid_delta=bid_delta, ask_delta=ask_delta, last_delta=last_delta, model_delta=model_delta,
             max_ask=extract_ask(call_option.ticker),
@@ -340,7 +340,7 @@ class OpportunityExplorer:
         position_initial_state = PositionInitialState(
             is_executed=1,
             strike=put_option.strike, right=put_option.right, expiry=put_option.lastTradeDateOrContractMonth,
-            estimated_sell_price=estimated_sell_price, stop_loss_per_option=stop_loss_per_option,
+            estimated_sell_price=estimated_sell_price,
             target_delta=target_delta,
             bid_delta=bid_delta, ask_delta=ask_delta, last_delta=last_delta, model_delta=model_delta,
             max_ask=extract_ask(put_option.ticker),

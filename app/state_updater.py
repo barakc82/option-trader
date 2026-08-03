@@ -186,7 +186,6 @@ class StateUpdater:
                     'right': option.right, 'strike': option.strike,
                     'date': position_date, 'contract_id': option.conId,
                     'estimated_sell_price': round(td_entry.estimated_sell_price, 3) if td_entry else '',
-                    'stop_loss_per_option': round(td_entry.stop_loss_per_option, 3) if td_entry else '',
                     'target_delta': round(td_entry.target_delta, 3) if td_entry else '',
                     'bid_delta': round(td_entry.bid_delta, 3) if td_entry and td_entry.bid_delta is not None else '',
                     'ask_delta': round(td_entry.ask_delta, 3) if td_entry and td_entry.ask_delta is not None else '',
@@ -234,7 +233,6 @@ class StateUpdater:
                 'right': sample.right, 'strike': sample.strike,
                 'date': sample_date,
                 'estimated_sell_price': round(sample.estimated_sell_price, 3),
-                'stop_loss_per_option': round(sample.stop_loss_per_option, 3),
                 'target_delta': round(sample.target_delta, 3),
                 'bid_delta': round(sample.bid_delta, 3) if sample.bid_delta is not None else '',
                 'ask_delta': round(sample.ask_delta, 3) if sample.ask_delta is not None else '',
@@ -245,7 +243,6 @@ class StateUpdater:
                 'minutes_to_expiration': sample.minutes_to_expiration if sample.minutes_to_expiration is not None else '',
                 'distance_to_strike_pct': round(sample.distance_to_strike_pct, 2) if sample.distance_to_strike_pct is not None else '',
                 'implied_volatility': round(sample.implied_volatility, 3) if sample.implied_volatility is not None else '',
-                'stop_loss_activated': sample.stop_loss_activated,
             })
         state['random_states'] = sorted(random_states, key=lambda x: (x['right'], x['date'], x['strike']))
 
