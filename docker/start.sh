@@ -37,7 +37,7 @@ echo "$(date): Waiting for IB Gateway to listen on port $PORT..." >> "$DOCKER_ST
 
 WAIT_TEXT="Login has completed"
 until grep -q "$WAIT_TEXT" "$IBG_LOG_FILE"; do
-  echo "$(date): Waiting for login to complete..." >> "$DOCKER_START_LOG_FILE"
+  echo "$(date): Waiting for login to IB gateway to complete..." >> "$DOCKER_START_LOG_FILE"
   sleep 2
 done
 

@@ -173,6 +173,7 @@ class PositionsManager:
                     'estimated_sell_price',
                     'target_delta', 'bid_delta', 'ask_delta', 'last_delta', 'model_delta', 'gamma',
                     'minutes_to_expiration', 'implied_volatility', 'distance_to_strike_pct',
+                    'max_ask',
                 ])
             writer.writerow([
                 datetime.now().isoformat(), position_initial_state.is_executed,
@@ -184,6 +185,7 @@ class PositionsManager:
                 position_initial_state.model_delta, position_initial_state.gamma,
                 position_initial_state.minutes_to_expiration,
                 position_initial_state.implied_volatility, position_initial_state.distance_to_strike_pct,
+                position_initial_state.max_ask,
             ])
 
 

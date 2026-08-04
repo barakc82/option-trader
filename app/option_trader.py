@@ -137,7 +137,7 @@ class OptionTrader:
             target_delta = target_deltas[option.right]
             if delta > target_delta:
                 logger.info(
-                    f"Cancelling sell of {get_option_name(open_sell_trade.contract)} since the delta ({delta:.2f}) is higher than the target delta ({target_delta:.3f})")
+                    f"Cancelling sell of {get_option_name(open_sell_trade.contract)} since the delta ({delta:.3f}) is higher than the target delta ({target_delta:.3f})")
 
                 self.trading_bot.cancel_trade(open_sell_trade)
                 continue

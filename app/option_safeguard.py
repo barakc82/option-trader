@@ -55,6 +55,7 @@ class OptionSafeguard:
             self.last_unfair_ask_warning_times = {}
             self.last_skipping_log_times = {}
             self.last_no_es_option_log_times = {}
+            self.last_watching_log_times = {}
             self._initialized = True
 
     async def run(self):
@@ -204,10 +205,13 @@ class OptionSafeguard:
             return
 
         if stop_loss * 0.5 <= current_price < stop_loss:
-            spot_price = self.index_price_manager.get_spot_price()
-            risk_free_rate = self.market_data_fetcher.get_cached_risk_free_rate()
-            distance_to_stop = calculate_distance_to_stop(option, option.ticker, stop_loss, spot_price, risk_free_rate)
-            logger.info(f"Watching the current price of {get_option_name(option)}: {current_price:.2f}, stop loss is at {stop_loss:.2f}, distance to stop is {distance_to_stop:.1f}")
+            now = time.time()
+            if now - self.last_watching_log_times.get(option.conId, 0) > 0.1:
+                spot_price = self.index_price_manager.get_spot_price()
+                risk_free_rate = self.market_data_fetcher.get_cached_risk_free_rate()
+                distance_to_stop = calculate_distance_to_stop(option, option.ticker, stop_loss, spot_price, risk_free_rate)
+                logger.info(f"Watching the current price of {get_option_name(option)}: {current_price:.2f}, stop loss is at {stop_loss:.2f}, distance to stop is {distance_to_stop:.1f}")
+                self.last_watching_log_times[option.conId] = now
 
         if current_price < stop_loss or math.isnan(current_price):
             return
