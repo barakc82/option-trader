@@ -141,13 +141,19 @@ class MarketDataFetcher:
         logger.info(f"Update: {contract.symbol} {get_option_name(contract)} | Price: {price} | Delta: {delta_str} | Gamma: {gamma_str}")
 
     def get_last_tick_time(self, con_id):
-        """Return the timestamp of the last tick received for the given contract id, or 0 if unknown."""
+        """Return the timestamp of the last tick received for the given contract id. If no tick
+        has been recorded yet, treat it as just ticked while we're still within
+        STALE_TICK_THRESHOLD_SECONDS of premarket end, otherwise 0."""
+        last_tick_times = getattr(self, 'last_tick_times', {})
+        if con_id in last_tick_times:
+            return last_tick_times[con_id]
+
         now_nyc = datetime.now(new_york_timezone)
         premarket_end = now_nyc.replace(hour=PREMARKET_END_TIME.hour, minute=PREMARKET_END_TIME.minute,
                                          second=0, microsecond=0)
-        if now_nyc - premarket_end > timedelta(seconds=STALE_TICK_THRESHOLD_SECONDS):
+        if now_nyc - premarket_end < timedelta(seconds=STALE_TICK_THRESHOLD_SECONDS):
             return time.time()
-        return getattr(self, 'last_tick_times', {}).get(con_id, 0)
+        return 0
 
     def notify_switch_to_new_options(self):
         """Called when switching to a new day's option chain; drop tick records for contracts

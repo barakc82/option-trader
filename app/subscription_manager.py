@@ -66,9 +66,9 @@ class SubscriptionManager:
         now = time.time()
         last_tick_time = self.market_data_fetcher.get_last_tick_time(contract.conId)
         if now - last_tick_time > threshold_seconds:
-            if contract.symbol == 'ES' and getattr(contract, 'right', None) is not None:
+            if contract.symbol == 'ES' and contract.right:
                 label = get_es_option_name(contract)
-            elif getattr(contract, 'right', None) is not None:
+            elif contract.right:
                 label = get_option_name(contract)
             else:
                 label = contract.symbol
