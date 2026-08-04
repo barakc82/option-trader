@@ -4,8 +4,6 @@ import os
 import random
 from datetime import datetime, timedelta
 
-from ib_insync import Option
-
 from utilities.utils import *
 from utilities.ib_utils import *
 
@@ -180,101 +178,6 @@ class OptionSampler:
         formatted_sample_times = [t.strftime('%d/%m/%Y %H:%M') for t in self.sample_times]
         logger.info(f"Sample times: {formatted_sample_times}")
 
-    async def find_max_ask(self, sample: PositionInitialState) -> float:
-        option = Option(
-            symbol='SPX', lastTradeDateOrContractMonth=sample.expiry, strike=sample.strike,
-            right=sample.right, exchange='CBOE', currency='USD', tradingClass='SPXW',
-        )
-
-        qualified = await self.market_data_fetcher.qualify([option])
-        if not qualified:
-            logger.error(f"Could not qualify {get_option_name(option)} to find max ask")
-            return 0
-        option = qualified[0]
-
-        expiry_date = datetime.strptime(sample.expiry, '%Y%m%d').date()
-        day_end = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
-
-        minutes_to_expiration = sample.minutes_to_expiration or 0
-        duration_seconds = max(int(minutes_to_expiration * 60), 60)
-
-        # IB caps a single 5-min-bar request at 86400 seconds (24h), so page backwards from
-        # day_end in <=24h chunks and stitch the results back into chronological order.
-        bars = []
-        remaining_seconds = duration_seconds
-        request_end = day_end
-        while remaining_seconds > 0:
-            chunk_seconds = min(remaining_seconds, 86400)
-            logger.info(f"barak: calling reqHistoricalDataAsync with {chunk_seconds} seconds, endDateTime {request_end}")
-            chunk_bars = await self.market_data_fetcher.ib.reqHistoricalDataAsync(
-                option,
-                endDateTime=request_end,
-                durationStr=f"{chunk_seconds} S",
-                barSizeSetting='5 mins',
-                whatToShow='MIDPOINT',
-                useRTH=False,
-            )
-            bars = chunk_bars + bars
-            remaining_seconds -= chunk_seconds
-            request_end = request_end - timedelta(seconds=chunk_seconds)
-            logger.info(f"barak: reqHistoricalDataAsync ended successfully")
-            await asyncio.sleep(1)
-
-        if not bars:
-            return 0
-
-        # Take the 5 bars with the highest highs, then map them to the contiguous [start, end)
-        # periods that need a tick-by-tick check, merging adjacent/overlapping bars so the same
-        # ticks aren't fetched twice.
-        top_bars = sorted(bars, key=lambda bar: bar.high, reverse=True)[:5]
-        top_bars.sort(key=lambda bar: bar.date)
-
-        periods = []
-        for bar in top_bars:
-            bar_start = bar.date
-            if bar_start.tzinfo is None:
-                bar_start = new_york_timezone.localize(bar_start)
-            bar_end = bar_start + timedelta(minutes=5)
-
-            if periods and bar_start <= periods[-1][1]:
-                periods[-1] = (periods[-1][0], max(periods[-1][1], bar_end))
-            else:
-                periods.append((bar_start, bar_end))
-
-        max_ask = 0
-        for period_start, period_end in periods:
-            logger.info(f"Checking tick-by-tick period {period_start} to {period_end} for {get_option_name(option)}")
-            cursor = period_start
-            last_time = None
-
-            while cursor < period_end:
-                logger.info(
-                    f"barak: Checking {cursor}")
-                raw_ticks = await self.market_data_fetcher.ib.reqHistoricalTicksAsync(
-                    option,
-                    startDateTime=cursor,
-                    endDateTime='',
-                    numberOfTicks=1000,
-                    whatToShow='BID_ASK',
-                    useRth=False,
-                )
-                if not raw_ticks:
-                    break
-
-                new_ticks = [t for t in raw_ticks if (last_time is None or t.time > last_time) and t.time < period_end]
-                for tick in new_ticks:
-                    if tick.priceAsk > max_ask:
-                        max_ask = tick.priceAsk
-
-                last_time = raw_ticks[-1].time
-                if len(raw_ticks) < 1000 or last_time >= period_end:
-                    break
-
-                cursor = last_time
-                await asyncio.sleep(1)
-
-        return max_ask
-
     async def run(self):
         logger.info("Starting sampling loop...")
         while True:
@@ -288,7 +191,7 @@ class OptionSampler:
                         expiry_date = datetime.strptime(sample.expiry, '%Y%m%d').date()
                         expiry_datetime = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
                         if expiry_datetime < now_nyc:
-                            max_ask = await self.find_max_ask(sample)
+                            max_ask = await self.market_data_fetcher.find_max_ask(sample)
                             sample.max_ask = max_ask
                             logger.info(f"Storing an expired sample for {get_option_name(sample)}")
                             PositionsManager()._log_close_event(sample)

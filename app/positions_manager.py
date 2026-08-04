@@ -4,8 +4,10 @@ import json
 import os
 from datetime import datetime
 
-from utilities.utils import is_trade_cancelled, write_heartbeat, get_option_name, is_final_hours, CACHED_JSON_PATH
+from utilities.utils import is_trade_cancelled, write_heartbeat, get_option_name, is_final_hours, CACHED_JSON_PATH, \
+    is_night_break
 from utilities.ib_utils import *
+from .market_data_fetcher import MarketDataFetcher
 
 from .max_loss_calculator import MaxLossCalculator
 from .opportunity_explorer import OpportunityExplorer
@@ -30,6 +32,7 @@ class PositionsManager:
         if not self._initialized:
             # Accessing the TradingBot singleton internally
             self.trading_bot = TradingBot()
+            self.market_data_fetcher = MarketDataFetcher()
             self.max_loss_calculator = MaxLossCalculator()
             self.done_contract_ids = set()
             self.position_initial_state_map = {}
@@ -104,14 +107,18 @@ class PositionsManager:
         current_con_ids = {p.contract.conId for p in positions}
         self.done_contract_ids &= current_con_ids
 
-        now_nyc = datetime.now(new_york_timezone)
-        for key, entries in list(self.position_initial_state_map.items()):
-            expiry_date = datetime.strptime(entries[0].expiry, '%Y%m%d').date()
-            expiry_datetime = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
-            if expiry_datetime < now_nyc:
-                for entry in entries:
-                    self._log_close_event(entry)
-                del self.position_initial_state_map[key]
+        if is_night_break():
+            now_nyc = datetime.now(new_york_timezone)
+            for key, entries in list(self.position_initial_state_map.items()):
+                expiry_date = datetime.strptime(entries[0].expiry, '%Y%m%d').date()
+                expiry_datetime = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
+                if expiry_datetime < now_nyc:
+                    for entry in entries:
+                        if entry.is_max_ask_scan_required:
+                            max_ask = await self.market_data_fetcher.find_max_ask(entry)
+                            entry.max_ask = max_ask
+                        self._log_close_event(entry)
+                    del self.position_initial_state_map[key]
 
         for position in positions:
             write_heartbeat()
@@ -153,7 +160,9 @@ class PositionsManager:
         if trade.order.action.upper() == 'BUY':
             self.done_contract_ids.add(trade.contract.conId)
             c = trade.contract
-            self.position_initial_state_map.pop(c.conId, [])
+            if trade.order.lmtPrice > 0.1:
+                for entry in self.position_initial_state_map.get(c.conId, []):
+                    entry.is_max_ask_scan_required = True
         if not position_initial_state:
             logger.error(f"Could not find position initial state entry for order ID {trade.order.orderId}, here is what we have:")
             for order_id, entry in self.trading_bot.req_id_to_order_metadata.items():
