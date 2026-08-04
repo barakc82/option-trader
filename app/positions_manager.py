@@ -187,7 +187,36 @@ class PositionsManager:
                 position_initial_state.implied_volatility, position_initial_state.distance_to_strike_pct,
                 position_initial_state.max_ask,
             ])
+        self._log_close_event_with_vega_and_theta(position_initial_state)
 
+
+    def _log_close_event_with_vega_and_theta(self, position_initial_state: PositionInitialState):
+        csv_path = 'cache/close_events_with_vega_and_theta.csv'
+        write_header = not os.path.exists(csv_path)
+        with open(csv_path, 'a', newline='') as f:
+            writer = csv.writer(f)
+            if write_header:
+                writer.writerow([
+                    'datetime', 'is_executed', 'right', 'strike', 'expiration',
+                    'estimated_sell_price',
+                    'target_delta', 'bid_delta', 'ask_delta', 'last_delta', 'model_delta', 'gamma',
+                    'vega', 'theta',
+                    'minutes_to_expiration', 'implied_volatility', 'distance_to_strike_pct',
+                    'max_ask',
+                ])
+            writer.writerow([
+                datetime.now().isoformat(), position_initial_state.is_executed,
+                position_initial_state.right, position_initial_state.strike,
+                position_initial_state.expiry,
+                position_initial_state.estimated_sell_price,
+                position_initial_state.target_delta, position_initial_state.bid_delta,
+                position_initial_state.ask_delta, position_initial_state.last_delta,
+                position_initial_state.model_delta, position_initial_state.gamma,
+                position_initial_state.vega, position_initial_state.theta,
+                position_initial_state.minutes_to_expiration,
+                position_initial_state.implied_volatility, position_initial_state.distance_to_strike_pct,
+                position_initial_state.max_ask,
+            ])
 
     def update_position_entry(self, position_initial_state: PositionInitialState, trade):
         c = trade.contract
