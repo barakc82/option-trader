@@ -189,7 +189,7 @@ class PositionsManager:
                     'target_delta', 'bid_delta', 'ask_delta', 'last_delta', 'model_delta', 'gamma',
                     'vega', 'theta',
                     'minutes_to_expiration', 'implied_volatility', 'distance_to_strike_pct',
-                    'max_ask',
+                    'max_ask', 'stop_loss',
                 ])
             writer.writerow([
                 datetime.now().isoformat(), position_initial_state.is_executed,
@@ -202,7 +202,7 @@ class PositionsManager:
                 position_initial_state.vega, position_initial_state.theta,
                 position_initial_state.minutes_to_expiration,
                 position_initial_state.implied_volatility, position_initial_state.distance_to_strike_pct,
-                position_initial_state.max_ask,
+                position_initial_state.max_ask, position_initial_state.stop_loss,
             ])
 
     def update_position_entry(self, position_initial_state: PositionInitialState, trade):
