@@ -289,23 +289,24 @@ class MarketDataFetcher:
         remaining_seconds = duration_seconds
         request_end = day_end
         while remaining_seconds > 0:
-            chunk_seconds = min(remaining_seconds, 86400)
+            chunk_seconds = min(remaining_seconds, 28800)
             logger.info(f"barak: calling reqHistoricalDataAsync with {chunk_seconds} seconds, endDateTime {request_end}")
             chunk_bars = await self.ib.reqHistoricalDataAsync(
                 option,
                 endDateTime=request_end,
                 durationStr=f"{chunk_seconds} S",
                 barSizeSetting='5 mins',
-                whatToShow='MIDPOINT',
-                useRTH=False,
+                whatToShow='TRADES',
+                useRTH=True
             )
             bars = chunk_bars + bars
             remaining_seconds -= chunk_seconds
             request_end = request_end - timedelta(seconds=chunk_seconds)
-            logger.info(f"barak: reqHistoricalDataAsync ended successfully")
+            logger.info(f"barak: reqHistoricalDataAsync ended successfully, numbers of bars retrieved: {len(chunk_bars)}")
             await asyncio.sleep(1)
 
         if not bars:
+            logger.error(f"No bars were found for {get_option_name(option)} during search for max ask")
             return 0
 
         # Take the 5 bars with the highest highs, then map them to the contiguous [start, end)
@@ -356,6 +357,6 @@ class MarketDataFetcher:
                     break
 
                 cursor = last_time
-                await asyncio.sleep(1)
+                await asyncio.sleep(2)
 
         return max_ask

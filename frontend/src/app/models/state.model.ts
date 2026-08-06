@@ -23,6 +23,8 @@ export interface Position {
     last_delta: string;
     model_delta: string;
     gamma: string;
+    vega: string;
+    theta: string;
     minutes_to_expiration: number | string;
     distance_to_strike_pct: string;
     implied_volatility: string;

@@ -81,7 +81,7 @@ if __name__ == "__main__":
     # Cleanup logs
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
-    for old_log in sorted(log_dir.glob("*.log"), key=lambda f: f.stat().st_mtime, reverse=True)[5:]:
+    for old_log in sorted(log_dir.glob("option_trader_*.log*"), key=lambda f: f.stat().st_mtime, reverse=True)[5:]:
         try:
             old_log.unlink()
         except Exception:

@@ -21,3 +21,5 @@ frontend.tar.gz
 htmlcov/
 .pytest_cache/
 .coverage.*
+machine_learning/data/
+machine_learning/model/

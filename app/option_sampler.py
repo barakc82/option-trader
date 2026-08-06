@@ -68,6 +68,8 @@ class OptionSampler:
                 last_delta = sample.get('last_delta')
                 model_delta = sample.get('model_delta')
                 gamma = sample.get('gamma')
+                vega = sample.get('vega')
+                theta = sample.get('theta')
                 minutes_to_expiration = sample.get('minutes_to_expiration')
                 distance_to_strike_pct = sample.get('distance_to_strike_pct')
                 implied_volatility = sample.get('implied_volatility')
@@ -82,6 +84,8 @@ class OptionSampler:
                     last_delta=float(last_delta) if last_delta not in (None, '') else None,
                     model_delta=float(model_delta) if model_delta not in (None, '') else None,
                     gamma=float(gamma) if gamma not in (None, '') else None,
+                    vega=float(vega) if vega not in (None, '') else None,
+                    theta=float(theta) if theta not in (None, '') else None,
                     minutes_to_expiration=int(minutes_to_expiration) if minutes_to_expiration not in (None, '') else None,
                     distance_to_strike_pct=float(distance_to_strike_pct) if distance_to_strike_pct not in (None, '') else None,
                     implied_volatility=float(implied_volatility) if implied_volatility not in (None, '') else None,
@@ -187,11 +191,14 @@ class OptionSampler:
                 now_nyc = datetime.now(new_york_timezone)
 
                 if is_night_break():
+                    logger.info("Starting storing the expired samples...")
                     for sample in list(self.collected_samples):
                         expiry_date = datetime.strptime(sample.expiry, '%Y%m%d').date()
                         expiry_datetime = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
                         if expiry_datetime < now_nyc:
                             max_ask = await self.market_data_fetcher.find_max_ask(sample)
+                            if max_ask == 0:
+                                continue
                             sample.max_ask = max_ask
                             logger.info(f"Storing an expired sample for {get_option_name(sample)}")
                             PositionsManager()._log_close_event(sample)
@@ -252,6 +259,7 @@ class OptionSampler:
             strike=option.strike, right=option.right, expiry=option.lastTradeDateOrContractMonth,
             estimated_sell_price=estimated_sell_price,
             target_delta=target_delta,
+            stop_loss=estimated_sell_price + stop_loss_per_option,
             bid_delta=bid_delta, ask_delta=ask_delta, last_delta=last_delta, model_delta=model_delta,
             gamma=get_model_gamma(option.ticker),
             vega=get_model_vega(option.ticker), theta=get_model_theta(option.ticker),

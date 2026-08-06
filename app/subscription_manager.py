@@ -1,13 +1,17 @@
+import bisect
 import asyncio
 import logging
 import time
 import math
 import json
 import os
+from typing import Any
+
 from ib_insync import Option, FuturesOption
 
 from utilities.ib_utils import get_es_option_name
 from .connection_manager import ConnectionManager
+from .index_price_manager import IndexPriceManager
 from .trading_bot import TradingBot
 from .market_data_fetcher import MarketDataFetcher
 from utilities.utils import get_option_name, SAFEGUARD_MAX_CADENCE, STALE_TICK_THRESHOLD_SECONDS
@@ -29,7 +33,8 @@ class SubscriptionManager:
             self.ib = self.connection_manager.ib
             self.trading_bot = TradingBot()
             self.market_data_fetcher = MarketDataFetcher()
-            
+            self.index_price_manager = IndexPriceManager()
+
             # Tracks SPX conId -> Matching ES Contract for hedge subscriptions
             self.spx_to_es_map = {}
 
@@ -95,9 +100,9 @@ class SubscriptionManager:
                 logger.info(f"Subscribed to {contract.symbol} {contract.secType} {contract.right} {contract.strike}")
 
         active_indices = [ticker.contract for ticker in active_tickers if ticker.contract.secType in ['IND', 'STK', 'FUT']]
-        es_future = await self.market_data_fetcher.fetch_es_future()
+        self.es_future = await self.market_data_fetcher.fetch_es_future()
 
-        for required_index in [self.market_data_fetcher.spx, es_future]:
+        for required_index in [self.market_data_fetcher.spx, self.es_future]:
             if required_index and required_index not in active_indices:
                 logger.info(f"Going to subscribe to Index {required_index.symbol}")
                 contracts_missing_tickers.append(required_index)
@@ -237,7 +242,8 @@ class SubscriptionManager:
             for es_contract in es_contracts:
                 if es_contract.conId not in active_es_con_ids:
                     logger.warning(f"ES ticker {get_es_option_name(es_contract)} is not in active subscriptions")
-                    del self.spx_to_es_map[spx_con_id]
+                    if spx_con_id in self.spx_to_es_map:
+                        del self.spx_to_es_map[spx_con_id]
                     continue
                 if self._unsubscribe_if_stale(es_contract):
                     continue
@@ -258,9 +264,10 @@ class SubscriptionManager:
         difference = self.market_data_fetcher.calculate_spx_es_difference()
         equivalent_es_strike = spx_contract.strike - difference
 
-        strike_increment = 5.0
-        lower_strike = math.floor(equivalent_es_strike / strike_increment) * strike_increment
-        upper_strike = math.ceil(equivalent_es_strike / strike_increment) * strike_increment
+        strikes = self.index_price_manager.es_strikes
+        strike_index = bisect.bisect_left(strikes, equivalent_es_strike)
+        lower_strike = strikes[strike_index - 1]
+        upper_strike = strikes[strike_index]
 
         logger.info(
             f"SPX strike {spx_contract.strike} maps to ES equivalent {equivalent_es_strike:.2f} "
@@ -277,6 +284,9 @@ class SubscriptionManager:
                 currency='USD'
             )
             details = await self.ib.reqContractDetailsAsync(future_option)
+            if not details:
+                return None
+
             return next(
                 detail.contract
                 for detail in details

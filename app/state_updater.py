@@ -180,7 +180,7 @@ class StateUpdater:
                 'distance_to_stop': distance_to_stop if not math.isnan(distance_to_stop) else '',
             }
 
-            td_entries = position_initial_state_map.get(option.conId) or [None]
+            td_entries = position_initial_state_map.get(option.conId) or []
             for td_entry in td_entries:
                 position_initial_states.append({
                     'right': option.right, 'strike': option.strike,
@@ -193,10 +193,13 @@ class StateUpdater:
                     'last_delta': round(td_entry.last_delta, 3) if td_entry and td_entry.last_delta is not None else '',
                     'model_delta': round(td_entry.model_delta, 3) if td_entry and td_entry.model_delta is not None else '',
                     'gamma': round(td_entry.gamma, 4) if td_entry and td_entry.gamma is not None else '',
+                    'vega': round(td_entry.vega, 4) if td_entry and td_entry.vega is not None else '',
+                    'theta': round(td_entry.theta, 4) if td_entry and td_entry.theta is not None else '',
                     'minutes_to_expiration': td_entry.minutes_to_expiration if td_entry and td_entry.minutes_to_expiration is not None else '',
                     'distance_to_strike_pct': round(td_entry.distance_to_strike_pct, 2) if td_entry and td_entry.distance_to_strike_pct is not None else '',
                     'implied_volatility': round(td_entry.implied_volatility, 3) if td_entry and td_entry.implied_volatility is not None else '',
                     'max_ask': round(td_entry.max_ask, 3) if td_entry and td_entry.max_ask is not None else '',
+                    'is_max_ask_scan_required': td_entry.is_max_ask_scan_required if td_entry else False,
                 })
 
             es_options = subscription_manager.spx_to_es_map.get(option.conId)
@@ -240,6 +243,8 @@ class StateUpdater:
                 'last_delta': round(sample.last_delta, 3) if sample.last_delta is not None else '',
                 'model_delta': round(sample.model_delta, 3) if sample.model_delta is not None else '',
                 'gamma': round(sample.gamma, 4) if sample.gamma is not None else '',
+                'vega': round(sample.vega, 4) if sample.vega is not None else '',
+                'theta': round(sample.theta, 4) if sample.theta is not None else '',
                 'minutes_to_expiration': sample.minutes_to_expiration if sample.minutes_to_expiration is not None else '',
                 'distance_to_strike_pct': round(sample.distance_to_strike_pct, 2) if sample.distance_to_strike_pct is not None else '',
                 'implied_volatility': round(sample.implied_volatility, 3) if sample.implied_volatility is not None else '',

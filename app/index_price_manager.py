@@ -28,6 +28,7 @@ class IndexPriceManager:
             self.ib = ConnectionManager().ib
             self.spx = Index(symbol='SPX', exchange='CBOE', currency='USD')
             self.es = None
+            self.es_strikes = None
             self.spx_es_history = deque(maxlen=100)
             self.previous_spx_value = math.nan
             self.previous_es_value = math.nan
@@ -88,6 +89,11 @@ class IndexPriceManager:
             await self.ib.qualifyContractsAsync(closest_es_future)
             logger.info(f"Selected ES future: {closest_es_future.lastTradeDateOrContractMonth}")
             self.es = closest_es_future
+
+            chains = await self.ib.reqSecDefOptParamsAsync(self.es.symbol, 'CME', 'FUT', self.es.conId)
+            chain = next(c for c in chains if c.tradingClass != 'ES')
+            self.es_strikes = sorted(chain.strikes)
+
         return self.es
 
     def get_spot_price(self):
