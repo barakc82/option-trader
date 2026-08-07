@@ -62,6 +62,7 @@ class OptionSampler:
 
                 target_delta = sample.get('target_delta')
                 estimated_sell_price = sample.get('estimated_sell_price')
+                stop_loss = sample.get('stop_loss')
                 bid_delta = sample.get('bid_delta')
                 ask_delta = sample.get('ask_delta')
                 last_ask = sample.get('last_ask')
@@ -78,6 +79,7 @@ class OptionSampler:
                     strike=float(strike), right=right, expiry=expiry,
                     target_delta=float(target_delta) if target_delta not in (None, '') else 0.0,
                     estimated_sell_price=float(estimated_sell_price) if estimated_sell_price not in (None, '') else 0.0,
+                    stop_loss=float(stop_loss) if stop_loss not in (None, '') else None,
                     bid_delta=float(bid_delta) if bid_delta not in (None, '') else None,
                     ask_delta=float(ask_delta) if ask_delta not in (None, '') else None,
                     last_ask=float(last_ask) if last_ask not in (None, '') else None,

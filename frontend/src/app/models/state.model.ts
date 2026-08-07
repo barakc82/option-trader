@@ -16,6 +16,7 @@ export interface Position {
     strike: number;
     date: string;
     estimated_sell_price: string;
+    stop_loss: string;
     target_delta: string;
     bid_delta: string;
     ask_delta: string;

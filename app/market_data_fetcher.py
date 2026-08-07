@@ -299,15 +299,19 @@ class MarketDataFetcher:
                 whatToShow='TRADES',
                 useRTH=True
             )
+
+            logger.info(
+                f"barak: reqHistoricalDataAsync ended successfully, numbers of bars retrieved: {len(chunk_bars)}")
+            if not chunk_bars:
+                logger.error(f"No bars were found for {get_option_name(option)} during search for max ask")
+                await asyncio.sleep(20)
+                continue
+
             bars = chunk_bars + bars
             remaining_seconds -= chunk_seconds
             request_end = request_end - timedelta(seconds=chunk_seconds)
-            logger.info(f"barak: reqHistoricalDataAsync ended successfully, numbers of bars retrieved: {len(chunk_bars)}")
-            await asyncio.sleep(1)
+            await asyncio.sleep(2)
 
-        if not bars:
-            logger.error(f"No bars were found for {get_option_name(option)} during search for max ask")
-            return 0
 
         # Take the 5 bars with the highest highs, then map them to the contiguous [start, end)
         # periods that need a tick-by-tick check, merging adjacent/overlapping bars so the same
@@ -357,6 +361,6 @@ class MarketDataFetcher:
                     break
 
                 cursor = last_time
-                await asyncio.sleep(2)
+                await asyncio.sleep(4)
 
         return max_ask

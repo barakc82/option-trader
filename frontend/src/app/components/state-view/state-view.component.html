@@ -172,12 +172,13 @@
             <th>Minutes to Expiration</th>
             <th>Distance to Strike (%)</th>
             <th>Implied Volatility</th>
+            <th>Stop Loss</th>
             <th>Last Ask</th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let pos of state.random_states" [ngClass]="{
-            'last-ask-alert-row': pos.last_ask !== '' && +pos.last_ask >= 2 * +pos.estimated_sell_price
+            'last-ask-alert-row': pos.last_ask !== '' && pos.stop_loss !== '' && +pos.last_ask > +pos.stop_loss / 2
           }">
             <td>{{ pos.right }}</td>
             <td>{{ pos.strike }}</td>
@@ -194,6 +195,7 @@
             <td>{{ pos.minutes_to_expiration }}</td>
             <td>{{ pos.distance_to_strike_pct }}</td>
             <td>{{ pos.implied_volatility }}</td>
+            <td>{{ pos.stop_loss }}</td>
             <td>{{ pos.last_ask }}</td>
           </tr>
         </tbody>
@@ -218,6 +220,7 @@
             <th>Minutes to Expiration</th>
             <th>Distance to Strike (%)</th>
             <th>Implied Volatility</th>
+            <th>Stop Loss</th>
             <th>Max Ask</th>
           </tr>
         </thead>
@@ -238,6 +241,7 @@
             <td>{{ pos.minutes_to_expiration }}</td>
             <td>{{ pos.distance_to_strike_pct }}</td>
             <td>{{ pos.implied_volatility }}</td>
+            <td>{{ pos.stop_loss }}</td>
             <td>{{ pos.max_ask }}</td>
           </tr>
         </tbody>
