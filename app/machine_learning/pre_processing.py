@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-CSV_PATH = Path(__file__).parent / "data" / "options_data.csv"
+CSV_PATH = "machine_learning/data/options_data.csv"
 
 DELTA_COLUMNS = ["bid_delta", "ask_delta", "last_delta", "model_delta"]
 

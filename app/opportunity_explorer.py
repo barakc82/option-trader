@@ -10,6 +10,7 @@ from .max_loss_calculator import MaxLossCalculator
 from .net_worth_calculator import NetWorthCalculator
 from .option_cache import OptionCache
 from .option_data_fetcher import OptionDataFetcher
+from .price_estimator import PriceEstimator
 from .strike_finder import StrikeFinder
 from .target_delta_calculator import TargetDeltaCalculator
 from .connection_manager import ConnectionManager
@@ -45,6 +46,7 @@ class OpportunityExplorer:
             self.market_data_fetcher = MarketDataFetcher()
             self.option_data_fetcher = OptionDataFetcher()
             self.trading_bot = TradingBot()
+            self.price_estimator = PriceEstimator()
             self.net_worth_calculator = NetWorthCalculator()
             self.max_loss_calculator = MaxLossCalculator()
             self.last_submit_order_attempt_time = 0
@@ -161,7 +163,7 @@ class OpportunityExplorer:
         if not call_option:
             return SellOptionResult()
 
-        estimated_sell_price = self.estimate_sell_price(call_option)
+        estimated_sell_price = self.price_estimator.estimate_sell_price(call_option)
         if estimated_sell_price < 0:
             logger.error("Failed to estimate selling price")
             return SellOptionResult()
@@ -191,7 +193,7 @@ class OpportunityExplorer:
             gamma=get_model_gamma(call_option.ticker),
             vega=get_model_vega(call_option.ticker), theta=get_model_theta(call_option.ticker),
             minutes_to_expiration=get_minutes_to_expiration(call_option),
-            implied_volatility=self.market_data_fetcher.get_cached_spx_implied_volatility('C'),
+            atm_iv=self.market_data_fetcher.get_cached_spx_implied_volatility('C'),
             distance_to_strike_pct=get_distance_to_strike_pct(call_option, self.market_data_fetcher),
         )
 
@@ -321,7 +323,7 @@ class OpportunityExplorer:
         if not put_option:
             return SellOptionResult()
 
-        estimated_sell_price = self.estimate_sell_price(put_option)
+        estimated_sell_price = self.price_estimator.estimate_sell_price(put_option)
         if estimated_sell_price < 0:
             logger.error("Failed to estimate selling price")
             return SellOptionResult()
@@ -350,7 +352,7 @@ class OpportunityExplorer:
             gamma=get_model_gamma(put_option.ticker),
             vega=get_model_vega(put_option.ticker), theta=get_model_theta(put_option.ticker),
             minutes_to_expiration=get_minutes_to_expiration(put_option),
-            implied_volatility=self.market_data_fetcher.get_cached_spx_implied_volatility('P'),
+            atm_iv=self.market_data_fetcher.get_cached_spx_implied_volatility('P'),
             distance_to_strike_pct=get_distance_to_strike_pct(put_option, self.market_data_fetcher),
         )
 
@@ -547,11 +549,6 @@ class OpportunityExplorer:
 
         logger.info(f"Will not buy {get_option_name(available_cheap_put_option)} since the potential sell price is too low ({self.last_put_option_price})")
         return FAILED
-
-    def estimate_sell_price(self, option):
-        if math.isnan(option.ticker.bid) or math.isnan(option.ticker.ask):
-            return option.ticker.last
-        return self.trading_bot.calculate_limit(option, option.ticker.bid, option.ticker.ask)
 
     async def try_to_resolve_margin_lock(self, candidate_option, missing_sum):
         if time.time() - self.last_margin_lock_resolution_attempt_time < 15 * 60:

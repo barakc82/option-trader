@@ -59,7 +59,7 @@ class PositionInitialState:
     vega: float | None = None
     theta: float | None = None
     minutes_to_expiration: int | None = None
-    implied_volatility: float | None = None
+    atm_iv: float | None = None
     distance_to_strike_pct: float | None = None
     is_max_ask_scan_required: bool = False
 

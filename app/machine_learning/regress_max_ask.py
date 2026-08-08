@@ -5,15 +5,16 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 
-CSV_PATH = Path(__file__).parent / "data" / "options_data.csv"
-MODEL_PATH = Path(__file__).parent / "model" / "probability_classifier.pkl"
+CSV_PATH = "machine_learning/data/options_data.csv"
+MODEL_PATH =  "machine_learning/model/probability_classifier.pkl"
 
 TARGET_COLUMN = "max_ask"
 FEATURE_COLUMNS = [
-    "estimated_sell_price", "target_delta",
-    "bid_delta", "ask_delta", "last_delta", "model_delta", "max_delta",
+    "estimated_sell_price",
+    #"target_delta", "bid_delta", "ask_delta", "last_delta", "model_delta",
+    "max_delta",
     "gamma", "vega", "theta",
-    "minutes_to_expiration", "implied_volatility", "distance_to_strike_pct",
+    "minutes_to_expiration", "atm_iv", "distance_to_strike_pct",
 ]
 
 
@@ -61,7 +62,7 @@ def main():
         "P": run_regression(df, "P"),
     }
 
-    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    Path(MODEL_PATH).parent.mkdir(parents=True, exist_ok=True)
     with open(MODEL_PATH, "wb") as f:
         pickle.dump(classifiers, f)
 

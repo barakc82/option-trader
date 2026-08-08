@@ -72,7 +72,7 @@ class PositionsManager:
                 theta = pos.get('theta')
                 minutes_to_expiration = pos.get('minutes_to_expiration')
                 distance_to_strike_pct = pos.get('distance_to_strike_pct')
-                implied_volatility = pos.get('implied_volatility')
+                atm_iv = pos.get('atm_iv')
                 self.position_initial_state_map.setdefault(key, []).append(PositionInitialState(
                     is_executed=int(is_executed) if is_executed not in (None, '') else 1,
                     strike=float(strike), right=right, expiry=expiry,
@@ -91,7 +91,7 @@ class PositionsManager:
                     theta=float(theta) if theta not in (None, '') else None,
                     minutes_to_expiration=int(minutes_to_expiration) if minutes_to_expiration not in (None, '') else None,
                     distance_to_strike_pct=float(distance_to_strike_pct) if distance_to_strike_pct not in (None, '') else None,
-                    implied_volatility=float(implied_volatility) if implied_volatility not in (None, '') else None,
+                    atm_iv=float(atm_iv) if atm_iv not in (None, '') else None,
                 ))
             logger.info(f"Loaded {len(self.position_initial_state_map)} position initial state entries from cache")
         except Exception as e:
@@ -150,6 +150,8 @@ class PositionsManager:
             expiry_date = datetime.strptime(entries[0].expiry, '%Y%m%d').date()
             expiry_datetime = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
             if expiry_datetime < now_nyc:
+                if entries:
+                    logger.info(f"Dumping position initial states for {get_option_name(entries[0])}")
                 for entry in entries:
                     if entry.is_max_ask_scan_required:
                         max_ask = await self.market_data_fetcher.find_max_ask(entry)
@@ -190,7 +192,7 @@ class PositionsManager:
                     'estimated_sell_price',
                     'target_delta', 'bid_delta', 'ask_delta', 'last_delta', 'model_delta', 'gamma',
                     'vega', 'theta',
-                    'minutes_to_expiration', 'implied_volatility', 'distance_to_strike_pct',
+                    'minutes_to_expiration', 'atm_iv', 'distance_to_strike_pct',
                     'max_ask',
                 ])
             writer.writerow([
@@ -203,7 +205,7 @@ class PositionsManager:
                 position_initial_state.model_delta, position_initial_state.gamma,
                 position_initial_state.vega, position_initial_state.theta,
                 position_initial_state.minutes_to_expiration,
-                position_initial_state.implied_volatility, position_initial_state.distance_to_strike_pct,
+                position_initial_state.atm_iv, position_initial_state.distance_to_strike_pct,
                 position_initial_state.max_ask
             ])
 
@@ -220,7 +222,7 @@ class PositionsManager:
                     'estimated_sell_price',
                     'target_delta', 'bid_delta', 'ask_delta', 'last_delta', 'model_delta', 'gamma',
                     'vega', 'theta',
-                    'minutes_to_expiration', 'implied_volatility', 'distance_to_strike_pct',
+                    'minutes_to_expiration', 'atm_iv', 'distance_to_strike_pct',
                     'max_ask', 'stop_loss',
                 ])
             writer.writerow([
@@ -233,7 +235,7 @@ class PositionsManager:
                 position_initial_state.model_delta, position_initial_state.gamma,
                 position_initial_state.vega, position_initial_state.theta,
                 position_initial_state.minutes_to_expiration,
-                position_initial_state.implied_volatility, position_initial_state.distance_to_strike_pct,
+                position_initial_state.atm_iv, position_initial_state.distance_to_strike_pct,
                 position_initial_state.max_ask, position_initial_state.stop_loss,
             ])
 

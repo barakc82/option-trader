@@ -6,6 +6,8 @@ from utilities.ib_utils import (extract_ask, get_delta, get_delta_for_sell, get_
                                  get_model_gamma, get_model_vega, get_model_theta,
                                  get_minutes_to_expiration, get_distance_to_strike_pct)
 from .market_data_fetcher import MarketDataFetcher
+from .price_estimator import PriceEstimator
+
 
 logger = logging.getLogger(__name__)
 
@@ -389,8 +391,7 @@ class StrikeFinder:
         if not classifier:
             return
 
-        from .opportunity_explorer import OpportunityExplorer
-        estimated_sell_price = OpportunityExplorer().estimate_sell_price(option)
+        estimated_sell_price = PriceEstimator().estimate_sell_price(option)
 
         bid_delta, ask_delta, last_delta, model_delta = get_individual_deltas(option.ticker)
         delta_values = [d for d in (bid_delta, ask_delta, last_delta, model_delta) if d is not None]
@@ -404,4 +405,4 @@ class StrikeFinder:
             get_distance_to_strike_pct(option, self.market_data_fetcher),
         ]]
         probability = classifier(X_new, estimated_sell_price)[0]
-        print(f"Probability that max ask stays below {estimated_sell_price:.2f} for {get_option_name(option)}: {probability:.3f}")
+        logger.info(f"Probability that max ask stays below {estimated_sell_price:.2f} for {get_option_name(option)}: {probability:.3f}")

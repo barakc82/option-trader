@@ -10,7 +10,7 @@ from utilities.ib_utils import *
 from .max_loss_calculator import MaxLossCalculator
 from .target_delta_calculator import TargetDeltaCalculator
 from .strike_finder import StrikeFinder
-from .opportunity_explorer import OpportunityExplorer
+from .price_estimator import PriceEstimator
 from .market_data_fetcher import MarketDataFetcher
 from .positions_manager import PositionsManager
 from .trading_bot import TradingBot
@@ -37,7 +37,7 @@ class OptionSampler:
             self.target_delta_calculator = TargetDeltaCalculator()
             self.strike_finder = StrikeFinder()
             self.trading_bot = TradingBot()
-            self.opportunity_explorer = OpportunityExplorer()
+            self.price_estimator = PriceEstimator()
 
             self.number_of_samples_per_day = DEFAULT_NUMBER_OF_SAMPLES_PER_DAY
             self.target_delta_top_multiplier = DEFAULT_TARGET_DELTA_TOP_MULTIPLIER
@@ -73,7 +73,7 @@ class OptionSampler:
                 theta = sample.get('theta')
                 minutes_to_expiration = sample.get('minutes_to_expiration')
                 distance_to_strike_pct = sample.get('distance_to_strike_pct')
-                implied_volatility = sample.get('implied_volatility')
+                atm_iv = sample.get('atm_iv')
                 self.collected_samples.append(PositionInitialState(
                     is_executed=0,
                     strike=float(strike), right=right, expiry=expiry,
@@ -90,7 +90,7 @@ class OptionSampler:
                     theta=float(theta) if theta not in (None, '') else None,
                     minutes_to_expiration=int(minutes_to_expiration) if minutes_to_expiration not in (None, '') else None,
                     distance_to_strike_pct=float(distance_to_strike_pct) if distance_to_strike_pct not in (None, '') else None,
-                    implied_volatility=float(implied_volatility) if implied_volatility not in (None, '') else None,
+                    atm_iv=float(atm_iv) if atm_iv not in (None, '') else None,
                 ))
             logger.info(f"Loaded {len(self.collected_samples)} random samples from cache")
         except Exception as e:
@@ -200,6 +200,7 @@ class OptionSampler:
                         if expiry_datetime < now_nyc:
                             max_ask = await self.market_data_fetcher.find_max_ask(sample)
                             if max_ask == 0:
+                                logger.error(f"No max ask found for {get_option_name(sample)}")
                                 continue
                             sample.max_ask = max_ask
                             logger.info(f"Storing an expired sample for {get_option_name(sample)}")
@@ -249,7 +250,7 @@ class OptionSampler:
             logger.warning("No option could be found for sample collection")
             return FAILED
 
-        estimated_sell_price = self.opportunity_explorer.estimate_sell_price(option)
+        estimated_sell_price = self.price_estimator.estimate_sell_price(option)
         minimal_sell_price = self.trading_bot.calculate_minimal_sell_price(option.ticker.last, option.lastTradeDateOrContractMonth)
         if estimated_sell_price < minimal_sell_price:
             logger.warning(f"Sampled option is sold for {estimated_sell_price} but the minimal sell price is {minimal_sell_price}")
@@ -266,7 +267,7 @@ class OptionSampler:
             gamma=get_model_gamma(option.ticker),
             vega=get_model_vega(option.ticker), theta=get_model_theta(option.ticker),
             minutes_to_expiration=get_minutes_to_expiration(option),
-            implied_volatility=self.market_data_fetcher.get_cached_spx_implied_volatility(right),
+            atm_iv=self.market_data_fetcher.get_cached_spx_implied_volatility(right),
             distance_to_strike_pct=get_distance_to_strike_pct(option, self.market_data_fetcher),
         )
 

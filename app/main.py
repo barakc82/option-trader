@@ -12,6 +12,7 @@ from .option_safeguard import OptionSafeguard
 from .subscription_manager import SubscriptionManager
 from .state_updater import StateUpdater
 from .option_sampler import OptionSampler
+from .machine_learning.regress_max_ask import ProbabilityClassifier
 
 OPTION_TRADER_CLIENT_ID = 1
 
