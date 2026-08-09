@@ -194,6 +194,7 @@ class OpportunityExplorer:
             vega=get_model_vega(call_option.ticker), theta=get_model_theta(call_option.ticker),
             minutes_to_expiration=get_minutes_to_expiration(call_option),
             atm_iv=self.market_data_fetcher.get_cached_spx_implied_volatility('C'),
+            contract_iv=get_model_iv(call_option.ticker),
             distance_to_strike_pct=get_distance_to_strike_pct(call_option, self.market_data_fetcher),
         )
 
@@ -353,6 +354,7 @@ class OpportunityExplorer:
             vega=get_model_vega(put_option.ticker), theta=get_model_theta(put_option.ticker),
             minutes_to_expiration=get_minutes_to_expiration(put_option),
             atm_iv=self.market_data_fetcher.get_cached_spx_implied_volatility('P'),
+            contract_iv=get_model_iv(put_option.ticker),
             distance_to_strike_pct=get_distance_to_strike_pct(put_option, self.market_data_fetcher),
         )
 

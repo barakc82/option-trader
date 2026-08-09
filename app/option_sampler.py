@@ -268,6 +268,7 @@ class OptionSampler:
             vega=get_model_vega(option.ticker), theta=get_model_theta(option.ticker),
             minutes_to_expiration=get_minutes_to_expiration(option),
             atm_iv=self.market_data_fetcher.get_cached_spx_implied_volatility(right),
+            contract_iv=get_model_iv(option.ticker),
             distance_to_strike_pct=get_distance_to_strike_pct(option, self.market_data_fetcher),
         )
 

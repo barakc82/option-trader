@@ -60,6 +60,7 @@ class PositionInitialState:
     theta: float | None = None
     minutes_to_expiration: int | None = None
     atm_iv: float | None = None
+    contract_iv: float | None = None
     distance_to_strike_pct: float | None = None
     is_max_ask_scan_required: bool = False
 
@@ -132,6 +133,10 @@ def get_model_vega(ticker):
 
 def get_model_theta(ticker):
     return ticker.modelGreeks.theta if ticker.modelGreeks and ticker.modelGreeks.theta is not None else None
+
+
+def get_model_iv(ticker):
+    return ticker.modelGreeks.impliedVol if ticker.modelGreeks and ticker.modelGreeks.impliedVol is not None else None
 
 
 def get_delta_for_sell(ticker):
