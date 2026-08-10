@@ -74,6 +74,7 @@ class OptionSampler:
                 minutes_to_expiration = sample.get('minutes_to_expiration')
                 distance_to_strike_pct = sample.get('distance_to_strike_pct')
                 atm_iv = sample.get('atm_iv')
+                contract_iv = sample.get('contract_iv')
                 self.collected_samples.append(PositionInitialState(
                     is_executed=0,
                     strike=float(strike), right=right, expiry=expiry,
@@ -91,6 +92,7 @@ class OptionSampler:
                     minutes_to_expiration=int(minutes_to_expiration) if minutes_to_expiration not in (None, '') else None,
                     distance_to_strike_pct=float(distance_to_strike_pct) if distance_to_strike_pct not in (None, '') else None,
                     atm_iv=float(atm_iv) if atm_iv not in (None, '') else None,
+                    contract_iv=float(contract_iv) if contract_iv not in (None, '') else None,
                 ))
             logger.info(f"Loaded {len(self.collected_samples)} random samples from cache")
         except Exception as e:
@@ -245,7 +247,7 @@ class OptionSampler:
         stop_loss_per_option = random.uniform(stop_loss_per_option * 0.50, stop_loss_per_option * 1.5)
         target_delta_base, _ = self.target_delta_calculator.calculate_max_loss_based_target_delta(right, stop_loss_per_option)
         target_delta = random.uniform(target_delta_base * 0.75, target_delta_base * self.target_delta_top_multiplier)
-        option = self.strike_finder.get_cached_low_delta_option(target_delta, right)
+        option = self.strike_finder.get_cached_low_delta_option(target_delta, right, stop_loss_per_option)
         if option is None:
             logger.warning("No option could be found for sample collection")
             return FAILED

@@ -73,6 +73,7 @@ class PositionsManager:
                 minutes_to_expiration = pos.get('minutes_to_expiration')
                 distance_to_strike_pct = pos.get('distance_to_strike_pct')
                 atm_iv = pos.get('atm_iv')
+                contract_iv = pos.get('contract_iv')
                 self.position_initial_state_map.setdefault(key, []).append(PositionInitialState(
                     is_executed=int(is_executed) if is_executed not in (None, '') else 1,
                     strike=float(strike), right=right, expiry=expiry,
@@ -92,6 +93,7 @@ class PositionsManager:
                     minutes_to_expiration=int(minutes_to_expiration) if minutes_to_expiration not in (None, '') else None,
                     distance_to_strike_pct=float(distance_to_strike_pct) if distance_to_strike_pct not in (None, '') else None,
                     atm_iv=float(atm_iv) if atm_iv not in (None, '') else None,
+                    contract_iv=float(contract_iv) if contract_iv not in (None, '') else None,
                 ))
             logger.info(f"Loaded {len(self.position_initial_state_map)} position initial state entries from cache")
         except Exception as e:
@@ -236,6 +238,37 @@ class PositionsManager:
                 position_initial_state.vega, position_initial_state.theta,
                 position_initial_state.minutes_to_expiration,
                 position_initial_state.atm_iv, position_initial_state.distance_to_strike_pct,
+                position_initial_state.max_ask, position_initial_state.stop_loss,
+            ])
+
+            self._log_close_event_with_stop_loss_and_contract_iv(position_initial_state)
+
+    def _log_close_event_with_stop_loss_and_contract_iv(self, position_initial_state: PositionInitialState):
+        csv_path = 'cache/close_events_with_stop_loss_and_contract_iv.csv'
+        write_header = not os.path.exists(csv_path)
+        with open(csv_path, 'a', newline='') as f:
+            writer = csv.writer(f)
+            if write_header:
+                writer.writerow([
+                    'datetime', 'is_executed', 'right', 'strike', 'expiration',
+                    'estimated_sell_price',
+                    'target_delta', 'bid_delta', 'ask_delta', 'last_delta', 'model_delta', 'gamma',
+                    'vega', 'theta',
+                    'minutes_to_expiration', 'atm_iv', 'contract_iv', 'distance_to_strike_pct',
+                    'max_ask', 'stop_loss',
+                ])
+            writer.writerow([
+                datetime.now().isoformat(), position_initial_state.is_executed,
+                position_initial_state.right, position_initial_state.strike,
+                position_initial_state.expiry,
+                position_initial_state.estimated_sell_price,
+                position_initial_state.target_delta, position_initial_state.bid_delta,
+                position_initial_state.ask_delta, position_initial_state.last_delta,
+                position_initial_state.model_delta, position_initial_state.gamma,
+                position_initial_state.vega, position_initial_state.theta,
+                position_initial_state.minutes_to_expiration,
+                position_initial_state.atm_iv, position_initial_state.contract_iv,
+                position_initial_state.distance_to_strike_pct,
                 position_initial_state.max_ask, position_initial_state.stop_loss,
             ])
 

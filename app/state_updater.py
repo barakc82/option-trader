@@ -198,6 +198,7 @@ class StateUpdater:
                     'minutes_to_expiration': td_entry.minutes_to_expiration if td_entry and td_entry.minutes_to_expiration is not None else '',
                     'distance_to_strike_pct': round(td_entry.distance_to_strike_pct, 2) if td_entry and td_entry.distance_to_strike_pct is not None else '',
                     'atm_iv': round(td_entry.atm_iv, 3) if td_entry and td_entry.atm_iv is not None else '',
+                    'contract_iv': round(td_entry.contract_iv, 3) if td_entry and td_entry.contract_iv is not None else '',
                     'stop_loss': round(td_entry.stop_loss, 3) if td_entry and td_entry.stop_loss is not None else '',
                     'max_ask': round(td_entry.max_ask, 3) if td_entry and td_entry.max_ask is not None else '',
                     'is_max_ask_scan_required': td_entry.is_max_ask_scan_required if td_entry else False,
@@ -249,6 +250,7 @@ class StateUpdater:
                 'minutes_to_expiration': sample.minutes_to_expiration if sample.minutes_to_expiration is not None else '',
                 'distance_to_strike_pct': round(sample.distance_to_strike_pct, 2) if sample.distance_to_strike_pct is not None else '',
                 'atm_iv': round(sample.atm_iv, 3) if sample.atm_iv is not None else '',
+                'contract_iv': round(sample.contract_iv, 3) if sample.contract_iv is not None else '',
                 'stop_loss': round(sample.stop_loss, 3) if sample.stop_loss is not None else '',
             })
         state['random_states'] = sorted(random_states, key=lambda x: (x['right'], x['date'], x['strike']))

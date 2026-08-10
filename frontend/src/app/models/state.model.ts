@@ -29,6 +29,7 @@ export interface Position {
     minutes_to_expiration: number | string;
     distance_to_strike_pct: string;
     atm_iv: string;
+    contract_iv: string;
     max_ask?: string;
   }
 

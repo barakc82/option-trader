@@ -1,6 +1,7 @@
 import logging
 import math
 import pickle
+import pandas as pd
 from utilities.utils import get_option_name
 from utilities.ib_utils import (extract_ask, get_delta, get_delta_for_sell, get_individual_deltas,
                                  get_model_gamma, get_model_vega, get_model_theta,
@@ -282,7 +283,7 @@ class StrikeFinder:
 
         return cached_options
 
-    def get_cached_low_delta_option(self, target_delta, right):
+    def get_cached_low_delta_option(self, target_delta, right, stop_loss_per_option):
         options_block = self.middle_fetched_block[right]
         if not options_block:
             return None
@@ -382,11 +383,11 @@ class StrikeFinder:
         log_message += f", bid: {current_candidate.ticker.bid}, ask: {current_candidate.ticker.ask}"
         logger.info(log_message)
 
-        self._print_max_ask_probability(current_candidate, right, target_delta)
+        self._print_max_ask_probability(current_candidate, right, target_delta, stop_loss_per_option)
 
         return current_candidate
 
-    def _print_max_ask_probability(self, option, right, target_delta):
+    def _print_max_ask_probability(self, option, right, target_delta, stop_loss_per_option):
         classifier = self.probability_classifier.get(right) if self.probability_classifier else None
         if not classifier:
             return
@@ -397,12 +398,21 @@ class StrikeFinder:
         delta_values = [d for d in (bid_delta, ask_delta, last_delta, model_delta) if d is not None]
         max_delta = max(delta_values) if delta_values else None
 
-        X_new = [[
-            estimated_sell_price, target_delta, bid_delta, ask_delta, last_delta, model_delta, max_delta,
-            get_model_gamma(option.ticker), get_model_vega(option.ticker), get_model_theta(option.ticker),
-            get_minutes_to_expiration(option),
-            self.market_data_fetcher.get_cached_spx_implied_volatility(right),
-            get_distance_to_strike_pct(option, self.market_data_fetcher),
-        ]]
-        probability = classifier(X_new, estimated_sell_price)[0]
-        logger.info(f"Probability that max ask stays below {estimated_sell_price:.2f} for {get_option_name(option)}: {probability:.3f}")
+        X_new = pd.DataFrame([{
+            "estimated_sell_price": estimated_sell_price,
+            "target_delta": target_delta,
+            "bid_delta": bid_delta,
+            "ask_delta": ask_delta,
+            "last_delta": last_delta,
+            "model_delta": model_delta,
+            "max_delta": max_delta,
+            "gamma": get_model_gamma(option.ticker),
+            "vega": get_model_vega(option.ticker),
+            "theta": get_model_theta(option.ticker),
+            "minutes_to_expiration": get_minutes_to_expiration(option),
+            "atm_iv": self.market_data_fetcher.get_cached_spx_implied_volatility(right),
+            "distance_to_strike_pct": get_distance_to_strike_pct(option, self.market_data_fetcher),
+        }])
+        stop_loss = estimated_sell_price + stop_loss_per_option
+        probability = classifier(X_new, stop_loss)[0]
+        logger.info(f"Probability that max ask stays below {stop_loss:.2f} for {get_option_name(option)}: {probability:.3f}")
