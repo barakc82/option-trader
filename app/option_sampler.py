@@ -3,6 +3,7 @@ import json
 import os
 import random
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 
 from utilities.utils import *
 from utilities.ib_utils import *
@@ -13,6 +14,7 @@ from .strike_finder import StrikeFinder
 from .price_estimator import PriceEstimator
 from .market_data_fetcher import MarketDataFetcher
 from .positions_manager import PositionsManager
+from .predictor import Predictor
 from .trading_bot import TradingBot
 
 logger = logging.getLogger(__name__)
@@ -38,6 +40,7 @@ class OptionSampler:
             self.strike_finder = StrikeFinder()
             self.trading_bot = TradingBot()
             self.price_estimator = PriceEstimator()
+            self.predictor = Predictor()
 
             self.number_of_samples_per_day = DEFAULT_NUMBER_OF_SAMPLES_PER_DAY
             self.target_delta_top_multiplier = DEFAULT_TARGET_DELTA_TOP_MULTIPLIER
@@ -48,6 +51,9 @@ class OptionSampler:
             self._initialized = True
 
     def _load_cached_collected_samples(self):
+        def as_float(value):
+            return float(value) if value not in (None, '') else None
+
         try:
             with open(CACHED_JSON_PATH, 'r') as f:
                 state = json.load(f)
@@ -60,39 +66,46 @@ class OptionSampler:
 
                 expiry = datetime.strptime(date, "%d/%m/%y").strftime("%Y%m%d")
 
-                target_delta = sample.get('target_delta')
-                estimated_sell_price = sample.get('estimated_sell_price')
-                stop_loss = sample.get('stop_loss')
-                bid_delta = sample.get('bid_delta')
-                ask_delta = sample.get('ask_delta')
-                last_ask = sample.get('last_ask')
-                last_delta = sample.get('last_delta')
-                model_delta = sample.get('model_delta')
-                gamma = sample.get('gamma')
-                vega = sample.get('vega')
-                theta = sample.get('theta')
-                minutes_to_expiration = sample.get('minutes_to_expiration')
-                distance_to_strike_pct = sample.get('distance_to_strike_pct')
-                atm_iv = sample.get('atm_iv')
-                contract_iv = sample.get('contract_iv')
+                strike = float(strike)
+                target_delta = as_float(sample.get('target_delta')) or 0.0
+                estimated_sell_price = as_float(sample.get('estimated_sell_price')) or 0.0
+                stop_loss = as_float(sample.get('stop_loss'))
+                bid_delta = as_float(sample.get('bid_delta'))
+                ask_delta = as_float(sample.get('ask_delta'))
+                last_ask = as_float(sample.get('last_ask'))
+                last_delta = as_float(sample.get('last_delta'))
+                model_delta = as_float(sample.get('model_delta'))
+                gamma = as_float(sample.get('gamma'))
+                vega = as_float(sample.get('vega'))
+                theta = as_float(sample.get('theta'))
+                minutes_to_expiration_raw = sample.get('minutes_to_expiration')
+                minutes_to_expiration = int(minutes_to_expiration_raw) if minutes_to_expiration_raw not in (None, '') else None
+                distance_to_strike_pct = as_float(sample.get('distance_to_strike_pct'))
+                atm_iv = as_float(sample.get('atm_iv'))
+                contract_iv = as_float(sample.get('contract_iv'))
+
+                out_of_the_money_probability = None
+                if stop_loss is not None:
+                    option_stub = SimpleNamespace(right=right, strike=strike)
+                    out_of_the_money_probability = self.predictor.predict_max_ask_probability(
+                        option_stub, right, target_delta, estimated_sell_price, stop_loss - estimated_sell_price,
+                        bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
+                        minutes_to_expiration, atm_iv, distance_to_strike_pct,
+                    )
+
                 self.collected_samples.append(PositionInitialState(
                     is_executed=0,
-                    strike=float(strike), right=right, expiry=expiry,
-                    target_delta=float(target_delta) if target_delta not in (None, '') else 0.0,
-                    estimated_sell_price=float(estimated_sell_price) if estimated_sell_price not in (None, '') else 0.0,
-                    stop_loss=float(stop_loss) if stop_loss not in (None, '') else None,
-                    bid_delta=float(bid_delta) if bid_delta not in (None, '') else None,
-                    ask_delta=float(ask_delta) if ask_delta not in (None, '') else None,
-                    last_ask=float(last_ask) if last_ask not in (None, '') else None,
-                    last_delta=float(last_delta) if last_delta not in (None, '') else None,
-                    model_delta=float(model_delta) if model_delta not in (None, '') else None,
-                    gamma=float(gamma) if gamma not in (None, '') else None,
-                    vega=float(vega) if vega not in (None, '') else None,
-                    theta=float(theta) if theta not in (None, '') else None,
-                    minutes_to_expiration=int(minutes_to_expiration) if minutes_to_expiration not in (None, '') else None,
-                    distance_to_strike_pct=float(distance_to_strike_pct) if distance_to_strike_pct not in (None, '') else None,
-                    atm_iv=float(atm_iv) if atm_iv not in (None, '') else None,
-                    contract_iv=float(contract_iv) if contract_iv not in (None, '') else None,
+                    strike=strike, right=right, expiry=expiry,
+                    target_delta=target_delta,
+                    estimated_sell_price=estimated_sell_price,
+                    stop_loss=stop_loss,
+                    bid_delta=bid_delta, ask_delta=ask_delta, last_ask=last_ask, last_delta=last_delta, model_delta=model_delta,
+                    gamma=gamma, vega=vega, theta=theta,
+                    minutes_to_expiration=minutes_to_expiration,
+                    distance_to_strike_pct=distance_to_strike_pct,
+                    atm_iv=atm_iv,
+                    contract_iv=contract_iv,
+                    out_of_the_money_probability=out_of_the_money_probability,
                 ))
             logger.info(f"Loaded {len(self.collected_samples)} random samples from cache")
         except Exception as e:
@@ -155,6 +168,10 @@ class OptionSampler:
         holiday/weekend closures in between)."""
         cal = get_nyse_calendar()
         start_time = cal.previous_close(now_nyc).astimezone(new_york_timezone)
+        if cal.is_session(now_nyc.date().strftime('%Y-%m-%d')):
+            todays_close = new_york_timezone.localize(datetime.combine(now_nyc.date(), REGULAR_HOURS_END_TIME))
+            if todays_close <= now_nyc:
+                start_time = max(start_time, todays_close)
         current_trading_day = get_current_trading_day()
         next_expiration_date = datetime.strptime(current_trading_day, '%Y%m%d').date()
         expiration_time = new_york_timezone.localize(datetime.combine(next_expiration_date, REGULAR_HOURS_END_TIME))
@@ -194,7 +211,7 @@ class OptionSampler:
 
                 now_nyc = datetime.now(new_york_timezone)
 
-                if is_night_break():
+                if is_after_hours():
                     logger.info("Starting storing the expired samples...")
                     for sample in list(self.collected_samples):
                         expiry_date = datetime.strptime(sample.expiry, '%Y%m%d').date()
@@ -208,6 +225,7 @@ class OptionSampler:
                             logger.info(f"Storing an expired sample for {get_option_name(sample)}")
                             PositionsManager()._log_close_event(sample)
                             self.collected_samples.remove(sample)
+                            await asyncio.sleep(10)
                     logger.info("Done storing the expired samples")
 
                 if self.schedule_date != get_current_trading_day() and not (
@@ -247,18 +265,32 @@ class OptionSampler:
         stop_loss_per_option = random.uniform(stop_loss_per_option * 0.50, stop_loss_per_option * 1.5)
         target_delta_base, _ = self.target_delta_calculator.calculate_max_loss_based_target_delta(right, stop_loss_per_option)
         target_delta = random.uniform(target_delta_base * 0.75, target_delta_base * self.target_delta_top_multiplier)
-        option = self.strike_finder.get_cached_low_delta_option(target_delta, right, stop_loss_per_option)
+        option = self.strike_finder.get_cached_low_delta_option(target_delta, right)
         if option is None:
             logger.warning("No option could be found for sample collection")
             return FAILED
 
         estimated_sell_price = self.price_estimator.estimate_sell_price(option)
+        logger.info(f"barak: Estimated sell price: {estimated_sell_price:.2f}, stop loss per option: {stop_loss_per_option:.2f}")
         minimal_sell_price = self.trading_bot.calculate_minimal_sell_price(option.ticker.last, option.lastTradeDateOrContractMonth)
         if estimated_sell_price < minimal_sell_price:
             logger.warning(f"Sampled option is sold for {estimated_sell_price} but the minimal sell price is {minimal_sell_price}")
             return FAILED
 
         bid_delta, ask_delta, last_delta, model_delta = get_individual_deltas(option.ticker)
+        gamma = get_model_gamma(option.ticker)
+        vega = get_model_vega(option.ticker)
+        theta = get_model_theta(option.ticker)
+        minutes_to_expiration = get_minutes_to_expiration(option)
+        atm_iv = self.market_data_fetcher.get_cached_spx_implied_volatility(right)
+        distance_to_strike_pct = get_distance_to_strike_pct(option, self.market_data_fetcher)
+
+        out_of_the_money_probability = self.predictor.predict_max_ask_probability(
+            option, right, target_delta, estimated_sell_price, stop_loss_per_option,
+            bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
+            minutes_to_expiration, atm_iv, distance_to_strike_pct,
+        )
+
         random_sample = PositionInitialState(
             is_executed=0,
             strike=option.strike, right=option.right, expiry=option.lastTradeDateOrContractMonth,
@@ -266,12 +298,12 @@ class OptionSampler:
             target_delta=target_delta,
             stop_loss=estimated_sell_price + stop_loss_per_option,
             bid_delta=bid_delta, ask_delta=ask_delta, last_delta=last_delta, model_delta=model_delta,
-            gamma=get_model_gamma(option.ticker),
-            vega=get_model_vega(option.ticker), theta=get_model_theta(option.ticker),
-            minutes_to_expiration=get_minutes_to_expiration(option),
-            atm_iv=self.market_data_fetcher.get_cached_spx_implied_volatility(right),
+            gamma=gamma, vega=vega, theta=theta,
+            minutes_to_expiration=minutes_to_expiration,
+            atm_iv=atm_iv,
             contract_iv=get_model_iv(option.ticker),
-            distance_to_strike_pct=get_distance_to_strike_pct(option, self.market_data_fetcher),
+            distance_to_strike_pct=distance_to_strike_pct,
+            out_of_the_money_probability=out_of_the_money_probability,
         )
 
         self.collected_samples.append(random_sample)

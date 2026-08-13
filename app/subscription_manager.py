@@ -14,7 +14,7 @@ from .connection_manager import ConnectionManager
 from .index_price_manager import IndexPriceManager
 from .trading_bot import TradingBot
 from .market_data_fetcher import MarketDataFetcher
-from utilities.utils import get_option_name, SAFEGUARD_MAX_CADENCE, STALE_TICK_THRESHOLD_SECONDS
+from utilities.utils import get_option_name, SAFEGUARD_MAX_CADENCE, STALE_TICK_THRESHOLD_SECONDS, is_market_open
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +68,10 @@ class SubscriptionManager:
     def _unsubscribe_if_stale(self, contract, threshold_seconds=STALE_TICK_THRESHOLD_SECONDS):
         """Unsubscribe market data for contract if no tick has been received within threshold_seconds.
         Returns True if the contract was unsubscribed."""
+
+        if not is_market_open():
+            return False
+
         now = time.time()
         last_tick_time = self.market_data_fetcher.get_last_tick_time(contract.conId)
         if now - last_tick_time > threshold_seconds:

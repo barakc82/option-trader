@@ -1,13 +1,8 @@
 import logging
 import math
-import pickle
-import pandas as pd
 from utilities.utils import get_option_name
-from utilities.ib_utils import (extract_ask, get_delta, get_delta_for_sell, get_individual_deltas,
-                                 get_model_gamma, get_model_vega, get_model_theta,
-                                 get_minutes_to_expiration, get_distance_to_strike_pct)
+from utilities.ib_utils import extract_ask, get_delta, get_delta_for_sell
 from .market_data_fetcher import MarketDataFetcher
-from .price_estimator import PriceEstimator
 
 
 logger = logging.getLogger(__name__)
@@ -15,8 +10,6 @@ logger = logging.getLogger(__name__)
 OPTIONS_BLOCK_SIZE = 100
 OPTIONS_BLOCK_LOWER_PART_SIZE = OPTIONS_BLOCK_SIZE // 2
 OPTIONS_BLOCK_HIGHER_PART_SIZE = OPTIONS_BLOCK_SIZE - OPTIONS_BLOCK_LOWER_PART_SIZE
-
-PROBABILITY_CLASSIFIER_PATH = "./machine_learning/probability_classifier.pkl"
 
 class StrikeFinder:
     _instance = None
@@ -32,16 +25,7 @@ class StrikeFinder:
             self.market_data_fetcher = MarketDataFetcher()
             self.middle_fetched_block = {'C': [], 'P': []}
             self.edge_fetched_block = {'C': [], 'P': []}
-            self.probability_classifier = self._load_probability_classifier()
             self._initialized = True
-
-    def _load_probability_classifier(self):
-        try:
-            with open(PROBABILITY_CLASSIFIER_PATH, 'rb') as f:
-                return pickle.load(f)
-        except Exception as e:
-            logger.warning(f"Could not load probability classifier: {e}")
-            return None
 
     async def get_low_delta_put_option(self, put_options, target_delta):
         return await self._get_low_delta_option(put_options, target_delta, 'P')
@@ -283,7 +267,7 @@ class StrikeFinder:
 
         return cached_options
 
-    def get_cached_low_delta_option(self, target_delta, right, stop_loss_per_option):
+    def get_cached_low_delta_option(self, target_delta, right):
         options_block = self.middle_fetched_block[right]
         if not options_block:
             return None
@@ -383,36 +367,4 @@ class StrikeFinder:
         log_message += f", bid: {current_candidate.ticker.bid}, ask: {current_candidate.ticker.ask}"
         logger.info(log_message)
 
-        self._print_max_ask_probability(current_candidate, right, target_delta, stop_loss_per_option)
-
         return current_candidate
-
-    def _print_max_ask_probability(self, option, right, target_delta, stop_loss_per_option):
-        classifier = self.probability_classifier.get(right) if self.probability_classifier else None
-        if not classifier:
-            return
-
-        estimated_sell_price = PriceEstimator().estimate_sell_price(option)
-
-        bid_delta, ask_delta, last_delta, model_delta = get_individual_deltas(option.ticker)
-        delta_values = [d for d in (bid_delta, ask_delta, last_delta, model_delta) if d is not None]
-        max_delta = max(delta_values) if delta_values else None
-
-        X_new = pd.DataFrame([{
-            "estimated_sell_price": estimated_sell_price,
-            "target_delta": target_delta,
-            "bid_delta": bid_delta,
-            "ask_delta": ask_delta,
-            "last_delta": last_delta,
-            "model_delta": model_delta,
-            "max_delta": max_delta,
-            "gamma": get_model_gamma(option.ticker),
-            "vega": get_model_vega(option.ticker),
-            "theta": get_model_theta(option.ticker),
-            "minutes_to_expiration": get_minutes_to_expiration(option),
-            "atm_iv": self.market_data_fetcher.get_cached_spx_implied_volatility(right),
-            "distance_to_strike_pct": get_distance_to_strike_pct(option, self.market_data_fetcher),
-        }])
-        stop_loss = estimated_sell_price + stop_loss_per_option
-        probability = classifier(X_new, stop_loss)[0]
-        logger.info(f"Probability that max ask stays below {stop_loss:.2f} for {get_option_name(option)}: {probability:.3f}")

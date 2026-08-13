@@ -79,7 +79,7 @@ class TradingBot:
         return self.cancel_order(trade.order)
 
     async def close_short_option(self, option, quantity, limit):
-        limit = self.adjust_limit_to_market_rules(option, limit)
+        limit = self.adjust_limit_to_market_rules(limit)
         open_trades = self.get_open_trades()
 
         for t in open_trades:
@@ -129,7 +129,7 @@ class TradingBot:
                 logger.error(f"Error while fetching price increments for {contract}: {e}. Retrying...")
                 await asyncio.sleep(5)
 
-    def adjust_limit_to_market_rules(self, contract, raw_limit):
+    def adjust_limit_to_market_rules(self, raw_limit):
         current_increment = self.price_increments[0].increment
         for i in self.price_increments:
             if raw_limit > i.lowEdge:
@@ -181,7 +181,7 @@ class TradingBot:
         return result
 
 
-    def calculate_limit(self, contract, bid, ask):
+    def calculate_limit(self, bid, ask):
         assert not math.isnan(bid)
         assert not math.isnan(ask)
 
@@ -189,12 +189,12 @@ class TradingBot:
             return ask
         spread = ask - bid
         raw_limit = bid + spread / 2
-        return self.adjust_limit_to_market_rules(contract, raw_limit)
+        return self.adjust_limit_to_market_rules(raw_limit)
 
     async def sell(self, contract, quantity, order_metadata):
         ticker = contract.ticker
         assert ticker
-        limit = self.calculate_limit(contract, ticker.bid, ticker.ask)
+        limit = self.calculate_limit(ticker.bid, ticker.ask)
 
         order = LimitOrder('SELL', quantity, limit, account=MY_ACCOUNT)
         order.usePriceMgmtAlgo = False
@@ -230,7 +230,7 @@ class TradingBot:
             logger.info(f"Sell of {get_option_name(contract)} failed: bid={ticker.bid}, ask={ticker.ask}")
             return result
 
-        limit = self.calculate_limit(contract, ticker.bid, ticker.ask)
+        limit = self.calculate_limit(ticker.bid, ticker.ask)
         minimal_sell_price = self.calculate_minimal_sell_price(ticker.last, contract.lastTradeDateOrContractMonth)
         if limit < minimal_sell_price:
             logger.info(f"Sell of {get_option_name(contract)} limit ({limit}) < min price ({minimal_sell_price})")
@@ -296,7 +296,7 @@ class TradingBot:
         return float(order_state.initMarginChange)
 
     async def modify_limit_order(self, limit_buy_trade, raw_limit):
-        limit_price = self.adjust_limit_to_market_rules(limit_buy_trade.contract, raw_limit)
+        limit_price = self.adjust_limit_to_market_rules(raw_limit)
         if limit_price == limit_buy_trade.order.lmtPrice:
             logger.info(f"Skipping modification for {get_option_name(limit_buy_trade.contract)} as limit price {limit_price} is unchanged")
             return limit_buy_trade

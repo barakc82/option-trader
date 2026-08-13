@@ -342,12 +342,13 @@ class OpportunityExplorer:
         await self.cancel_all_buy_trades(open_trades, put_option)
 
         bid_delta, ask_delta, last_delta, model_delta = get_individual_deltas(put_option.ticker)
+        stop_loss = self.trading_bot.adjust_limit_to_market_rules(estimated_sell_price + stop_loss_per_option)
         position_initial_state = PositionInitialState(
             is_executed=1,
             strike=put_option.strike, right=put_option.right, expiry=put_option.lastTradeDateOrContractMonth,
             estimated_sell_price=estimated_sell_price,
             target_delta=target_delta,
-            stop_loss=estimated_sell_price + stop_loss_per_option,
+            stop_loss=stop_loss,
             bid_delta=bid_delta, ask_delta=ask_delta, last_delta=last_delta, model_delta=model_delta,
             max_ask=extract_ask(put_option.ticker),
             gamma=get_model_gamma(put_option.ticker),

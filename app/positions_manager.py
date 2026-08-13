@@ -3,6 +3,7 @@ import csv
 import json
 import os
 from datetime import datetime
+from types import SimpleNamespace
 
 from utilities.utils import is_trade_cancelled, write_heartbeat, get_option_name, is_final_hours, CACHED_JSON_PATH, \
     is_night_break
@@ -11,6 +12,7 @@ from .market_data_fetcher import MarketDataFetcher
 
 from .max_loss_calculator import MaxLossCalculator
 from .opportunity_explorer import OpportunityExplorer
+from .predictor import Predictor
 from .trading_bot import TradingBot
 
 
@@ -34,14 +36,19 @@ class PositionsManager:
             self.trading_bot = TradingBot()
             self.market_data_fetcher = MarketDataFetcher()
             self.max_loss_calculator = MaxLossCalculator()
+            self.predictor = Predictor()
             self.done_contract_ids = set()
             self.position_initial_state_map = {}
+            self._dumped_during_night_break = False
             self._load_cached_position_initial_states()
             logger.info("PositionsManager singleton initialized.")
             self._initialized = True
 
 
     def _load_cached_position_initial_states(self):
+        def as_float(value):
+            return float(value) if value not in (None, '') else None
+
         try:
             with open(CACHED_JSON_PATH, 'r') as f:
                 state = json.load(f)
@@ -57,43 +64,56 @@ class PositionsManager:
                 key = int(con_id)
 
                 is_executed = pos.get('is_executed')
-                target_delta = pos.get('target_delta')
-                estimated_sell_price = pos.get('estimated_sell_price')
-                stop_loss = pos.get('stop_loss')
-                bid_delta = pos.get('bid_delta')
-                ask_delta = pos.get('ask_delta')
-                last_ask = pos.get('last_ask')
-                max_ask = pos.get('max_ask')
+                strike = float(strike)
+                target_delta = as_float(pos.get('target_delta')) or 0.0
+                estimated_sell_price = as_float(pos.get('estimated_sell_price')) or 0.0
+                stop_loss = as_float(pos.get('stop_loss'))
+                bid_delta = as_float(pos.get('bid_delta'))
+                ask_delta = as_float(pos.get('ask_delta'))
+                last_ask = as_float(pos.get('last_ask'))
+                max_ask = as_float(pos.get('max_ask'))
                 is_max_ask_scan_required = pos.get('is_max_ask_scan_required')
-                last_delta = pos.get('last_delta')
-                model_delta = pos.get('model_delta')
-                gamma = pos.get('gamma')
-                vega = pos.get('vega')
-                theta = pos.get('theta')
-                minutes_to_expiration = pos.get('minutes_to_expiration')
-                distance_to_strike_pct = pos.get('distance_to_strike_pct')
-                atm_iv = pos.get('atm_iv')
-                contract_iv = pos.get('contract_iv')
+                last_delta = as_float(pos.get('last_delta'))
+                model_delta = as_float(pos.get('model_delta'))
+                gamma = as_float(pos.get('gamma'))
+                vega = as_float(pos.get('vega'))
+                theta = as_float(pos.get('theta'))
+                minutes_to_expiration_raw = pos.get('minutes_to_expiration')
+                minutes_to_expiration = int(minutes_to_expiration_raw) if minutes_to_expiration_raw not in (None, '') else None
+                distance_to_strike_pct = as_float(pos.get('distance_to_strike_pct'))
+                atm_iv = as_float(pos.get('atm_iv'))
+                contract_iv = as_float(pos.get('contract_iv'))
+
+                out_of_the_money_probability = None
+                if stop_loss is not None:
+                    option_stub = SimpleNamespace(right=right, strike=strike)
+                    out_of_the_money_probability = self.predictor.predict_max_ask_probability(
+                        option_stub, right, target_delta, estimated_sell_price, stop_loss - estimated_sell_price,
+                        bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
+                        minutes_to_expiration, atm_iv, distance_to_strike_pct,
+                    )
+
                 self.position_initial_state_map.setdefault(key, []).append(PositionInitialState(
                     is_executed=int(is_executed) if is_executed not in (None, '') else 1,
-                    strike=float(strike), right=right, expiry=expiry,
-                    target_delta=float(target_delta) if target_delta not in (None, '') else 0.0,
-                    estimated_sell_price=float(estimated_sell_price) if estimated_sell_price not in (None, '') else 0.0,
-                    stop_loss=float(stop_loss) if stop_loss not in (None, '') else None,
-                    bid_delta=float(bid_delta) if bid_delta not in (None, '') else None,
-                    ask_delta=float(ask_delta) if ask_delta not in (None, '') else None,
-                    last_ask=float(last_ask) if last_ask not in (None, '') else None,
-                    max_ask=float(max_ask) if max_ask not in (None, '') else None,
+                    strike=strike, right=right, expiry=expiry,
+                    target_delta=target_delta,
+                    estimated_sell_price=estimated_sell_price,
+                    stop_loss=stop_loss,
+                    bid_delta=bid_delta,
+                    ask_delta=ask_delta,
+                    last_ask=last_ask,
+                    max_ask=max_ask,
                     is_max_ask_scan_required=bool(is_max_ask_scan_required),
-                    last_delta=float(last_delta) if last_delta not in (None, '') else None,
-                    model_delta=float(model_delta) if model_delta not in (None, '') else None,
-                    gamma=float(gamma) if gamma not in (None, '') else None,
-                    vega=float(vega) if vega not in (None, '') else None,
-                    theta=float(theta) if theta not in (None, '') else None,
-                    minutes_to_expiration=int(minutes_to_expiration) if minutes_to_expiration not in (None, '') else None,
-                    distance_to_strike_pct=float(distance_to_strike_pct) if distance_to_strike_pct not in (None, '') else None,
-                    atm_iv=float(atm_iv) if atm_iv not in (None, '') else None,
-                    contract_iv=float(contract_iv) if contract_iv not in (None, '') else None,
+                    last_delta=last_delta,
+                    model_delta=model_delta,
+                    gamma=gamma,
+                    vega=vega,
+                    theta=theta,
+                    minutes_to_expiration=minutes_to_expiration,
+                    distance_to_strike_pct=distance_to_strike_pct,
+                    atm_iv=atm_iv,
+                    contract_iv=contract_iv,
+                    out_of_the_money_probability=out_of_the_money_probability,
                 ))
             logger.info(f"Loaded {len(self.position_initial_state_map)} position initial state entries from cache")
         except Exception as e:
@@ -116,6 +136,10 @@ class PositionsManager:
 
         current_con_ids = {p.contract.conId for p in positions}
         self.done_contract_ids &= current_con_ids
+
+        if not self._dumped_during_night_break and is_after_hours():
+            await self.dump_positions_initial_states()
+        self._dumped_during_night_break &= not is_after_hours()
 
         for position in positions:
             write_heartbeat()
@@ -146,7 +170,7 @@ class PositionsManager:
             req_id_to_comment[close_position_trade.order.orderId] = "Position buyback"
 
     async def dump_positions_initial_states(self):
-        logger.info("Dumping position initial states")
+        logger.info(f"Dumping position initial states, map size: {len(self.position_initial_state_map)}")
         now_nyc = datetime.now(new_york_timezone)
         for key, entries in list(self.position_initial_state_map.items()):
             expiry_date = datetime.strptime(entries[0].expiry, '%Y%m%d').date()
@@ -160,6 +184,7 @@ class PositionsManager:
                         entry.max_ask = max_ask
                     self._log_close_event(entry)
                 del self.position_initial_state_map[key]
+        self._dumped_during_night_break = True
 
     def can_buy_options(self):
         return not is_final_hours()
@@ -168,7 +193,7 @@ class PositionsManager:
         position_initial_state = self.trading_bot.req_id_to_order_metadata.get(trade.order.orderId)
         logger.info(f"Trade filled: {get_option_name(trade.contract)} {trade.order.action}, position initial state: {position_initial_state}")
         if trade.order.action.upper() == 'SELL' and position_initial_state is not None:
-            self.update_position_entry(position_initial_state, trade)
+            self.add_position_entry(position_initial_state, trade)
         if trade.order.action.upper() == 'BUY':
             self.done_contract_ids.add(trade.contract.conId)
             c = trade.contract
@@ -272,7 +297,7 @@ class PositionsManager:
                 position_initial_state.max_ask, position_initial_state.stop_loss,
             ])
 
-    def update_position_entry(self, position_initial_state: PositionInitialState, trade):
+    def add_position_entry(self, position_initial_state: PositionInitialState, trade):
         c = trade.contract
         key = c.conId
         logger.info(f"barak: storing in position_initial_state_map a position_initial_state object for {get_option_name(c)} with estimated sell price of {position_initial_state.estimated_sell_price}")

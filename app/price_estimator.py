@@ -20,4 +20,4 @@ class PriceEstimator:
     def estimate_sell_price(self, option):
         if math.isnan(option.ticker.bid) or math.isnan(option.ticker.ask):
             return option.ticker.last
-        return self.trading_bot.calculate_limit(option, option.ticker.bid, option.ticker.ask)
+        return self.trading_bot.calculate_limit(option.ticker.bid, option.ticker.ask)

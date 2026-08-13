@@ -30,6 +30,7 @@ export interface Position {
     distance_to_strike_pct: string;
     atm_iv: string;
     contract_iv: string;
+    out_of_the_money_probability: string;
     max_ask?: string;
   }
 

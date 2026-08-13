@@ -34,7 +34,6 @@ class OptionTrader:
         
         self.connection_failure_start_time = None
         self.config = {}
-        self._dumped_during_night_break = False
 
     async def run(self):
         logger.info("OptionTrader: Starting trading loop...")
@@ -58,15 +57,11 @@ class OptionTrader:
                 if is_market_open():
                     logger.info(f"OptionTrader: Checking market status...")
                     await self.trade()
-                    self._dumped_during_night_break = False
                 else:
                     if int(time.time()) % 100 == 0:
                         logger.info(f"Market is closed")
                     if is_night_break():
                         await self.verify_no_open_trades()
-                        if not self._dumped_during_night_break:
-                            await self.positions_manager.dump_positions_initial_states()
-                            self._dumped_during_night_break = True
 
                 if self.connection_failure_start_time is not None:
                     logger.info("OptionTrader: Connection error resolved.")

@@ -109,12 +109,7 @@ class MarketDataFetcher:
         now = time.time()
         contract = ticker.contract
 
-        from .positions_manager import PositionsManager
-        current_ask = extract_ask(ticker)
-        if current_ask is not None:
-            for entry in PositionsManager().position_initial_state_map.get(contract.conId, []):
-                if entry.max_ask is None or current_ask > entry.max_ask:
-                    entry.max_ask = current_ask
+        self.update_max_ask(ticker)
 
         last_tick_time = self.get_last_tick_time(contract.conId)
 
@@ -139,6 +134,23 @@ class MarketDataFetcher:
         delta_str = f"{abs(delta):.3f}" if delta is not None else "N/A"
         gamma_str = f"{gamma:.3f}" if not math.isnan(gamma) else "N/A"
         logger.info(f"Update: {contract.symbol} {get_option_name(contract)} | Price: {price} | Delta: {delta_str} | Gamma: {gamma_str}")
+
+    def update_max_ask(self, ticker):
+        current_ask = extract_ask(ticker)
+        if current_ask is None:
+            return
+
+        contract = ticker.contract
+        from .positions_manager import PositionsManager
+        from .fairness_checker import FairnessChecker
+        from .subscription_manager import SubscriptionManager
+        contract.ticker = ticker
+        fairness_checker = FairnessChecker()
+        es_options = SubscriptionManager().spx_to_es_map.get(contract.conId)
+        for entry in PositionsManager().position_initial_state_map.get(contract.conId, []):
+            if entry.max_ask is None or current_ask > entry.max_ask:
+                if not fairness_checker.is_unfair_ask_value(contract, es_options):
+                    entry.max_ask = current_ask
 
     def get_last_tick_time(self, con_id):
         """Return the timestamp of the last tick received for the given contract id. If no tick
@@ -283,19 +295,24 @@ class MarketDataFetcher:
         minutes_to_expiration = sample.minutes_to_expiration or 0
         duration_seconds = max(int(minutes_to_expiration * 60), 60)
 
+        # Below 5 minutes, a '5 mins' bar request would need padding out beyond the real
+        # duration just to get a single bar, so use 1-min bars instead.
+        bar_size_setting = '1 min' if duration_seconds < 300 else '5 mins'
+        min_chunk_seconds = 60 if bar_size_setting == '1 min' else 300
+
         # IB caps a single 5-min-bar request at 86400 seconds (24h), so page backwards from
         # day_end in <=24h chunks and stitch the results back into chronological order.
         bars = []
         remaining_seconds = duration_seconds
         request_end = day_end
         while remaining_seconds > 0:
-            chunk_seconds = min(remaining_seconds, 28800)
+            chunk_seconds = max(min(remaining_seconds, 28800), min_chunk_seconds)
             logger.info(f"barak: calling reqHistoricalDataAsync with {chunk_seconds} seconds, endDateTime {request_end}")
             chunk_bars = await self.ib.reqHistoricalDataAsync(
                 option,
                 endDateTime=request_end,
                 durationStr=f"{chunk_seconds} S",
-                barSizeSetting='5 mins',
+                barSizeSetting=bar_size_setting,
                 whatToShow='TRADES',
                 useRTH=True
             )
@@ -310,57 +327,6 @@ class MarketDataFetcher:
             bars = chunk_bars + bars
             remaining_seconds -= chunk_seconds
             request_end = request_end - timedelta(seconds=chunk_seconds)
-            await asyncio.sleep(2)
+            await asyncio.sleep(20)
 
-
-        # Take the 5 bars with the highest highs, then map them to the contiguous [start, end)
-        # periods that need a tick-by-tick check, merging adjacent/overlapping bars so the same
-        # ticks aren't fetched twice.
-        top_bars = sorted(bars, key=lambda bar: bar.high, reverse=True)[:5]
-        top_bars.sort(key=lambda bar: bar.date)
-
-        periods = []
-        for bar in top_bars:
-            bar_start = bar.date
-            if bar_start.tzinfo is None:
-                bar_start = new_york_timezone.localize(bar_start)
-            bar_end = bar_start + timedelta(minutes=5)
-
-            if periods and bar_start <= periods[-1][1]:
-                periods[-1] = (periods[-1][0], max(periods[-1][1], bar_end))
-            else:
-                periods.append((bar_start, bar_end))
-
-        max_ask = 0
-        for period_start, period_end in periods:
-            logger.info(f"Checking tick-by-tick period {period_start} to {period_end} for {get_option_name(option)}")
-            cursor = period_start
-            last_time = None
-
-            while cursor < period_end:
-                logger.info(
-                    f"barak: Checking {cursor}")
-                raw_ticks = await self.ib.reqHistoricalTicksAsync(
-                    option,
-                    startDateTime=cursor,
-                    endDateTime='',
-                    numberOfTicks=1000,
-                    whatToShow='BID_ASK',
-                    useRth=False,
-                )
-                if not raw_ticks:
-                    break
-
-                new_ticks = [t for t in raw_ticks if (last_time is None or t.time > last_time) and t.time < period_end]
-                for tick in new_ticks:
-                    if tick.priceAsk > max_ask:
-                        max_ask = tick.priceAsk
-
-                last_time = raw_ticks[-1].time
-                if len(raw_ticks) < 1000 or last_time >= period_end:
-                    break
-
-                cursor = last_time
-                await asyncio.sleep(4)
-
-        return max_ask
+        return max((bar.high for bar in bars), default=0)

@@ -164,7 +164,7 @@ class StateUpdater:
 
             stop_loss_per_option = self.max_loss_calculator.calculate_max_loss(option.right)
             raw_stop_loss = position.avgCost / 100 + stop_loss_per_option
-            stop_loss = self.trading_bot.adjust_limit_to_market_rules(option, raw_stop_loss)
+            stop_loss = self.trading_bot.adjust_limit_to_market_rules(raw_stop_loss)
             
             ticker = self.market_data_fetcher.get_ticker(option)
             distance_to_stop = calculate_distance_to_stop(option, ticker, stop_loss, spot_price, r) if ticker else math.nan
@@ -200,6 +200,7 @@ class StateUpdater:
                     'atm_iv': round(td_entry.atm_iv, 3) if td_entry and td_entry.atm_iv is not None else '',
                     'contract_iv': round(td_entry.contract_iv, 3) if td_entry and td_entry.contract_iv is not None else '',
                     'stop_loss': round(td_entry.stop_loss, 3) if td_entry and td_entry.stop_loss is not None else '',
+                    'out_of_the_money_probability': round(td_entry.out_of_the_money_probability, 3) if td_entry and td_entry.out_of_the_money_probability is not None else '',
                     'max_ask': round(td_entry.max_ask, 3) if td_entry and td_entry.max_ask is not None else '',
                     'is_max_ask_scan_required': td_entry.is_max_ask_scan_required if td_entry else False,
                 })
@@ -252,6 +253,7 @@ class StateUpdater:
                 'atm_iv': round(sample.atm_iv, 3) if sample.atm_iv is not None else '',
                 'contract_iv': round(sample.contract_iv, 3) if sample.contract_iv is not None else '',
                 'stop_loss': round(sample.stop_loss, 3) if sample.stop_loss is not None else '',
+                'out_of_the_money_probability': round(sample.out_of_the_money_probability, 3) if sample.out_of_the_money_probability is not None else '',
             })
         state['random_states'] = sorted(random_states, key=lambda x: (x['right'], x['date'], x['strike']))
 

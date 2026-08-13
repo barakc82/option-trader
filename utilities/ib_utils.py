@@ -63,6 +63,7 @@ class PositionInitialState:
     contract_iv: float | None = None
     distance_to_strike_pct: float | None = None
     is_max_ask_scan_required: bool = False
+    out_of_the_money_probability: float | None = None
 
 
 def get_time_passed_since_submission(trade: Trade) -> timedelta | Any:

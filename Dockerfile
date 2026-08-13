@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     nginx
 
-RUN pip3 install ib_insync colorlog pytz exchange_calendars gspread psutil twilio dash aiohttp nest_asyncio Brotli yfinance scikit-learn --break-system-packages \
+RUN pip3 install ib_insync colorlog pytz exchange_calendars gspread psutil twilio dash aiohttp nest_asyncio Brotli yfinance "scikit-learn>=1.7" --break-system-packages \
     && rm -rf /var/lib/apt/lists/*
 #USER ibgateway  # Switch back to non-root for security
 
