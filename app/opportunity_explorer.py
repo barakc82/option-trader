@@ -10,6 +10,7 @@ from .max_loss_calculator import MaxLossCalculator
 from .net_worth_calculator import NetWorthCalculator
 from .option_cache import OptionCache
 from .option_data_fetcher import OptionDataFetcher
+from .predictor import Predictor
 from .price_estimator import PriceEstimator
 from .strike_finder import StrikeFinder
 from .target_delta_calculator import TargetDeltaCalculator
@@ -47,6 +48,7 @@ class OpportunityExplorer:
             self.option_data_fetcher = OptionDataFetcher()
             self.trading_bot = TradingBot()
             self.price_estimator = PriceEstimator()
+            self.predictor = Predictor()
             self.net_worth_calculator = NetWorthCalculator()
             self.max_loss_calculator = MaxLossCalculator()
             self.last_submit_order_attempt_time = 0
@@ -182,6 +184,19 @@ class OpportunityExplorer:
         await self.cancel_all_buy_trades(open_trades, call_option)
 
         bid_delta, ask_delta, last_delta, model_delta = get_individual_deltas(call_option.ticker)
+        gamma = get_model_gamma(call_option.ticker)
+        vega = get_model_vega(call_option.ticker)
+        theta = get_model_theta(call_option.ticker)
+        minutes_to_expiration = get_minutes_to_expiration(call_option)
+        atm_iv = self.market_data_fetcher.get_cached_spx_implied_volatility('C')
+        distance_to_strike_pct = get_distance_to_strike_pct(call_option, self.market_data_fetcher)
+
+        out_of_the_money_probability = self.predictor.predict_max_ask_probability(
+            call_option, 'C', target_delta, estimated_sell_price, stop_loss_per_option,
+            bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
+            minutes_to_expiration, atm_iv, distance_to_strike_pct,
+        )
+
         position_initial_state = PositionInitialState(
             is_executed=1,
             strike=call_option.strike, right=call_option.right, expiry=call_option.lastTradeDateOrContractMonth,
@@ -190,12 +205,13 @@ class OpportunityExplorer:
             stop_loss=estimated_sell_price + stop_loss_per_option,
             bid_delta=bid_delta, ask_delta=ask_delta, last_delta=last_delta, model_delta=model_delta,
             max_ask=extract_ask(call_option.ticker),
-            gamma=get_model_gamma(call_option.ticker),
-            vega=get_model_vega(call_option.ticker), theta=get_model_theta(call_option.ticker),
-            minutes_to_expiration=get_minutes_to_expiration(call_option),
-            atm_iv=self.market_data_fetcher.get_cached_spx_implied_volatility('C'),
+            gamma=gamma,
+            vega=vega, theta=theta,
+            minutes_to_expiration=minutes_to_expiration,
+            atm_iv=atm_iv,
             contract_iv=get_model_iv(call_option.ticker),
-            distance_to_strike_pct=get_distance_to_strike_pct(call_option, self.market_data_fetcher),
+            distance_to_strike_pct=distance_to_strike_pct,
+            out_of_the_money_probability=out_of_the_money_probability,
         )
 
         sell_option_result = await self.try_to_sell(call_option, 2, position_initial_state)
@@ -343,6 +359,19 @@ class OpportunityExplorer:
 
         bid_delta, ask_delta, last_delta, model_delta = get_individual_deltas(put_option.ticker)
         stop_loss = self.trading_bot.adjust_limit_to_market_rules(estimated_sell_price + stop_loss_per_option)
+        gamma = get_model_gamma(put_option.ticker)
+        vega = get_model_vega(put_option.ticker)
+        theta = get_model_theta(put_option.ticker)
+        minutes_to_expiration = get_minutes_to_expiration(put_option)
+        atm_iv = self.market_data_fetcher.get_cached_spx_implied_volatility('P')
+        distance_to_strike_pct = get_distance_to_strike_pct(put_option, self.market_data_fetcher)
+
+        out_of_the_money_probability = self.predictor.predict_max_ask_probability(
+            put_option, 'P', target_delta, estimated_sell_price, stop_loss_per_option,
+            bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
+            minutes_to_expiration, atm_iv, distance_to_strike_pct,
+        )
+
         position_initial_state = PositionInitialState(
             is_executed=1,
             strike=put_option.strike, right=put_option.right, expiry=put_option.lastTradeDateOrContractMonth,
@@ -351,12 +380,13 @@ class OpportunityExplorer:
             stop_loss=stop_loss,
             bid_delta=bid_delta, ask_delta=ask_delta, last_delta=last_delta, model_delta=model_delta,
             max_ask=extract_ask(put_option.ticker),
-            gamma=get_model_gamma(put_option.ticker),
-            vega=get_model_vega(put_option.ticker), theta=get_model_theta(put_option.ticker),
-            minutes_to_expiration=get_minutes_to_expiration(put_option),
-            atm_iv=self.market_data_fetcher.get_cached_spx_implied_volatility('P'),
+            gamma=gamma,
+            vega=vega, theta=theta,
+            minutes_to_expiration=minutes_to_expiration,
+            atm_iv=atm_iv,
             contract_iv=get_model_iv(put_option.ticker),
-            distance_to_strike_pct=get_distance_to_strike_pct(put_option, self.market_data_fetcher),
+            distance_to_strike_pct=distance_to_strike_pct,
+            out_of_the_money_probability=out_of_the_money_probability,
         )
 
         quantity = min(max_options_for_market_drop, 2)
