@@ -184,6 +184,7 @@ class OpportunityExplorer:
         await self.cancel_all_buy_trades(open_trades, call_option)
 
         bid_delta, ask_delta, last_delta, model_delta = get_individual_deltas(call_option.ticker)
+        stop_loss = self.trading_bot.adjust_limit_to_market_rules(estimated_sell_price + stop_loss_per_option)
         gamma = get_model_gamma(call_option.ticker)
         vega = get_model_vega(call_option.ticker)
         theta = get_model_theta(call_option.ticker)
@@ -202,7 +203,7 @@ class OpportunityExplorer:
             strike=call_option.strike, right=call_option.right, expiry=call_option.lastTradeDateOrContractMonth,
             estimated_sell_price=estimated_sell_price,
             target_delta=target_delta,
-            stop_loss=estimated_sell_price + stop_loss_per_option,
+            stop_loss=stop_loss,
             bid_delta=bid_delta, ask_delta=ask_delta, last_delta=last_delta, model_delta=model_delta,
             max_ask=extract_ask(call_option.ticker),
             gamma=gamma,

@@ -271,7 +271,7 @@ class OptionSampler:
             return FAILED
 
         estimated_sell_price = self.price_estimator.estimate_sell_price(option)
-        logger.info(f"barak: Estimated sell price: {estimated_sell_price:.2f}, stop loss per option: {stop_loss_per_option:.2f}")
+        stop_loss = self.trading_bot.adjust_limit_to_market_rules(estimated_sell_price + stop_loss_per_option)
         minimal_sell_price = self.trading_bot.calculate_minimal_sell_price(option.ticker.last, option.lastTradeDateOrContractMonth)
         if estimated_sell_price < minimal_sell_price:
             logger.warning(f"Sampled option is sold for {estimated_sell_price} but the minimal sell price is {minimal_sell_price}")
@@ -296,7 +296,7 @@ class OptionSampler:
             strike=option.strike, right=option.right, expiry=option.lastTradeDateOrContractMonth,
             estimated_sell_price=estimated_sell_price,
             target_delta=target_delta,
-            stop_loss=estimated_sell_price + stop_loss_per_option,
+            stop_loss=stop_loss,
             bid_delta=bid_delta, ask_delta=ask_delta, last_delta=last_delta, model_delta=model_delta,
             gamma=gamma, vega=vega, theta=theta,
             minutes_to_expiration=minutes_to_expiration,

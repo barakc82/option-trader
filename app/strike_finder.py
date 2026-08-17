@@ -270,6 +270,7 @@ class StrikeFinder:
     def get_cached_low_delta_option(self, target_delta, right):
         options_block = self.middle_fetched_block[right]
         if not options_block:
+            logger.warning(f"No middle option block found for {right}")
             return None
 
         strike_to_option = {option.strike: option for option in options_block}
@@ -319,6 +320,7 @@ class StrikeFinder:
             options_block = self.edge_fetched_block[right]
 
         if not options_block:
+            logger.warning(f"No edge option block found for {right}")
             return None
 
         highest_delta_under_target = 0
