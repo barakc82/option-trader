@@ -33,49 +33,37 @@ class StrikeFinder:
     async def get_low_delta_call_option(self, call_options, target_delta):
         return await self._get_low_delta_option(call_options, target_delta, 'C')
 
-    async def _get_low_delta_option(self, options, target_delta, right):
-        assert options
-        self.middle_fetched_block[right] = []
-        self.edge_fetched_block[right] = []
+    def _resolve_delta_for_sell(self, option):
+        if not hasattr(option, "ticker"):
+            ticker = self.market_data_fetcher.get_ticker(option)
+            option.ticker = ticker
+        if option.ticker is None:
+            logger.error(f"Option {get_option_name(option)} has an empty ticker field")
+            return None
+        delta = get_delta_for_sell(option.ticker)
+        if delta is None or math.isnan(delta):
+            return None
+        return abs(delta)
 
-        strike_to_option = {option.strike: option for option in options}
-        strikes = sorted(strike_to_option.keys(), reverse=(right == 'C'))
-        
-        number_of_strikes = len(strikes)
-        middle_idx = number_of_strikes // 2
-        lower_idx = max(middle_idx - OPTIONS_BLOCK_LOWER_PART_SIZE, 0)
-        higher_idx = min(middle_idx + OPTIONS_BLOCK_HIGHER_PART_SIZE, number_of_strikes - 1)
-
-        logger.info(f"Fetching {right} option block: {strikes[lower_idx]} -> {strikes[higher_idx]}")
-        options_block = await self.fetch_options_block(lower_idx, higher_idx, strike_to_option, strikes)
-        self.middle_fetched_block[right] = options_block
-
+    def _scan_block_extremes(self, options_block):
         lowest_delta, highest_delta = 1.0, 0.0
         highest_delta_option = None
 
         for option in options_block:
-            if not hasattr(option, "ticker"):
-                # logger.error(f"Option {get_option_name(option)} has no ticker field")
-                ticker = self.market_data_fetcher.get_ticker(option)
-                option.ticker = ticker
-            if option.ticker is None:
-                logger.error(f"Option {get_option_name(option)} has an empty ticker field")
-                continue
-            delta = get_delta_for_sell(option.ticker)
-            if delta is None or math.isnan(delta): continue
-            delta = abs(delta)
+            delta = self._resolve_delta_for_sell(option)
+            if delta is None: continue
             if delta < lowest_delta: lowest_delta = delta
             if delta > highest_delta:
                 highest_delta = delta
                 highest_delta_option = option
 
-        if lowest_delta > highest_delta:
-            logger.error(f"No delta data available for {right} options")
-            return None
+        return lowest_delta, highest_delta, highest_delta_option
 
-        current_candidate = None
+    async def _fetch_edge_block_if_needed(self, options_block, lowest_delta, highest_delta,
+                                           strike_to_option, strikes, lower_idx, higher_idx, target_delta, right):
+        number_of_strikes = len(strikes)
+
         if lowest_delta > target_delta:
-            current_candidate = options_block[0] if right == 'P' else options_block[-1]
             logger.info(f"Initial block deltas too high for {right}. Lowest: {lowest_delta:.3f}")
             if right == 'P':
                 logger.info(f"Fetching {right} option block: {strikes[0]} -> {strikes[lower_idx-1]}")
@@ -85,35 +73,29 @@ class StrikeFinder:
                     logger.info(f"Fetching {right} option block: {strikes[higher_idx+1]} -> {strikes[number_of_strikes-1]}")
                     options_block = await self.fetch_options_block(higher_idx + 1, number_of_strikes - 1, strike_to_option, strikes)
             self.edge_fetched_block[right] = options_block
-        
+
         elif highest_delta < target_delta:
-            current_candidate = highest_delta_option
             logger.info(f"Initial block deltas too low for {right}. Highest: {highest_delta:.3f}")
             logger.info(f"Fetching {right} option block: {strikes[higher_idx]} -> {strikes[number_of_strikes - 1]}")
             options_block = await self.fetch_options_block(higher_idx, number_of_strikes - 1, strike_to_option, strikes)
             self.edge_fetched_block[right] = options_block
 
+        return options_block
+
+    def _find_highest_delta_under_target(self, options_block, target_delta):
         highest_delta_under_target = 0
+        best_candidate = None
         for option in options_block:
-            if not hasattr(option, "ticker"):
-                # logger.error(f"Option {get_option_name(option)} has no ticker field")
-                ticker = self.market_data_fetcher.get_ticker(option)
-                option.ticker = ticker
-            if option.ticker is None:
-                logger.error(f"Option {get_option_name(option)} has an empty ticker field")
-                continue
-            delta = get_delta_for_sell(option.ticker)
-            if delta is None or math.isnan(delta): continue
-            delta = abs(delta)
+            delta = self._resolve_delta_for_sell(option)
+            if delta is None: continue
 
             if highest_delta_under_target < delta < target_delta:
                 highest_delta_under_target = delta
-                current_candidate = option
+                best_candidate = option
 
-        if not current_candidate:
-            logger.error(f"No {right} option candidate found")
-            return None
+        return best_candidate
 
+    def _finalize_candidate(self, current_candidate, options_block, target_delta, right):
         final_delta = get_delta_for_sell(current_candidate.ticker)
         if final_delta is None:
             logger.error(f"No delta data available for the candidate option {get_option_name(current_candidate)}")
@@ -138,6 +120,47 @@ class StrikeFinder:
         log_message += f", bid: {current_candidate.ticker.bid}, ask: {current_candidate.ticker.ask}"
         logger.info(log_message)
         return current_candidate
+
+    async def _get_low_delta_option(self, options, target_delta, right):
+        assert options
+        self.middle_fetched_block[right] = []
+        self.edge_fetched_block[right] = []
+
+        strike_to_option = {option.strike: option for option in options}
+        strikes = sorted(strike_to_option.keys(), reverse=(right == 'C'))
+        
+        number_of_strikes = len(strikes)
+        middle_idx = number_of_strikes // 2
+        lower_idx = max(middle_idx - OPTIONS_BLOCK_LOWER_PART_SIZE, 0)
+        higher_idx = min(middle_idx + OPTIONS_BLOCK_HIGHER_PART_SIZE, number_of_strikes - 1)
+
+        logger.info(f"Fetching {right} option block: {strikes[lower_idx]} -> {strikes[higher_idx]}")
+        options_block = await self.fetch_options_block(lower_idx, higher_idx, strike_to_option, strikes)
+        self.middle_fetched_block[right] = options_block
+
+        lowest_delta, highest_delta, highest_delta_option = self._scan_block_extremes(options_block)
+
+        if lowest_delta > highest_delta:
+            logger.error(f"No delta data available for {right} options")
+            return None
+
+        current_candidate = None
+        if lowest_delta > target_delta:
+            current_candidate = options_block[0] if right == 'P' else options_block[-1]
+        elif highest_delta < target_delta:
+            current_candidate = highest_delta_option
+
+        options_block = await self._fetch_edge_block_if_needed(
+            options_block, lowest_delta, highest_delta, strike_to_option, strikes, lower_idx, higher_idx,
+            target_delta, right)
+
+        current_candidate = self._find_highest_delta_under_target(options_block, target_delta) or current_candidate
+
+        if not current_candidate:
+            logger.error(f"No {right} option candidate found")
+            return None
+
+        return self._finalize_candidate(current_candidate, options_block, target_delta, right)
 
     def find_first_cheap_option(self, right):
         """
