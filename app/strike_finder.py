@@ -1,8 +1,12 @@
 import logging
 import math
 from utilities.utils import get_option_name
-from utilities.ib_utils import extract_ask, get_delta, get_delta_for_sell
+from utilities.ib_utils import (extract_ask, get_delta, get_delta_for_sell, get_individual_deltas, get_model_gamma,
+                                 get_model_vega, get_model_theta, get_minutes_to_expiration, get_distance_to_strike_pct)
 from .market_data_fetcher import MarketDataFetcher
+from .max_loss_calculator import MaxLossCalculator
+from .predictor import Predictor
+from .price_estimator import PriceEstimator
 
 
 logger = logging.getLogger(__name__)
@@ -23,6 +27,9 @@ class StrikeFinder:
     def __init__(self):
         if not self._initialized:
             self.market_data_fetcher = MarketDataFetcher()
+            self.max_loss_calculator = MaxLossCalculator()
+            self.predictor = Predictor()
+            self.price_estimator = PriceEstimator()
             self.middle_fetched_block = {'C': [], 'P': []}
             self.edge_fetched_block = {'C': [], 'P': []}
             self._initialized = True
@@ -33,7 +40,7 @@ class StrikeFinder:
     async def get_low_delta_call_option(self, call_options, target_delta):
         return await self._get_low_delta_option(call_options, target_delta, 'C')
 
-    def _resolve_delta_for_sell(self, option):
+    def _resolve_delta_for_sell(self, option) -> float | None:
         if not hasattr(option, "ticker"):
             ticker = self.market_data_fetcher.get_ticker(option)
             option.ticker = ticker
@@ -94,6 +101,58 @@ class StrikeFinder:
                 best_candidate = option
 
         return best_candidate
+
+    def _log_best_expected_profit_option(self, target_delta, right):
+        stop_loss_per_option = self.max_loss_calculator.calculate_max_loss(right)
+        atm_iv = self.market_data_fetcher.get_cached_spx_implied_volatility(right)
+
+        best_option, best_expected_profit, best_probability, best_max_delta, best_estimated_sell_price = \
+            None, None, None, None, None
+
+        for option in self.middle_fetched_block[right]:
+            if not hasattr(option, "ticker") or option.ticker is None:
+                continue
+
+            try:
+                estimated_sell_price = self.price_estimator.estimate_sell_price(option)
+                bid_delta, ask_delta, last_delta, model_delta = get_individual_deltas(option.ticker)
+                gamma = get_model_gamma(option.ticker)
+                vega = get_model_vega(option.ticker)
+                theta = get_model_theta(option.ticker)
+                minutes_to_expiration = get_minutes_to_expiration(option)
+                distance_to_strike_pct = get_distance_to_strike_pct(option, self.market_data_fetcher)
+            except (TypeError, ValueError) as e:
+                logger.warning(f"Skipping {get_option_name(option)} in expected-profit scan: {e}")
+                continue
+
+            out_of_the_money_probability = self.predictor.predict_out_of_the_money_probability(
+                option, right, target_delta, estimated_sell_price, stop_loss_per_option,
+                bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
+                minutes_to_expiration, atm_iv, distance_to_strike_pct,
+            )
+            if out_of_the_money_probability is None:
+                continue
+
+            in_the_money_probability = 1 - out_of_the_money_probability
+            expected_profit = (estimated_sell_price * out_of_the_money_probability
+                                - stop_loss_per_option * in_the_money_probability)
+
+            if best_expected_profit is None or expected_profit > best_expected_profit:
+                delta_values = [d for d in (bid_delta, ask_delta, last_delta, model_delta) if d is not None]
+                best_option = option
+                best_expected_profit = expected_profit
+                best_probability = out_of_the_money_probability
+                best_max_delta = max(delta_values) if delta_values else None
+                best_estimated_sell_price = estimated_sell_price
+
+        if best_option is None:
+            return
+
+        max_delta_str = f"{best_max_delta:.3f}" if best_max_delta is not None else "n/a"
+        logger.info(f"Best expected-profit {right} option in the scanned block: {get_option_name(best_option)}, "
+                    f"expected profit: {best_expected_profit:.3f}, estimated sell price: {best_estimated_sell_price:.2f}, "
+                    f"stop loss: {stop_loss_per_option:.2f}, probability: {best_probability:.3f}, "
+                    f"max delta: {max_delta_str}, target delta: {target_delta:.3f}")
 
     def _finalize_candidate(self, current_candidate, options_block, target_delta, right):
         final_delta = get_delta_for_sell(current_candidate.ticker)
@@ -159,6 +218,8 @@ class StrikeFinder:
         if not current_candidate:
             logger.error(f"No {right} option candidate found")
             return None
+
+        self._log_best_expected_profit_option(target_delta, right)
 
         return self._finalize_candidate(current_candidate, options_block, target_delta, right)
 

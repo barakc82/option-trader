@@ -87,7 +87,7 @@ class PositionsManager:
                 out_of_the_money_probability = None
                 if stop_loss is not None:
                     option_stub = SimpleNamespace(right=right, strike=strike)
-                    out_of_the_money_probability = self.predictor.predict_max_ask_probability(
+                    out_of_the_money_probability = self.predictor.predict_out_of_the_money_probability(
                         option_stub, right, target_delta, estimated_sell_price, stop_loss - estimated_sell_price,
                         bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
                         minutes_to_expiration, atm_iv, distance_to_strike_pct,

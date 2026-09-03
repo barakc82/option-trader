@@ -192,7 +192,7 @@ class OpportunityExplorer:
         atm_iv = self.market_data_fetcher.get_cached_spx_implied_volatility('C')
         distance_to_strike_pct = get_distance_to_strike_pct(call_option, self.market_data_fetcher)
 
-        out_of_the_money_probability = self.predictor.predict_max_ask_probability(
+        out_of_the_money_probability = self.predictor.predict_out_of_the_money_probability(
             call_option, 'C', target_delta, estimated_sell_price, stop_loss_per_option,
             bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
             minutes_to_expiration, atm_iv, distance_to_strike_pct,
@@ -367,7 +367,7 @@ class OpportunityExplorer:
         atm_iv = self.market_data_fetcher.get_cached_spx_implied_volatility('P')
         distance_to_strike_pct = get_distance_to_strike_pct(put_option, self.market_data_fetcher)
 
-        out_of_the_money_probability = self.predictor.predict_max_ask_probability(
+        out_of_the_money_probability = self.predictor.predict_out_of_the_money_probability(
             put_option, 'P', target_delta, estimated_sell_price, stop_loss_per_option,
             bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
             minutes_to_expiration, atm_iv, distance_to_strike_pct,

@@ -57,9 +57,9 @@ class Predictor:
         except Exception as e:
             logger.warning(f"Could not load probability classifier: {e}")
 
-    def predict_max_ask_probability(self, option, right, target_delta, estimated_sell_price, stop_loss_per_option,
-                                     bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
-                                     minutes_to_expiration, atm_iv, distance_to_strike_pct):
+    def predict_out_of_the_money_probability(self, option, right, target_delta, estimated_sell_price, stop_loss_per_option,
+                                             bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
+                                             minutes_to_expiration, atm_iv, distance_to_strike_pct):
         self._load_probability_classifier()
 
         classifier = self.probability_classifier.get(right) if self.probability_classifier else None
