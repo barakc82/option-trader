@@ -6,7 +6,7 @@ import traceback
 from utilities.utils import *
 
 from .market_data_fetcher import MarketDataFetcher
-from .max_loss_calculator import DEFAULT_MAX_LOSS, MaxLossCalculator
+from .max_loss_calculator import MaxLossCalculator
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

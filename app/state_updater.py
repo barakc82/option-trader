@@ -116,7 +116,8 @@ class StateUpdater:
         state['spx_premium'] = round(premium, 2)
 
         # 1. Gather account metrics
-        state['cash'] = round(self.account_data.get_cash_balance_value())
+        _, cash = self.account_data.get_cash_balance_value()
+        state['cash'] = round(cash)
         excess_liq = self.account_data.get_cached_excess_liquidity()
         state['excess_liquidity'] = '' if excess_liq == sys.float_info.max else round(excess_liq)
         state['cushion'] = round(self.account_data.get_cached_cushion(), 2)
@@ -157,19 +158,22 @@ class StateUpdater:
         spot_price = self.market_data_fetcher.get_spx_price() if is_reg_hours else self.market_data_fetcher.get_es_price() + indices_difference
         r = self.market_data_fetcher.get_cached_risk_free_rate()
 
+        stop_loss = ''
+        distance_to_stop = ''
         for position in positions:
             option = position.contract
             delta = self.market_data_fetcher.get_delta(option)
             market_price = round(self.market_data_fetcher.get_market_price(option), 2)
 
             stop_loss_per_option = self.max_loss_calculator.calculate_max_loss(option.right)
-            raw_stop_loss = position.avgCost / 100 + stop_loss_per_option
-            stop_loss = self.trading_bot.adjust_limit_to_market_rules(raw_stop_loss)
+            if not math.isnan(stop_loss_per_option):
+                raw_stop_loss = position.avgCost / 100 + stop_loss_per_option
+                stop_loss = self.trading_bot.adjust_limit_to_market_rules(raw_stop_loss)
             
-            ticker = self.market_data_fetcher.get_ticker(option)
-            distance_to_stop = calculate_distance_to_stop(option, ticker, stop_loss, spot_price, r) if ticker else math.nan
-            distance_to_stop_roundness = 1 if distance_to_stop < 100 else 0
-            distance_to_stop = round(distance_to_stop, distance_to_stop_roundness)
+                ticker = self.market_data_fetcher.get_ticker(option)
+                distance_to_stop = calculate_distance_to_stop(option, ticker, stop_loss, spot_price, r) if ticker else math.nan
+                distance_to_stop_roundness = 1 if distance_to_stop < 100 else 0
+                distance_to_stop = round(distance_to_stop, distance_to_stop_roundness)
 
             position_date = datetime.strptime(option.lastTradeDateOrContractMonth, "%Y%m%d").strftime("%d/%m/%y")
             pos_data = {

@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     nginx
 
-RUN pip3 install ib_insync colorlog pytz exchange_calendars gspread psutil twilio dash aiohttp nest_asyncio Brotli yfinance "scikit-learn>=1.7" --break-system-packages \
+RUN pip3 install ib_insync colorlog pytz exchange_calendars gspread psutil twilio dash aiohttp nest_asyncio Brotli yfinance "scikit-learn>=1.7" lightgbm pyyaml matplotlib pytest pyarrow --break-system-packages \
     && rm -rf /var/lib/apt/lists/*
 #USER ibgateway  # Switch back to non-root for security
 
@@ -49,6 +49,7 @@ RUN echo "alias tailsupervisor='tail -f supervisor.log'" >> ~/.bashrc
 RUN echo "alias runsupervisor='python3 -m app.options_trader_supervisor'" >> ~/.bashrc
 RUN echo "alias restartsupervisor='pkill -f app.options_trader_supervisor; cd /home/option-trader && python3 -m app.options_trader_supervisor &'" >> ~/.bashrc
 RUN echo "alias restarttrader='echo \"{\\\"should_restart_option_trader\\\": 1}\" > /home/option-trader/config/supervisor_config.json'" >> ~/.bashrc
+RUN echo "alias stop_all='pkill -9 -u "$USER" python'" >> ~/.bashrc
 
 EXPOSE 8080
 

@@ -7,7 +7,7 @@ import requests
 import psutil
 import asyncio
 from .supervisor_utils import OPTION_TRADER_DIR, send_telegram_message
-from utilities.utils import is_in_docker, SUCCESS, ERROR
+from utilities.utils import is_in_docker, SUCCESS, ERROR, FAILED
 
 logger = logging.getLogger(__name__)
 
@@ -212,7 +212,12 @@ def soft_restart(timeout: int = 30):
     logger.info("Running 'restart.sh'")
     try:
         result = subprocess.run(['/home/ibgateway/ibc/restart.sh'], check=True, capture_output=True, text=True, timeout=timeout)
-        logger.info(f"Soft restart script executed successfully: {result.stdout}")
+        if 'ERROR' in result.stdout:
+            logger.error(f"Soft restart failed:n{result.stdout}")
+            return FAILED
+        logger.info(f"Soft restart script executed successfully:\n{result.stdout}")
         time.sleep(5)
+        return SUCCESS
     except Exception as e:
         logger.error(f"Soft restart failed: {e}")
+        return FAILED

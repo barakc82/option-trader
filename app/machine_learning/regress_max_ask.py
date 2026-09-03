@@ -17,7 +17,7 @@ CANDIDATE_FEATURE_COLUMNS = [
     "max_delta", "gamma", "vega", "theta", "minutes_to_expiration", "atm_iv", "distance_to_strike_pct",
 ]
 CV_FOLDS = 5
-CV_RANDOM_STATE = 42
+CV_RANDOM_STATE = 41
 
 
 class ProbabilityClassifier:

@@ -10,7 +10,6 @@ MIN_NUMBER_OF_RECORDED_OPTIONS_QUANTITIES = 5
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-DEFAULT_MAX_LOSS = 1.0
 WINDOW_SECONDS = 7 * 24 * 60 * 60  # 1 week
 STOP_LOSS_CHANGE_INTERVAL = 900
 
@@ -37,7 +36,7 @@ class MaxLossCalculator:
             self.account_data = AccountData()
             self.market_data_fetcher = MarketDataFetcher()
             self.trading_bot = TradingBot()
-            self.last_max_loss = {'C': DEFAULT_MAX_LOSS, 'P': DEFAULT_MAX_LOSS}
+            self.last_max_loss = {'C': math.nan, 'P': math.nan}
             self.last_calculation_time = {'C': 0.0, 'P': 0.0}
             self.last_dump_time = {'C': 0.0, 'P': 0.0}
             self.quantity = {'C': [], 'P': []}
@@ -84,26 +83,33 @@ class MaxLossCalculator:
         else:
             number_of_options = max(self.get_max_number_of_options(right), number_of_options - 1)
 
-        max_loss = DEFAULT_MAX_LOSS
+        max_loss = math.nan
         if number_of_options and len(self.quantity[right]) >= MIN_NUMBER_OF_RECORDED_OPTIONS_QUANTITIES:
-            total_cash_value = self.account_data.get_cash_balance_value()
-            extra_cash_per_contract = (total_cash_value - 1000) / number_of_options
-            extra_cash_per_contract = max(extra_cash_per_contract, 0)
-
-            extra_cash_per_option = extra_cash_per_contract / 100
-            raw_risk_fraction = 1
-            if extra_cash_per_option > 0:
-                raw_risk_fraction = 1 / math.sqrt(extra_cash_per_option)
-            risk_fraction = min(raw_risk_fraction, 1)
-
-            logger.info(f"Risk fraction for {right} is {risk_fraction:.2f}, extra cash per option: {extra_cash_per_option:.2f}, "
-                        f"total cash: {total_cash_value:.2f}, max number of options: {number_of_options}")
-            max_loss = max(extra_cash_per_option * risk_fraction, DEFAULT_MAX_LOSS)
-            self.risk_fraction[right] = risk_fraction
+            result, total_cash_value = self.account_data.get_cash_balance_value()
+            if result == SUCCESS:
+                max_loss = self.calculate_max_loss_using_cash_balance(number_of_options, right, total_cash_value)
 
         self.last_calculation_time[right] = time.time()
         self.last_max_loss[right] = max_loss
 
+        return max_loss
+
+    def calculate_max_loss_using_cash_balance(self, number_of_options,
+                                              right, total_cash_value) -> float:
+        extra_cash_per_contract = (total_cash_value - 1000) / number_of_options
+        extra_cash_per_contract = max(extra_cash_per_contract, 0)
+
+        extra_cash_per_option = extra_cash_per_contract / 100
+        raw_risk_fraction = 1
+        if extra_cash_per_option > 0:
+            raw_risk_fraction = 1 / math.sqrt(extra_cash_per_option)
+        risk_fraction = min(raw_risk_fraction, 1)
+
+        logger.info(
+            f"Risk fraction for {right} is {risk_fraction:.2f}, extra cash per option: {extra_cash_per_option:.2f}, "
+            f"total cash: {total_cash_value:.2f}, max number of options: {number_of_options}")
+        max_loss = extra_cash_per_option * risk_fraction
+        self.risk_fraction[right] = risk_fraction
         return max_loss
 
     def get_current_number_of_options(self, right):

@@ -20,7 +20,7 @@ sed -i 's/^CommandServerPort=.*/CommandServerPort=7462/' /home/ibgateway/ibc/con
 sed -i 's/^ReloginAfterSecondFactorAuthenticationTimeout=.*/ReloginAfterSecondFactorAuthenticationTimeout=yes/' /home/ibgateway/ibc/config.ini
 sed -i 's/^CommandServerPort=.*/CommandServerPort=7462/' /home/ibgateway/ibc/config.ini.tmpl
 sed -i 's/^ReloginAfterSecondFactorAuthenticationTimeout=.*/ReloginAfterSecondFactorAuthenticationTimeout=yes/' /home/ibgateway/ibc/config.ini.tmpl
-sed -i 's/-Xmx[0-9]\+[mg]/-Xmx2g/' /home/ibgateway/Jts/ibgateway/*/ibgateway.vmoptions
+sed -i 's/-Xmx[0-9]\+[mg]/-Xmx4g/' /home/ibgateway/Jts/ibgateway/*/ibgateway.vmoptions
 
 echo "$(date): Starting IB Gateway..." >> "$DOCKER_START_LOG_FILE"
 

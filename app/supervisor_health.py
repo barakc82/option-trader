@@ -154,9 +154,11 @@ def is_session_expired():
 
 def check_ib_gateway_health(api_port=4001, ibc_port=7462, log_path="~/ibc/logs"):
     status = {"process_found": False, "cpu_stable": False, "is_healthy": False}
+    seen_processes = []
     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
             cmd = " ".join(proc.info['cmdline'] or [])
+            seen_processes.append(f"pid={proc.info['pid']} name={proc.info['name']} cmdline={cmd}")
             if "java" in proc.info['name'].lower() and "ibgateway" in cmd:
                 status["process_found"] = True
                 cpu_pct = proc.cpu_percent(interval=0.2)
@@ -164,8 +166,18 @@ def check_ib_gateway_health(api_port=4001, ibc_port=7462, log_path="~/ibc/logs")
                 if not status["cpu_stable"] or random.random() < 0.01:
                     logger.info(f"ibgateway CPU usage is {cpu_pct}")
                 break
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
+        except psutil.AccessDenied:
+            logger.warning(f"AccessDenied when reading process PID {proc.pid}")
             continue
+        except (psutil.NoSuchProcess, TypeError) as e:
+            logger.warning(f"Could not read process PID {proc.pid}: {e}")
+            continue
+
+    if not status["process_found"]:
+        logger.error(f"IBGateway process not found. {len(seen_processes)} process(es) were seen during the scan:")
+        for entry in seen_processes:
+            logger.info(f"  {entry}")
+
     status["is_healthy"] = all([status["process_found"], status["cpu_stable"]])
     return status
 

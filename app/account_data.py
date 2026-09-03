@@ -90,6 +90,6 @@ class AccountData:
     def get_cash_balance_value(self):
         result, account_value = self.get_account_value("$LEDGER-CashBalance", currency='USD')
         if result == SUCCESS:
-            return account_value
-        _, account_value = self.get_account_value("CashBalance", currency='USD')
-        return account_value
+            return result, account_value
+        result, account_value = self.get_account_value("CashBalance", currency='USD')
+        return result, account_value

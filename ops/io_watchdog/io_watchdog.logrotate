@@ -1,0 +1,13 @@
+/var/log/io_watchdog.log {
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    # No copytruncate needed: the script's log() function opens LOG_FILE by
+    # path fresh on every call (via `tee -a`) rather than holding a file
+    # descriptor open across the process's lifetime, so a plain rename+
+    # recreate rotation is picked up on the very next log line with no
+    # signal/restart required.
+}

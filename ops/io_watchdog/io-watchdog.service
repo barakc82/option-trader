@@ -1,0 +1,36 @@
+[Unit]
+Description=Disk I/O watchdog for the trading Docker container
+# Needs the Docker daemon up (for `docker top`/`docker restart`) and the
+# system's own storage settled before it starts sampling.
+After=docker.service local-fs.target
+Wants=docker.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/io_watchdog.sh
+Restart=on-failure
+RestartSec=10
+
+# Needs root: reading other users' /proc/<pid>/io, writing cgroup v2
+# io.max files, and talking to the Docker socket all require it.
+User=root
+
+# Let the script's own SIGTERM trap run its shutdown log line and revert
+# any in-flight throttle before systemd escalates to SIGKILL.
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+# Deliberately NOT using ProtectSystem=strict / PrivateDevices / etc. here:
+# this service needs broad read access to /proc for every process on the
+# host and write access to /sys/fs/cgroup, which typical systemd sandboxing
+# directives would block. Keep the host itself patched and access to this
+# unit file restricted instead.
+NoNewPrivileges=false
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=io-watchdog
+
+[Install]
+WantedBy=multi-user.target

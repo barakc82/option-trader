@@ -193,6 +193,11 @@ class OptionSafeguard:
 
         current_price = option.ticker.marketPrice()
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss(option.right)
+        if math.isnan(stop_loss_per_option):
+            logger.warning(f"Max loss calculator is not ready yet to provide the stop loss per option")
+            await asyncio.sleep(2)
+            return
+
         stop_loss = position.avgCost / 100 + stop_loss_per_option
         high_limit_buy_trade = find_high_limit_buy_trade(option, open_trades)
 

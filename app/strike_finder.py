@@ -316,7 +316,7 @@ class StrikeFinder:
 
         elif highest_delta < target_delta:
             current_candidate = highest_delta_option
-            logger.info(f"Initial block deltas too low for {right}. Highest: {highest_delta:.3f}")
+            logger.info(f"Initial block deltas too low for {right}. Highest: {highest_delta:.3f}, where the target delta is {target_delta:.3f}")
             options_block = self.edge_fetched_block[right]
 
         if not options_block:

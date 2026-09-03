@@ -61,13 +61,17 @@ def monitor_option_trader():
         kill_option_trader()
         analysis_result = analyze_option_trader_log()
         logger.info(f"Log analysis result after killing Option Trader: {analysis_result}")
+        soft_restart_failed = False
         if analysis_result == IBGATEWAY_RESTART_REQUIRED:
             logger.info("Calling soft restart for IBGateway")
-            soft_restart()
+            result = soft_restart()
+            if result == FAILED:
+                logger.error("Since the soft restart failed, calling hard restart")
+                soft_restart_failed = True
 
         asyncio.run(post_current_state({'status': 'Terminated'}))
         
-        if is_session_expired():
+        if is_session_expired() or soft_restart_failed:
             logger.warning("IBGateway session expired, switching to restart platform state")
             store_platform_log()
             set_switch_to_restart_platform_state()

@@ -9,7 +9,18 @@ from utilities.utils import get_option_name
 
 logger = logging.getLogger(__name__)
 
-PROBABILITY_CLASSIFIER_PATH = "./machine_learning/probability_classifier.pkl"
+# Produced by app.machine_learning.select_probability_model (best-subset
+# search over raw/log/log_ratio/logistic scored by weighted OOF logloss),
+# not by the older regress_max_ask.py. Same {"C": classifier, "P": classifier}
+# shape and the same classifier(X_new, threshold) -> (probability, y_hat)
+# calling convention, so this is a drop-in swap for feature_values/X_new
+# construction below -- nothing else in this file needs to change.
+#
+# Matches the deployed container layout installed by
+# docker/install_probability_classifier.ps1 (${APP_DIR}/machine_learning/model/).
+# cwd at runtime is ${APP_DIR} (docker/start.sh cd's there before launching
+# the supervisor), so this relative path resolves there, not against the repo.
+PROBABILITY_CLASSIFIER_PATH = "./machine_learning/model/best_probability_model.pkl"
 
 
 class Predictor:
