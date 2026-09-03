@@ -197,6 +197,7 @@ class OpportunityExplorer:
             bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
             minutes_to_expiration, atm_iv, distance_to_strike_pct,
         )
+        expected_profit = calculate_expected_profit(estimated_sell_price, stop_loss_per_option, out_of_the_money_probability)
 
         position_initial_state = PositionInitialState(
             is_executed=1,
@@ -213,6 +214,7 @@ class OpportunityExplorer:
             contract_iv=get_model_iv(call_option.ticker),
             distance_to_strike_pct=distance_to_strike_pct,
             out_of_the_money_probability=out_of_the_money_probability,
+            expected_profit=expected_profit,
         )
 
         sell_option_result = await self.try_to_sell(call_option, 2, position_initial_state)
@@ -372,6 +374,7 @@ class OpportunityExplorer:
             bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
             minutes_to_expiration, atm_iv, distance_to_strike_pct,
         )
+        expected_profit = calculate_expected_profit(estimated_sell_price, stop_loss_per_option, out_of_the_money_probability)
 
         position_initial_state = PositionInitialState(
             is_executed=1,
@@ -388,6 +391,7 @@ class OpportunityExplorer:
             contract_iv=get_model_iv(put_option.ticker),
             distance_to_strike_pct=distance_to_strike_pct,
             out_of_the_money_probability=out_of_the_money_probability,
+            expected_profit=expected_profit,
         )
 
         quantity = min(max_options_for_market_drop, 2)

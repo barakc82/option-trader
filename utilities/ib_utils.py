@@ -52,7 +52,7 @@ class PositionInitialState:
     bid_delta: float | None = None
     ask_delta: float | None = None
     last_ask: float | None = None
-    max_ask: float | None = None
+    max_ask: float = 0
     last_delta: float | None = None
     model_delta: float | None = None
     gamma: float | None = None
@@ -64,6 +64,14 @@ class PositionInitialState:
     distance_to_strike_pct: float | None = None
     is_max_ask_scan_required: bool = False
     out_of_the_money_probability: float | None = None
+    expected_profit: float | None = None
+
+
+def calculate_expected_profit(estimated_sell_price, stop_loss_per_option, out_of_the_money_probability):
+    if out_of_the_money_probability is None:
+        return None
+    in_the_money_probability = 1 - out_of_the_money_probability
+    return estimated_sell_price * out_of_the_money_probability - stop_loss_per_option * in_the_money_probability
 
 
 def get_time_passed_since_submission(trade: Trade) -> timedelta | Any:

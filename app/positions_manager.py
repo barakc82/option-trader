@@ -85,13 +85,16 @@ class PositionsManager:
                 contract_iv = as_float(pos.get('contract_iv'))
 
                 out_of_the_money_probability = None
+                expected_profit = None
                 if stop_loss is not None:
+                    stop_loss_per_option = stop_loss - estimated_sell_price
                     option_stub = SimpleNamespace(right=right, strike=strike)
                     out_of_the_money_probability = self.predictor.predict_out_of_the_money_probability(
-                        option_stub, right, target_delta, estimated_sell_price, stop_loss - estimated_sell_price,
+                        option_stub, right, target_delta, estimated_sell_price, stop_loss_per_option,
                         bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
                         minutes_to_expiration, atm_iv, distance_to_strike_pct,
                     )
+                    expected_profit = calculate_expected_profit(estimated_sell_price, stop_loss_per_option, out_of_the_money_probability)
 
                 self.position_initial_state_map.setdefault(key, []).append(PositionInitialState(
                     is_executed=int(is_executed) if is_executed not in (None, '') else 1,
@@ -114,6 +117,7 @@ class PositionsManager:
                     atm_iv=atm_iv,
                     contract_iv=contract_iv,
                     out_of_the_money_probability=out_of_the_money_probability,
+                    expected_profit=expected_profit,
                 ))
             logger.info(f"Loaded {len(self.position_initial_state_map)} position initial state entries from cache")
         except Exception as e:
@@ -181,7 +185,8 @@ class PositionsManager:
                 for entry in entries:
                     if entry.is_max_ask_scan_required:
                         max_ask = await self.market_data_fetcher.find_max_ask(entry)
-                        entry.max_ask = max_ask
+                        if max_ask > entry.max_ask:
+                            entry.max_ask = max_ask
                     self._log_close_event(entry)
                 del self.position_initial_state_map[key]
         self._dumped_during_night_break = True

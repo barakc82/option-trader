@@ -31,6 +31,7 @@ export interface Position {
     atm_iv: string;
     contract_iv: string;
     out_of_the_money_probability: string;
+    expected_profit: string;
     max_ask?: string;
   }
 

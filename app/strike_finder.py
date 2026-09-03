@@ -2,7 +2,8 @@ import logging
 import math
 from utilities.utils import get_option_name
 from utilities.ib_utils import (extract_ask, get_delta, get_delta_for_sell, get_individual_deltas, get_model_gamma,
-                                 get_model_vega, get_model_theta, get_minutes_to_expiration, get_distance_to_strike_pct)
+                                 get_model_vega, get_model_theta, get_minutes_to_expiration, get_distance_to_strike_pct,
+                                 calculate_expected_profit)
 from .market_data_fetcher import MarketDataFetcher
 from .max_loss_calculator import MaxLossCalculator
 from .predictor import Predictor
@@ -133,9 +134,7 @@ class StrikeFinder:
             if out_of_the_money_probability is None:
                 continue
 
-            in_the_money_probability = 1 - out_of_the_money_probability
-            expected_profit = (estimated_sell_price * out_of_the_money_probability
-                                - stop_loss_per_option * in_the_money_probability)
+            expected_profit = calculate_expected_profit(estimated_sell_price, stop_loss_per_option, out_of_the_money_probability)
 
             if best_expected_profit is None or expected_profit > best_expected_profit:
                 delta_values = [d for d in (bid_delta, ask_delta, last_delta, model_delta) if d is not None]
