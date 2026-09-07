@@ -20,7 +20,6 @@ export interface Position {
     target_delta: string;
     bid_delta: string;
     ask_delta: string;
-    last_ask: string;
     last_delta: string;
     model_delta: string;
     gamma: string;
@@ -32,7 +31,7 @@ export interface Position {
     contract_iv: string;
     out_of_the_money_probability: string;
     expected_profit: string;
-    max_ask?: string;
+    max_ask: string;
   }
 
   export interface Trade {

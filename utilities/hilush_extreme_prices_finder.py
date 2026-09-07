@@ -14,7 +14,7 @@ ib = IB()
 ib.connect('127.0.0.1', 7496, clientId=10)
 
 security_names = ['VT', 'AVUV', 'AVDV', 'VGT', 'SCHD', 'SCHY', 'SPHD', 'VIG', 'VIGI']
-row_indices = range(72, 80)
+row_indices = range(73, 81)
 
 history_end_date = start_date - timedelta(days=1)
 print(f"History end date: {history_end_date}")

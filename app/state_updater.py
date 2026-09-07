@@ -175,40 +175,14 @@ class StateUpdater:
                 distance_to_stop_roundness = 1 if distance_to_stop < 100 else 0
                 distance_to_stop = round(distance_to_stop, distance_to_stop_roundness)
 
-            position_date = datetime.strptime(option.lastTradeDateOrContractMonth, "%Y%m%d").strftime("%d/%m/%y")
+            position_date = await self.extract_date_string(option)
             pos_data = {
                 'right': option.right, 'strike': option.strike, 'quantity': position.position,
                 'date': position_date,
                 'delta': delta, 'market_price': str(market_price) if not math.isnan(market_price) else '',
                 'stop_loss': stop_loss,
-                'distance_to_stop': distance_to_stop if not math.isnan(distance_to_stop) else '',
+                'distance_to_stop': distance_to_stop if distance_to_stop else '',
             }
-
-            td_entries = position_initial_state_map.get(option.conId) or []
-            for td_entry in td_entries:
-                position_initial_states.append({
-                    'right': option.right, 'strike': option.strike,
-                    'date': position_date, 'contract_id': option.conId,
-                    'estimated_sell_price': round(td_entry.estimated_sell_price, 3) if td_entry else '',
-                    'target_delta': round(td_entry.target_delta, 3) if td_entry else '',
-                    'bid_delta': round(td_entry.bid_delta, 3) if td_entry and td_entry.bid_delta is not None else '',
-                    'ask_delta': round(td_entry.ask_delta, 3) if td_entry and td_entry.ask_delta is not None else '',
-                    'last_ask': round(td_entry.last_ask, 3) if td_entry and td_entry.last_ask is not None else '',
-                    'last_delta': round(td_entry.last_delta, 3) if td_entry and td_entry.last_delta is not None else '',
-                    'model_delta': round(td_entry.model_delta, 3) if td_entry and td_entry.model_delta is not None else '',
-                    'gamma': round(td_entry.gamma, 4) if td_entry and td_entry.gamma is not None else '',
-                    'vega': round(td_entry.vega, 4) if td_entry and td_entry.vega is not None else '',
-                    'theta': round(td_entry.theta, 4) if td_entry and td_entry.theta is not None else '',
-                    'minutes_to_expiration': td_entry.minutes_to_expiration if td_entry and td_entry.minutes_to_expiration is not None else '',
-                    'distance_to_strike_pct': round(td_entry.distance_to_strike_pct, 2) if td_entry and td_entry.distance_to_strike_pct is not None else '',
-                    'atm_iv': round(td_entry.atm_iv, 3) if td_entry and td_entry.atm_iv is not None else '',
-                    'contract_iv': round(td_entry.contract_iv, 3) if td_entry and td_entry.contract_iv is not None else '',
-                    'stop_loss': round(td_entry.stop_loss, 3) if td_entry and td_entry.stop_loss is not None else '',
-                    'out_of_the_money_probability': round(td_entry.out_of_the_money_probability, 3) if td_entry and td_entry.out_of_the_money_probability is not None else '',
-                    'expected_profit': round(td_entry.expected_profit, 3) if td_entry and td_entry.expected_profit is not None else '',
-                    'max_ask': round(td_entry.max_ask, 3) if td_entry and td_entry.max_ask is not None else '',
-                    'is_max_ask_scan_required': td_entry.is_max_ask_scan_required if td_entry else False,
-                })
 
             es_options = subscription_manager.spx_to_es_map.get(option.conId)
             if es_options and len(es_options) == 2:
@@ -232,8 +206,35 @@ class StateUpdater:
 
             state_positions.append(pos_data)
             contract_id_to_delta[option.conId] = delta
-
         state['positions'] = sorted(state_positions, key=lambda x: (x['right'], x['date'], x['strike']))
+
+        for td_entries in position_initial_state_map.values():
+            for td_entry in td_entries:
+                position_initial_states.append({
+                    'right': td_entry.right, 'strike': td_entry.strike,
+                    'date': td_entry.expiry,
+                    'estimated_sell_price': round(td_entry.estimated_sell_price, 3) if td_entry else '',
+                    'target_delta': round(td_entry.target_delta, 3) if td_entry else '',
+                    'bid_delta': round(td_entry.bid_delta, 3) if td_entry and td_entry.bid_delta is not None else '',
+                    'ask_delta': round(td_entry.ask_delta, 3) if td_entry and td_entry.ask_delta is not None else '',
+                    'last_delta': round(td_entry.last_delta, 3) if td_entry and td_entry.last_delta is not None else '',
+                    'model_delta': round(td_entry.model_delta, 3) if td_entry and td_entry.model_delta is not None else '',
+                    'gamma': round(td_entry.gamma, 4) if td_entry and td_entry.gamma is not None else '',
+                    'vega': round(td_entry.vega, 4) if td_entry and td_entry.vega is not None else '',
+                    'theta': round(td_entry.theta, 4) if td_entry and td_entry.theta is not None else '',
+                    'minutes_to_expiration': td_entry.minutes_to_expiration if td_entry and td_entry.minutes_to_expiration is not None else '',
+                    'distance_to_strike_pct': round(td_entry.distance_to_strike_pct,
+                                                    2) if td_entry and td_entry.distance_to_strike_pct is not None else '',
+                    'atm_iv': round(td_entry.atm_iv, 3) if td_entry and td_entry.atm_iv is not None else '',
+                    'contract_iv': round(td_entry.contract_iv, 3) if td_entry and td_entry.contract_iv is not None else '',
+                    'stop_loss': round(td_entry.stop_loss, 3) if td_entry and td_entry.stop_loss is not None else '',
+                    'out_of_the_money_probability': round(td_entry.out_of_the_money_probability,
+                                                          3) if td_entry and td_entry.out_of_the_money_probability is not None else '',
+                    'expected_profit': round(td_entry.expected_profit,
+                                             3) if td_entry and td_entry.expected_profit is not None else '',
+                    'max_ask': round(td_entry.max_ask, 3) if td_entry and td_entry.max_ask is not None else '',
+                    'is_max_ask_scan_required': td_entry.is_max_ask_scan_required if td_entry else False,
+                })
         state['position_initial_states'] = sorted(position_initial_states, key=lambda x: (x['right'], x['date'], x['strike']))
 
         # 3b. Gather randomly collected samples from OptionSampler
@@ -247,7 +248,6 @@ class StateUpdater:
                 'target_delta': round(sample.target_delta, 3),
                 'bid_delta': round(sample.bid_delta, 3) if sample.bid_delta is not None else '',
                 'ask_delta': round(sample.ask_delta, 3) if sample.ask_delta is not None else '',
-                'last_ask': round(sample.last_ask, 3) if sample.last_ask is not None else '',
                 'last_delta': round(sample.last_delta, 3) if sample.last_delta is not None else '',
                 'model_delta': round(sample.model_delta, 3) if sample.model_delta is not None else '',
                 'gamma': round(sample.gamma, 4) if sample.gamma is not None else '',
@@ -260,6 +260,7 @@ class StateUpdater:
                 'stop_loss': round(sample.stop_loss, 3) if sample.stop_loss is not None else '',
                 'out_of_the_money_probability': round(sample.out_of_the_money_probability, 3) if sample.out_of_the_money_probability is not None else '',
                 'expected_profit': round(sample.expected_profit, 3) if sample.expected_profit is not None else '',
+                'max_ask': round(sample.max_ask, 3) if sample.max_ask is not None else '',
             })
         state['random_states'] = sorted(random_states, key=lambda x: (x['right'], x['date'], x['strike']))
 
@@ -340,6 +341,11 @@ class StateUpdater:
             logger.error(f"Failed to post state to Render: {e}")
             
         return
+
+    async def extract_date_string(self, option) -> str:
+        position_date = datetime.strptime(option.lastTradeDateOrContractMonth, "%Y%m%d").strftime("%d/%m/%y")
+        return position_date
+
 
 async def post_current_state(state):
     """Standalone async helper for simple state reporting."""

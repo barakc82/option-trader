@@ -70,7 +70,6 @@ class PositionsManager:
                 stop_loss = as_float(pos.get('stop_loss'))
                 bid_delta = as_float(pos.get('bid_delta'))
                 ask_delta = as_float(pos.get('ask_delta'))
-                last_ask = as_float(pos.get('last_ask'))
                 max_ask = as_float(pos.get('max_ask'))
                 is_max_ask_scan_required = pos.get('is_max_ask_scan_required')
                 last_delta = as_float(pos.get('last_delta'))
@@ -104,7 +103,6 @@ class PositionsManager:
                     stop_loss=stop_loss,
                     bid_delta=bid_delta,
                     ask_delta=ask_delta,
-                    last_ask=last_ask,
                     max_ask=max_ask,
                     is_max_ask_scan_required=bool(is_max_ask_scan_required),
                     last_delta=last_delta,

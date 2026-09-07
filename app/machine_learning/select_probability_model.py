@@ -68,6 +68,16 @@ import pandas as pd
 MODEL_PATH = "machine_learning/model/best_probability_model.pkl"
 
 
+def _print_days_above_stop(subset: pd.DataFrame) -> None:
+    """Count of distinct days (GROUP_COLUMN) with at least one row whose
+    max_ask exceeded that row's own stop_loss -- i.e. would have been
+    stopped out. Printed fresh before each method/transform below since
+    they don't all share the exact same filtered subset."""
+    stop_col = survival_scoring.STOP_COLUMN
+    n_days = subset.loc[subset[TARGET_COLUMN] > subset[stop_col], GROUP_COLUMN].nunique()
+    print(f"  {n_days} day(s) with {TARGET_COLUMN} > {stop_col}")
+
+
 def _select_best_model_rss(df: pd.DataFrame, right: str, score_method: ScoreMethod) -> tuple[ProbabilityClassifier, dict]:
     """The original RSS-based selection, unchanged in behavior: best-subset
     search per transform, dollar-space rescoring to make the three
@@ -95,6 +105,7 @@ def _select_best_model_rss(df: pd.DataFrame, right: str, score_method: ScoreMeth
 
     candidates = {}
     for method_name, transform in TRANSFORMS.items():
+        _print_days_above_stop(subset)
         print(f"  Method = {method_name}")
         extra_col = transform["extra_column"]
         extra_arr = X[extra_col].to_numpy() if extra_col is not None else None
@@ -175,6 +186,7 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
     all_candidates = []
     per_transform_best = {}
     for transform_name, transform in TRANSFORMS.items():
+        _print_days_above_stop(ctx)
         print(f"  Transform = {transform_name}")
         results = search_best_subset_with_distribution(
             X, ctx, transform, transform_name, CANDIDATE_FEATURE_COLUMNS, score_method,
@@ -193,6 +205,7 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
     logistic_extrapolation_fraction = None
     logistic_spread_comparison = None
     try:
+        _print_days_above_stop(ctx)
         print(f"  Transform = logistic")
         logistic_results = logistic_survival.search_logistic_candidates(
             X, ctx, CANDIDATE_FEATURE_COLUMNS, score_method,

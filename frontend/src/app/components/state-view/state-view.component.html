@@ -176,12 +176,12 @@
             <th>Stop Loss</th>
             <th>OTM Probability</th>
             <th>Expected Profit</th>
-            <th>Last Ask</th>
+            <th>Max Ask</th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let pos of state.random_states" [ngClass]="{
-            'last-ask-alert-row': pos.last_ask !== '' && pos.stop_loss !== '' && +pos.last_ask > +pos.stop_loss / 2
+            'last-ask-alert-row': pos.max_ask !== '' && pos.stop_loss !== '' && +pos.max_ask > +pos.stop_loss / 2
           }">
             <td>{{ pos.right }}</td>
             <td>{{ pos.strike }}</td>
@@ -202,7 +202,7 @@
             <td>{{ pos.stop_loss }}</td>
             <td>{{ pos.out_of_the_money_probability }}</td>
             <td>{{ pos.expected_profit }}</td>
-            <td>{{ pos.last_ask }}</td>
+            <td>{{ pos.max_ask }}</td>
           </tr>
         </tbody>
       </table>

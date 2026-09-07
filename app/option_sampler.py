@@ -72,7 +72,6 @@ class OptionSampler:
                 stop_loss = as_float(sample.get('stop_loss'))
                 bid_delta = as_float(sample.get('bid_delta'))
                 ask_delta = as_float(sample.get('ask_delta'))
-                last_ask = as_float(sample.get('last_ask'))
                 last_delta = as_float(sample.get('last_delta'))
                 model_delta = as_float(sample.get('model_delta'))
                 gamma = as_float(sample.get('gamma'))
@@ -83,6 +82,7 @@ class OptionSampler:
                 distance_to_strike_pct = as_float(sample.get('distance_to_strike_pct'))
                 atm_iv = as_float(sample.get('atm_iv'))
                 contract_iv = as_float(sample.get('contract_iv'))
+                max_ask = as_float(sample.get('max_ask')) or 0.0
 
                 out_of_the_money_probability = None
                 expected_profit = None
@@ -102,7 +102,7 @@ class OptionSampler:
                     target_delta=target_delta,
                     estimated_sell_price=estimated_sell_price,
                     stop_loss=stop_loss,
-                    bid_delta=bid_delta, ask_delta=ask_delta, last_ask=last_ask, last_delta=last_delta, model_delta=model_delta,
+                    bid_delta=bid_delta, ask_delta=ask_delta, last_delta=last_delta, model_delta=model_delta,
                     gamma=gamma, vega=vega, theta=theta,
                     minutes_to_expiration=minutes_to_expiration,
                     distance_to_strike_pct=distance_to_strike_pct,
@@ -110,6 +110,7 @@ class OptionSampler:
                     contract_iv=contract_iv,
                     out_of_the_money_probability=out_of_the_money_probability,
                     expected_profit=expected_profit,
+                    max_ask=max_ask,
                 ))
             logger.info(f"Loaded {len(self.collected_samples)} random samples from cache")
         except Exception as e:
@@ -255,7 +256,9 @@ class OptionSampler:
                             continue
                         cached_option = cached_options[sample.right].get(sample.strike)
                         if cached_option:
-                            sample.last_ask = extract_ask(cached_option.ticker)
+                            current_ask = extract_ask(cached_option.ticker)
+                            if current_ask is not None and not math.isnan(current_ask) and current_ask > sample.max_ask:
+                                sample.max_ask = current_ask
 
             except Exception:
                 logger.exception("OptionSampler: Loop error:")

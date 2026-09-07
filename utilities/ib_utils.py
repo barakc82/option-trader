@@ -51,7 +51,6 @@ class PositionInitialState:
     stop_loss: float | None = None
     bid_delta: float | None = None
     ask_delta: float | None = None
-    last_ask: float | None = None
     max_ask: float = 0
     last_delta: float | None = None
     model_delta: float | None = None
