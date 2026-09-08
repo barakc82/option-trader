@@ -3,6 +3,7 @@ import json
 import logging
 import math
 import os
+import shutil
 import sys
 import aiohttp
 import asyncio
@@ -30,6 +31,10 @@ API_URL = "https://option-trader.onrender.com/api"
 UPDATE_STATE_URL = API_URL + "/update-state"
 UPDATE_SUPERVISOR_STATE_URL = API_URL + "/update-supervisor-state"
 
+BACKUP_DIR = 'cache/backup'
+BACKUP_INTERVAL_SECONDS = 3 * 60 * 60
+BACKUP_FILES_TO_KEEP = 10
+
 logger = logging.getLogger(__name__)
 
 class StateUpdater:
@@ -49,6 +54,7 @@ class StateUpdater:
             self.subscription_manager = SubscriptionManager()
             self.target_delta_calculator = TargetDeltaCalculator()
             self.max_loss_calculator = MaxLossCalculator()
+            self.last_backup_time = 0.0
 
             self._initialized = True
 
@@ -89,6 +95,26 @@ class StateUpdater:
         if state.get('spx_premium'):
             with open(CACHED_JSON_PATH, 'w') as file:
                 json.dump(state, file, indent=4)
+            self._backup_cached_state_if_due()
+
+    def _backup_cached_state_if_due(self):
+        now = time.time()
+        if now - self.last_backup_time < BACKUP_INTERVAL_SECONDS:
+            return
+        self.last_backup_time = now
+        try:
+            os.makedirs(BACKUP_DIR, exist_ok=True)
+            backup_path = os.path.join(BACKUP_DIR, f"state_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json")
+            shutil.copyfile(CACHED_JSON_PATH, backup_path)
+            logger.info(f"Backed up cached state to {backup_path}")
+            self._prune_old_backups()
+        except Exception as e:
+            logger.warning(f"Could not back up cached state: {e}")
+
+    def _prune_old_backups(self):
+        backups = sorted(f for f in os.listdir(BACKUP_DIR) if f.startswith('state_') and f.endswith('.json'))
+        for stale in backups[:-BACKUP_FILES_TO_KEEP]:
+            os.remove(os.path.join(BACKUP_DIR, stale))
 
     def _read_cached_after_hours_profit(self):
         try:
