@@ -25,6 +25,7 @@ class ConnectionManager:
             self.reconnect_delay = 1
             self.is_connecting = False
             self._managed_tasks: list[asyncio.Task] = []
+            self._background_tasks: set[asyncio.Task] = set()
 
             # Hook events
             self.ib.disconnectedEvent += self.on_disconnected
@@ -36,6 +37,20 @@ class ConnectionManager:
     def register_task(self, task: asyncio.Task):
         self._managed_tasks = [t for t in self._managed_tasks if not t.done()]
         self._managed_tasks.append(task)
+
+    def _fire_and_forget(self, coro, name=None) -> asyncio.Task:
+        """Schedule coro as a background task while keeping a strong reference
+        to it. asyncio.create_task()'s return value is the only strong
+        reference the event loop keeps -- an uncaptured one is eligible for
+        GC mid-execution. Deliberately kept separate from _managed_tasks:
+        that list is cancelled wholesale by _restart_managed_tasks() on every
+        reconnect, and this helper is used to launch reconnect()/
+        initialize_data() themselves, so registering them there would risk a
+        task cancelling itself mid-flight."""
+        task = asyncio.create_task(coro, name=name)
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        return task
 
     async def _restart_managed_tasks(self):
         logger.info(f"Cancelling {len(self._managed_tasks)} managed tasks for restart after reconnect...")
@@ -130,7 +145,7 @@ class ConnectionManager:
     def on_disconnected(self):
         logger.warning("Disconnected from IB.")
         # Trigger an immediate reconnection attempt in a new task
-        asyncio.create_task(self.reconnect())
+        self._fire_and_forget(self.reconnect(), name="reconnect")
 
     def on_error(self, reqId, errorCode, errorString, contract):
         if errorCode == 321:
@@ -144,7 +159,7 @@ class ConnectionManager:
             logger.warning(f"IB Connectivity Error {errorCode}: {errorString}")
             if errorCode in [1101, 1102]:
                 logger.info(f"Connectivity restored (error {errorCode}). Re-initializing data...")
-                asyncio.create_task(self.initialize_data())
+                self._fire_and_forget(self.initialize_data(), name="initialize_data")
 
     async def reconnect(self):
         if self.ib.isConnected() or self.is_connecting:
