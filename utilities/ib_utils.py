@@ -48,6 +48,7 @@ class PositionInitialState:
     expiry: str
     estimated_sell_price: float
     target_delta: float
+    contract_id: int | None = None
     stop_loss: float | None = None
     bid_delta: float | None = None
     ask_delta: float | None = None

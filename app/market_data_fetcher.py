@@ -314,7 +314,7 @@ class MarketDataFetcher:
                 durationStr=f"{chunk_seconds} S",
                 barSizeSetting=bar_size_setting,
                 whatToShow='TRADES',
-                useRTH=True
+                useRTH=False
             )
 
             logger.info(
@@ -329,4 +329,5 @@ class MarketDataFetcher:
             request_end = request_end - timedelta(seconds=chunk_seconds)
             await asyncio.sleep(20)
 
-        return max((bar.high for bar in bars), default=0)
+        max_high = max((bar.high for bar in bars), default=0)
+        return max_high

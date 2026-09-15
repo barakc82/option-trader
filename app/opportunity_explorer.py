@@ -204,6 +204,7 @@ class OpportunityExplorer:
             strike=call_option.strike, right=call_option.right, expiry=call_option.lastTradeDateOrContractMonth,
             estimated_sell_price=estimated_sell_price,
             target_delta=target_delta,
+            contract_id=call_option.conId,
             stop_loss=stop_loss,
             bid_delta=bid_delta, ask_delta=ask_delta, last_delta=last_delta, model_delta=model_delta,
             max_ask=extract_ask(call_option.ticker),
@@ -250,7 +251,8 @@ class OpportunityExplorer:
                     logger.info("Margin lock resolution is disabled by configuration")
                 else:
                     missing_sum = sell_option_result.required_initial_margin - sell_option_result.initial_margin_after
-                    await self.try_to_resolve_margin_lock(candidate, missing_sum)
+                    calls_fraction = number_of_position_calls / (number_of_position_calls + number_of_position_puts)
+                    await self.try_to_resolve_margin_lock(candidate, missing_sum, calls_fraction)
                     return
 
         self.try_to_publish_available_cheap_option('C')
@@ -381,6 +383,7 @@ class OpportunityExplorer:
             strike=put_option.strike, right=put_option.right, expiry=put_option.lastTradeDateOrContractMonth,
             estimated_sell_price=estimated_sell_price,
             target_delta=target_delta,
+            contract_id=put_option.conId,
             stop_loss=stop_loss,
             bid_delta=bid_delta, ask_delta=ask_delta, last_delta=last_delta, model_delta=model_delta,
             max_ask=extract_ask(put_option.ticker),
@@ -446,7 +449,8 @@ class OpportunityExplorer:
                     logger.info("Margin lock resolution is disabled by configuration")
                 else:
                     missing_sum = sell_option_result.required_initial_margin - sell_option_result.initial_margin_after
-                    await self.try_to_resolve_margin_lock(candidate, missing_sum)
+                    puts_fraction = number_of_position_puts / (number_of_position_puts + number_of_position_calls)
+                    await self.try_to_resolve_margin_lock(candidate, missing_sum, puts_fraction)
                     return
 
         self.try_to_publish_available_cheap_option('P')
@@ -588,13 +592,16 @@ class OpportunityExplorer:
         logger.info(f"Will not buy {get_option_name(available_cheap_put_option)} since the potential sell price is too low ({self.last_put_option_price})")
         return FAILED
 
-    async def try_to_resolve_margin_lock(self, candidate_option, missing_sum):
-        if time.time() - self.last_margin_lock_resolution_attempt_time < 15 * 60:
-            logger.warning(f"An attempt to resolve the margin lock has been carried out recently, more time is required for the next attempt")
+    async def try_to_resolve_margin_lock(self, candidate_option, missing_sum, minority_fraction):
+        time_from_last_margin_lock_resolution_attempt = time.time() - self.last_margin_lock_resolution_attempt_time
+        if time_from_last_margin_lock_resolution_attempt < 15 * 60:
+            time_to_next_margin_lock_resolution_attempt = 15 * 60 - time_from_last_margin_lock_resolution_attempt
+            logger.warning(f"An attempt to resolve the margin lock has been carried out recently, more time is required for the next attempt ({time_to_next_margin_lock_resolution_attempt} seconds)")
             return
 
         initial_margin_change = await self.trading_bot.get_initial_margin_change(candidate_option, quantity=1, limit=0.1)
-        if abs(initial_margin_change) < abs(missing_sum):
+        initial_margin_change_coefficient = 2 if minority_fraction < 0.25 else 1
+        if initial_margin_change_coefficient * abs(initial_margin_change) < abs(missing_sum):
             logger.info(f"Initial margin change for buying {get_option_name(candidate_option)} is {initial_margin_change}, "
                         f"which is not enough to cover for the missing sum of {missing_sum}, will not buy it as part of margin lock resolution")
             return

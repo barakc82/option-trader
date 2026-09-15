@@ -236,9 +236,10 @@ class StateUpdater:
 
         for td_entries in position_initial_state_map.values():
             for td_entry in td_entries:
+                date = datetime.strptime(td_entry.expiry, '%Y%m%d').strftime('%d/%m/%y')
                 position_initial_states.append({
-                    'right': td_entry.right, 'strike': td_entry.strike,
-                    'date': td_entry.expiry,
+                    'right': td_entry.right, 'strike': td_entry.strike, 'date': date,
+                    'contract_id': td_entry.contract_id if td_entry and td_entry.contract_id is not None else '',
                     'estimated_sell_price': round(td_entry.estimated_sell_price, 3) if td_entry else '',
                     'target_delta': round(td_entry.target_delta, 3) if td_entry else '',
                     'bid_delta': round(td_entry.bid_delta, 3) if td_entry and td_entry.bid_delta is not None else '',
@@ -270,6 +271,7 @@ class StateUpdater:
             random_states.append({
                 'right': sample.right, 'strike': sample.strike,
                 'date': sample_date,
+                'contract_id': sample.contract_id if sample.contract_id is not None else '',
                 'estimated_sell_price': round(sample.estimated_sell_price, 3),
                 'target_delta': round(sample.target_delta, 3),
                 'bid_delta': round(sample.bid_delta, 3) if sample.bid_delta is not None else '',

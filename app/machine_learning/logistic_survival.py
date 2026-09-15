@@ -456,7 +456,14 @@ class LogisticSurvivalClassifier:
         X_pred = X_new[self.subset].reset_index(drop=True).copy()
         X_pred[LOG_K_COLUMN] = log_k
         X_pred = _apply_feature_engineering(X_pred)
-        X_scaled = self.scaler.transform(X_pred[self.columns])
+        X_pred = X_pred[self.columns]
+
+        nan_mask = X_pred.isna().any()
+        if nan_mask.any():
+            raise ValueError(f"LogisticSurvivalClassifier: NaN input in column(s) "
+                              f"{nan_mask.index[nan_mask].tolist()}; refusing to call predict_proba")
+
+        X_scaled = self.scaler.transform(X_pred)
         p_raw = self.model.predict_proba(X_scaled)[:, 1]
         p_clipped, clip_rate = clip_probabilities(p_raw)
         logger.info(f"LogisticSurvivalClassifier: p = sigmoid(scaler.transform(X[{self.columns}]) @ coef) "

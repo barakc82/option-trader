@@ -31,6 +31,7 @@ class PositionsManager:
         return cls._instance
 
     def __init__(self):
+        self.counter = 1
         if not self._initialized:
             # Accessing the TradingBot singleton internally
             self.trading_bot = TradingBot()
@@ -53,13 +54,18 @@ class PositionsManager:
             with open(CACHED_JSON_PATH, 'r') as f:
                 state = json.load(f)
             for pos in state.get('position_initial_states', []):
+                logger.info(f"barak: Loading position initial state: {pos}")
                 date = pos.get('date')
                 strike = pos.get('strike')
                 right = pos.get('right')
                 con_id = pos.get('contract_id')
+                if not con_id:
+                    con_id = self.counter
+                    self.counter += 1
                 if not date or strike is None or not right or not con_id:
                     continue
 
+                logger.info(f"Loading position initial state for {right} {strike} {date} from cache")
                 expiry = datetime.strptime(date, "%d/%m/%y").strftime("%Y%m%d")
                 key = int(con_id)
 
@@ -99,6 +105,7 @@ class PositionsManager:
                     is_executed=int(is_executed) if is_executed not in (None, '') else 1,
                     strike=strike, right=right, expiry=expiry,
                     target_delta=target_delta,
+                    contract_id=key,
                     estimated_sell_price=estimated_sell_price,
                     stop_loss=stop_loss,
                     bid_delta=bid_delta,

@@ -1,0 +1,75 @@
+# rmax_model configuration.
+#
+# All paths are relative to the repository root (the directory this file's
+# parent, rmax_model/, lives in).
+
+seed: 42
+
+data:
+  csv_path: "machine_learning/data/options_data.csv"
+  require_executed: true          # drop rows where is_executed == 0
+
+# Fixed, domain-driven bin edges in R = max_ask / credit space. NOT fitted
+# from data -- do not derive these from quantiles of R_max, that would be a
+# leakage path through the bin definition itself.
+r_edges: [1.0, 1.2, 1.5, 2.0, 2.5, 3.0, 3.25, 3.5, 4.0, 4.5, 5.0, 7.0, 10.0, .inf]
+
+# Stop multiples actually used downstream. Every value here must land exactly
+# on an r_edges boundary; binning.py asserts this at build time and inserts +
+# re-sorts r_edges if a candidate is missing, rather than silently rounding.
+candidate_k: [1.5, 2.0, 3.0, 3.25, 3.5, 4.0, 5.0]
+
+physics_prior:
+  reference_multiples: [1.5, 2.0, 3.0, 5.0]
+
+backends:
+  call: binned_softmax
+  put: linreg
+
+lgb_params:
+  objective: multiclass
+  metric: multi_logloss
+  max_depth: 3
+  num_leaves: 15
+  min_child_samples: 15
+  feature_fraction: 0.7
+  bagging_fraction: 0.8
+  bagging_freq: 1
+  learning_rate: 0.03
+  num_boost_round: 500
+  early_stopping_rounds: 30
+  verbosity: -1
+
+day_balanced_weights: false
+
+cv:
+  n_splits: 5             # clamped to min(n_splits, n_distinct_dates) at run time
+  walk_forward_min_train_days: 3
+
+calibration:
+  method: isotonic
+
+tail:
+  enabled: true
+  threshold_quantile: 0.90
+  min_exceedances: 20     # below this, fall back to empirical mean (reported, not silent)
+
+label_smoothing:
+  enabled: false
+  neighbor_weight: 0.1
+
+bootstrap:
+  n_resamples: 1000
+  ci: 0.95
+
+backtest:
+  fees: 0.0                # per contract, price points. No fee data exists yet -- override once you have a real figure.
+  ev_threshold: 0.0         # FIXED. Do not sweep this to maximize the total -- see rmax_model/backtest.py module docstring.
+  stop_draw_low: 2.0
+  stop_draw_high: 6.0
+  n_random_draws: 200
+
+paths:
+  artifact_path: "rmax_model/artifacts/rmax_model.pkl"
+  report_path: "rmax_model/artifacts/report.md"
+  log_path: "rmax_model/artifacts/rmax_model.log"

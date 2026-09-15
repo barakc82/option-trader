@@ -66,6 +66,8 @@ class OptionSampler:
 
                 expiry = datetime.strptime(date, "%d/%m/%y").strftime("%Y%m%d")
 
+                contract_id_raw = sample.get('contract_id')
+                contract_id = int(contract_id_raw) if contract_id_raw not in (None, '') else None
                 strike = float(strike)
                 target_delta = as_float(sample.get('target_delta')) or 0.0
                 estimated_sell_price = as_float(sample.get('estimated_sell_price')) or 0.0
@@ -100,6 +102,7 @@ class OptionSampler:
                     is_executed=0,
                     strike=strike, right=right, expiry=expiry,
                     target_delta=target_delta,
+                    contract_id=contract_id,
                     estimated_sell_price=estimated_sell_price,
                     stop_loss=stop_loss,
                     bid_delta=bid_delta, ask_delta=ask_delta, last_delta=last_delta, model_delta=model_delta,
@@ -258,6 +261,7 @@ class OptionSampler:
                         if cached_option:
                             current_ask = extract_ask(cached_option.ticker)
                             if current_ask is not None and not math.isnan(current_ask) and current_ask > sample.max_ask:
+                                logger.info(f"Got new max ask for {get_option_name(sample)}: {current_ask}")
                                 sample.max_ask = current_ask
 
             except Exception:
@@ -266,12 +270,14 @@ class OptionSampler:
             await asyncio.sleep(300)
 
     def collect_sample(self):
-        logger.info("Collecting the next sample...")
         right = random.choice(['C', 'P'])
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss(right)
         stop_loss_per_option = random.uniform(stop_loss_per_option * 0.50, stop_loss_per_option * 1.5)
         target_delta_base, _ = self.target_delta_calculator.calculate_max_loss_based_target_delta(right, stop_loss_per_option)
-        target_delta = random.uniform(target_delta_base * 0.75, target_delta_base * self.target_delta_top_multiplier)
+        target_delta_top = target_delta_base * self.target_delta_top_multiplier
+        target_delta_bottom = target_delta_base * 0.75
+        target_delta = random.uniform(target_delta_bottom, target_delta_top)
+        logger.info(f"Collecting the next sample... target delta: {target_delta} (picked randomly from ({target_delta_bottom}, {target_delta_top}))")
         option = self.strike_finder.get_cached_low_delta_option(target_delta, right)
         if option is None:
             logger.warning("No option could be found for sample collection")
@@ -304,6 +310,7 @@ class OptionSampler:
             strike=option.strike, right=option.right, expiry=option.lastTradeDateOrContractMonth,
             estimated_sell_price=estimated_sell_price,
             target_delta=target_delta,
+            contract_id=option.conId,
             stop_loss=stop_loss,
             bid_delta=bid_delta, ask_delta=ask_delta, last_delta=last_delta, model_delta=model_delta,
             gamma=gamma, vega=vega, theta=theta,

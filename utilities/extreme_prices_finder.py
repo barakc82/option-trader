@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from utilities.database_access import get_worksheet
 from utilities.utils import REGULAR_HOURS_END_TIME, new_york_timezone
 
-start_date = datetime(year=2026, month=8, day=11)
+start_date = datetime(year=2026, month=9, day=14)
 history_days = 36
 
 barak_sheet = get_worksheet("ברק")
@@ -20,10 +20,10 @@ quotes_sheet = get_worksheet("$$$$")
 #start_date = datetime.strptime(start_date_str, "%d/%m/%y")
 
 ib = IB()
-ib.connect('127.0.0.1', 7496, clientId=10)
+ib.connect('127.0.0.1', 7496, clientId=11)
 
-security_names = ['VT', 'AVUV', 'AVDV', 'VGT', 'UPRO', 'SPYU', 'SP5Y', 'SCHD', 'SCHY', 'SPHD', 'VIG', 'VIGI', 'ACWD', 'GBTC', 'SPYU', 'INTU', 'MA', 'SPGI', 'AXP', 'META', 'GE', 'MCO', 'ASML', 'OXY']
-row_indices = [177, 178, 179, None, None, None, None, 182, 183, 184, 185, 186, None, None, None, 189, 195, 196, 198, 199, 200, 201, 203, 204]
+security_names = ['VT', 'AVUV', 'AVDV', 'VGT', 'UPRO', 'SPYU', 'SP5Y', 'SCHD', 'SCHY', 'SPHD', 'VIG', 'VIGI', 'ACWD', 'GBTC', 'SPYU', 'INTU', 'MA', 'SPGI', 'AXP', 'META', 'GE', 'MCO', 'ASML', 'OXY', 'GOOG']
+row_indices = [177, 178, 179, None, None, None, None, 182, 183, 184, 185, 186, None, None, None, 189, 195, 196, 198, 199, 200, 201, 203, 204, 205]
 
 history_end_date = start_date - timedelta(days=1)
 print(f"History end date: {history_end_date}")

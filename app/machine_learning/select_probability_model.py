@@ -52,7 +52,7 @@ from pathlib import Path
 import numpy as np
 from sklearn.linear_model import LinearRegression
 
-from . import logistic_survival, pre_processing, survival_scoring
+from . import logistic_survival, pre_processing, survival_scoring, xgboost_survival
 from .best_subset import (
     SCORE_METHODS, DEFAULT_SCORE_METHOD_NAME, ScoreMethod,
     best_subset_for_target, count_within_one_se, search_best_subset_with_distribution,
@@ -244,6 +244,25 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
     except logistic_survival.LogisticSearchBudgetExceeded as e:
         print(f"  WARNING: skipping logistic method for side {right}: {e}")
 
+    # XGBoost: an eighth method, built on the exact same k-grid replication
+    # scaffolding as logistic (see xgboost_survival.py) and searched over the
+    # same CANDIDATE_FEATURE_COLUMNS -- "same features as logistic" by
+    # construction, not by convention. Its candidates are more
+    # CandidateResult objects pooled into the same all_candidates list.
+    try:
+        _print_days_above_stop(ctx)
+        print(f"  Transform = xgboost")
+        xgboost_results = xgboost_survival.search_xgboost_candidates(
+            X, ctx, CANDIDATE_FEATURE_COLUMNS, score_method,
+        )
+        all_candidates.extend(xgboost_results)
+        xgboost_recommended = xgboost_survival.select_xgboost_recommended(xgboost_results, CANDIDATE_FEATURE_COLUMNS)
+        per_transform_best["xgboost"] = xgboost_recommended
+        print(f"    Best for xgboost (1-SE + fewest-features rule): subset={xgboost_recommended.subset}, "
+              f"score={xgboost_recommended.score:.4f}")
+    except xgboost_survival.XgboostSearchBudgetExceeded as e:
+        print(f"  WARNING: skipping xgboost method for side {right}: {e}")
+
     best = min(all_candidates, key=lambda c: c.score)
     se = standard_error_from_fold_scores(best.fold_scores)
     n_within = count_within_one_se(all_candidates, best.score, se)
@@ -267,6 +286,15 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
             print(f"    {feature}: {coef:.4f}")
 
         classifier = logistic_survival.LogisticSurvivalClassifier(model, scaler, best.subset, columns)
+    elif best.transform_name == "xgboost":
+        columns = logistic_survival.columns_for_subset(best.subset)
+        k_grid = logistic_survival.build_k_grid()
+        X_rep, y_rep, w_rep, _ = logistic_survival.replicate_for_training(X, ctx, best.subset, k_grid)
+        model = xgboost_survival.fit_xgboost(X_rep, y_rep, w_rep, columns)
+        print(f"  Final xgboost fit: {xgboost_survival.XGBOOST_PARAMS['n_estimators']} trees, "
+              f"max_depth={xgboost_survival.XGBOOST_PARAMS['max_depth']}")
+
+        classifier = xgboost_survival.XgboostSurvivalClassifier(model, best.subset, columns)
     else:
         transform = TRANSFORMS[best.transform_name]
         extra_col = transform["extra_column"]
@@ -302,12 +330,33 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
     return classifier, report
 
 
+def _print_last_expiration_stop_breach(df: pd.DataFrame, right: str) -> None:
+    """For the most recent expiration date among this side's rows, prints
+    whether any option's max_ask exceeded its own stop_loss, and if so,
+    which option(s)."""
+    subset = df[df["right"] == right]
+    if subset.empty:
+        return
+    stop_col = survival_scoring.STOP_COLUMN
+    last_expiration = subset[GROUP_COLUMN].max()
+    last_subset = subset[subset[GROUP_COLUMN] == last_expiration]
+    breaches = last_subset[last_subset[TARGET_COLUMN] > last_subset[stop_col]]
+    if breaches.empty:
+        print(f"  Last expiration ({last_expiration}): no option with {TARGET_COLUMN} > {stop_col}")
+        return
+    for _, row in breaches.iterrows():
+        print(f"  Last expiration ({last_expiration}): {TARGET_COLUMN} > {stop_col} for "
+              f"strike={row['strike']}, right={row['right']}, datetime={row.get('datetime')}, "
+              f"{TARGET_COLUMN}={row[TARGET_COLUMN]:.4f}, {stop_col}={row[stop_col]:.4f}")
+
+
 def select_best_model_for_side(df: pd.DataFrame, right: str,
                                 score_method_name: str = DEFAULT_SCORE_METHOD_NAME):
     """Dispatches to the RSS or logloss-family selection path based on
     score_method_name (see best_subset.SCORE_METHODS). Returns (classifier,
     report); classifier is always callable as classifier(X_new, threshold)
     -> (probability, y_hat), regardless of which path produced it."""
+    _print_last_expiration_stop_breach(df, right)
     score_method = SCORE_METHODS[score_method_name]
     if score_method.needs_distribution:
         return _select_best_model_distribution(df, right, score_method)
@@ -334,6 +383,8 @@ def print_selection_report(right: str, report: dict) -> None:
             print(f"      logistic: subset={candidate.subset}, score={candidate.score:.4f}, "
                   f"log_k_coef={candidate.log_k_coef:.4f} (sign={'+' if candidate.log_k_coef > 0 else '-'}), "
                   f"1/coef(log_k)={1.0 / candidate.log_k_coef:.4f}, max|coef|={candidate.max_abs_coef:.4f}")
+        elif transform_name == "xgboost":
+            print(f"      xgboost: subset={candidate.subset}, score={candidate.score:.4f}")
         else:
             print(f"      {transform_name}: distribution={candidate.distribution}, subset={candidate.subset}, "
                   f"score={candidate.score:.4f}")

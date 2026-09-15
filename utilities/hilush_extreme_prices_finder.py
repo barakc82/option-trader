@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 from utilities.database_access import get_worksheet
 
-start_date = datetime(year=2026, month=9, day=3)
+start_date = datetime(year=2026, month=9, day=14)
 history_days = 30
 
 hilush_sheet = get_worksheet("הילוש")

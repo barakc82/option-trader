@@ -24,3 +24,6 @@ htmlcov/
 machine_learning/data/
 machine_learning/model/
 rmax_model/artifacts/
+raw_data/
+processed_data/
+shared/

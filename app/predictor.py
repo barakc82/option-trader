@@ -91,8 +91,12 @@ class Predictor:
 
         X_new = pd.DataFrame([feature_values])
         stop_loss = estimated_sell_price + stop_loss_per_option
-        probabilities, predicted_max_asks = classifier(X_new, stop_loss)
-        probability, predicted_max_ask = probabilities[0], predicted_max_asks[0]
+        try:
+            probabilities, predicted_max_asks = classifier(X_new, stop_loss)
+            probability, predicted_max_ask = probabilities[0], predicted_max_asks[0]
+        except Exception as e:
+            logger.warning(f"Classifier call failed for {get_option_name(option)}: {e}")
+            return math.nan
         logger.info(f"Probability that max ask stays below {stop_loss:.2f} for {get_option_name(option)}: {probability:.3f}, "
                     f"Predicted max ask: {predicted_max_ask} (estimated sell price: {estimated_sell_price:.2f}, stop loss per option: {stop_loss_per_option:.2f})")
         return probability
