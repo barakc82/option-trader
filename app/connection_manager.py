@@ -147,6 +147,16 @@ class ConnectionManager:
         # Trigger an immediate reconnection attempt in a new task
         self._fire_and_forget(self.reconnect(), name="reconnect")
 
+    async def _reinitialize_after_connectivity_restored(self):
+        """Paired the same way _ensure_connected pairs them: initialize_data()
+        first, then _restart_managed_tasks() to cancel any managed task stuck
+        awaiting a request whose response was lost during the TWS<->IB-server
+        outage (1100/1101/1102 can fire without ever dropping our own socket
+        to TWS/Gateway, so _ensure_connected's isConnected()-gated restart
+        never runs for this case)."""
+        await self.initialize_data()
+        await self._restart_managed_tasks()
+
     def on_error(self, reqId, errorCode, errorString, contract):
         if errorCode == 321:
             logger.critical(f"IB Error 321 ({errorString}); It means that IBGateway requires a restart, so exiting")
@@ -159,7 +169,7 @@ class ConnectionManager:
             logger.warning(f"IB Connectivity Error {errorCode}: {errorString}")
             if errorCode in [1101, 1102]:
                 logger.info(f"Connectivity restored (error {errorCode}). Re-initializing data...")
-                self._fire_and_forget(self.initialize_data(), name="initialize_data")
+                self._fire_and_forget(self._reinitialize_after_connectivity_restored(), name="initialize_data")
 
     async def reconnect(self):
         if self.ib.isConnected() or self.is_connecting:

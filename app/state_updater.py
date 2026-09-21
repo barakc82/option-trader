@@ -185,7 +185,7 @@ class StateUpdater:
         r = self.market_data_fetcher.get_cached_risk_free_rate()
 
         stop_loss = ''
-        distance_to_stop = ''
+        distance_to_stop = 0
         for position in positions:
             option = position.contract
             delta = self.market_data_fetcher.get_delta(option)
@@ -207,7 +207,7 @@ class StateUpdater:
                 'date': position_date,
                 'delta': delta, 'market_price': str(market_price) if not math.isnan(market_price) else '',
                 'stop_loss': stop_loss,
-                'distance_to_stop': distance_to_stop if distance_to_stop else '',
+                'distance_to_stop': distance_to_stop if distance_to_stop and not math.isnan(distance_to_stop) else '',
             }
 
             es_options = subscription_manager.spx_to_es_map.get(option.conId)

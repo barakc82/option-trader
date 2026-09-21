@@ -36,7 +36,7 @@ import pandas as pd
 from sklearn.model_selection import GroupKFold
 from xgboost import XGBClassifier
 
-from .best_subset import CandidateResult, ScoreMethod
+from .best_subset import MAX_STALE_SIZES, CandidateResult, ScoreMethod
 from .logistic_survival import (
     LOG_K_COLUMN, build_k_grid, build_predict_frame, columns_for_subset,
     replicate_for_training, select_logistic_recommended, trade_weight,
@@ -71,7 +71,7 @@ XGBOOST_PARAMS = dict(
 # vs. a single closed-form-ish logistic fit). Timed via one calibration fit
 # before the real search starts; if the projected total exceeds this, the
 # search raises instead of silently running for hours.
-XGBOOST_SEARCH_TIME_BUDGET_SEC = 7200.0
+XGBOOST_SEARCH_TIME_BUDGET_SEC = 14400.0
 
 
 class XgboostSearchBudgetExceeded(RuntimeError):
@@ -171,8 +171,11 @@ def search_xgboost_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names:
     weight_trades = trade_weight(ctx)
 
     results: list[CandidateResult] = []
+    best_score = np.inf
+    stale_sizes = 0
     for size in range(1, len(feature_names) + 1):
         print(f"    Working on size {size}")
+        improved_this_size = False
         for subset in itertools.combinations(feature_names, size):
             subset = list(subset)
             columns = columns_for_subset(subset)
@@ -196,6 +199,18 @@ def search_xgboost_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names:
             w_full = weight_trades if score_method.needs_weight else None
             score = score_method.compute(oof_p, y_survived_trades, w_full)
             results.append(CandidateResult(TRANSFORM_NAME, subset, None, score, fold_scores))
+            if score < best_score:
+                best_score = score
+                improved_this_size = True
+                print(f"    Size {size} improves best score to {score:.4f}, features: {subset}")
+
+        if improved_this_size:
+            stale_sizes = 0
+        else:
+            stale_sizes += 1
+            if stale_sizes >= MAX_STALE_SIZES:
+                print(f"    No improvement for {MAX_STALE_SIZES} consecutive sizes, stopping at size {size}")
+                break
 
     return results
 

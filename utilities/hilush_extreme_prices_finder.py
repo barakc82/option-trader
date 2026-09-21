@@ -4,11 +4,13 @@ from datetime import datetime, timedelta
 
 from utilities.database_access import get_worksheet
 
-start_date = datetime(year=2026, month=9, day=14)
 history_days = 30
 
 hilush_sheet = get_worksheet("הילוש")
 quotes_sheet = get_worksheet("$$$$")
+
+start_date_string = hilush_sheet.get(range_name=f"S65")[0][0]
+start_date = datetime.strptime(start_date_string, "%d/%m/%y")
 
 ib = IB()
 ib.connect('127.0.0.1', 7496, clientId=10)

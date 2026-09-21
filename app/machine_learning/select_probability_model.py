@@ -330,33 +330,12 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
     return classifier, report
 
 
-def _print_last_expiration_stop_breach(df: pd.DataFrame, right: str) -> None:
-    """For the most recent expiration date among this side's rows, prints
-    whether any option's max_ask exceeded its own stop_loss, and if so,
-    which option(s)."""
-    subset = df[df["right"] == right]
-    if subset.empty:
-        return
-    stop_col = survival_scoring.STOP_COLUMN
-    last_expiration = subset[GROUP_COLUMN].max()
-    last_subset = subset[subset[GROUP_COLUMN] == last_expiration]
-    breaches = last_subset[last_subset[TARGET_COLUMN] > last_subset[stop_col]]
-    if breaches.empty:
-        print(f"  Last expiration ({last_expiration}): no option with {TARGET_COLUMN} > {stop_col}")
-        return
-    for _, row in breaches.iterrows():
-        print(f"  Last expiration ({last_expiration}): {TARGET_COLUMN} > {stop_col} for "
-              f"strike={row['strike']}, right={row['right']}, datetime={row.get('datetime')}, "
-              f"{TARGET_COLUMN}={row[TARGET_COLUMN]:.4f}, {stop_col}={row[stop_col]:.4f}")
-
-
 def select_best_model_for_side(df: pd.DataFrame, right: str,
                                 score_method_name: str = DEFAULT_SCORE_METHOD_NAME):
     """Dispatches to the RSS or logloss-family selection path based on
     score_method_name (see best_subset.SCORE_METHODS). Returns (classifier,
     report); classifier is always callable as classifier(X_new, threshold)
     -> (probability, y_hat), regardless of which path produced it."""
-    _print_last_expiration_stop_breach(df, right)
     score_method = SCORE_METHODS[score_method_name]
     if score_method.needs_distribution:
         return _select_best_model_distribution(df, right, score_method)

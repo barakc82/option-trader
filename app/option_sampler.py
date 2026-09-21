@@ -277,7 +277,7 @@ class OptionSampler:
         target_delta_top = target_delta_base * self.target_delta_top_multiplier
         target_delta_bottom = target_delta_base * 0.75
         target_delta = random.uniform(target_delta_bottom, target_delta_top)
-        logger.info(f"Collecting the next sample... target delta: {target_delta} (picked randomly from ({target_delta_bottom}, {target_delta_top}))")
+        logger.info(f"Collecting the next sample... target delta: {target_delta:.3f} (picked randomly from ({target_delta_bottom:.3f}, {target_delta_top:.3f}))")
         option = self.strike_finder.get_cached_low_delta_option(target_delta, right)
         if option is None:
             logger.warning("No option could be found for sample collection")

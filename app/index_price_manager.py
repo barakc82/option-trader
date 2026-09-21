@@ -7,7 +7,7 @@ import pandas as pd
 import exchange_calendars as ecals
 from datetime import datetime
 from collections import deque
-from ib_insync import Index, Future, Stock
+from ib_insync import Index, Future, Stock, FuturesOption
 from utilities.utils import is_regular_hours, CACHED_JSON_PATH
 from .connection_manager import ConnectionManager
 from .market_data_utils import SPXESPair
@@ -82,16 +82,14 @@ class IndexPriceManager:
                 logger.error("Timed out requesting ES future contract details")
                 logger.critical(f"Timed out requesting ES future contract details. It means that IBGateway requires a restart, so exiting")
                 os._exit(1)
-                return self.es
-            contracts = [es_detail.contract for es_detail in es_details if es_detail.contract.lastTradeDateOrContractMonth >= today_str]
+            contracts = [es_detail.contract for es_detail in es_details if es_detail.contract.lastTradeDateOrContractMonth > today_str]
             contracts.sort(key=lambda c: c.lastTradeDateOrContractMonth)
             closest_es_future = contracts[0]
             await self.ib.qualifyContractsAsync(closest_es_future)
-            logger.info(f"Selected ES future: {closest_es_future.lastTradeDateOrContractMonth}")
+            logger.info(f"Selected ES future: {closest_es_future.lastTradeDateOrContractMonth}, contract ID is {closest_es_future.conId}")
             self.es = closest_es_future
-
             chains = await self.ib.reqSecDefOptParamsAsync(self.es.symbol, 'CME', 'FUT', self.es.conId)
-            chain = next(c for c in chains if c.tradingClass != 'ES')
+            chain = chains[0] if len(chains) == 1 else next(c for c in chains if c.tradingClass != 'ES')
             self.es_strikes = sorted(chain.strikes)
 
         return self.es

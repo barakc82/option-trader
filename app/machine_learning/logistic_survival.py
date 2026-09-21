@@ -44,7 +44,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GroupKFold
 from sklearn.preprocessing import StandardScaler
 
-from .best_subset import CandidateResult, ScoreMethod
+from .best_subset import MAX_STALE_SIZES, CandidateResult, ScoreMethod
 from .regress_max_ask import CV_FOLDS, CV_RANDOM_STATE, GROUP_COLUMN
 from .survival_scoring import CREDIT_COLUMN, STOP_COLUMN, TARGET_COLUMN, clip_probabilities, compute_survival_label
 
@@ -360,8 +360,11 @@ def search_logistic_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names
     weight_trades = trade_weight(ctx)
 
     results: list[CandidateResult] = []
+    best_score = np.inf
+    stale_sizes = 0
     for size in range(1, len(searchable_features) + 1):
         print(f"    Working on size {size}")
+        improved_this_size = False
         for subset in itertools.combinations(searchable_features, size):
             subset = list(subset)
             columns = columns_for_subset(subset)
@@ -394,6 +397,18 @@ def search_logistic_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names
                 log_k_coef=float(np.mean(fold_log_k_coef)), max_abs_coef=float(np.mean(fold_max_abs_coef)),
             )
             results.append(candidate)
+            if score < best_score:
+                best_score = score
+                improved_this_size = True
+                print(f"    Size {size} improves best score to {score:.4f}, features: {subset}")
+
+        if improved_this_size:
+            stale_sizes = 0
+        else:
+            stale_sizes += 1
+            if stale_sizes >= MAX_STALE_SIZES:
+                print(f"    No improvement for {MAX_STALE_SIZES} consecutive sizes, stopping at size {size}")
+                break
 
     return results
 

@@ -5,19 +5,14 @@ from datetime import datetime, timedelta
 from utilities.database_access import get_worksheet
 from utilities.utils import REGULAR_HOURS_END_TIME, new_york_timezone
 
-start_date = datetime(year=2026, month=9, day=14)
-history_days = 36
 
 barak_sheet = get_worksheet("ברק")
 quotes_sheet = get_worksheet("$$$$")
 
-#date_arr = barak_sheet.get("U47")
-#history_days_arr = barak_sheet.get("V51")
-#start_date_str = date_arr[0][0]
-#history_days = int(history_days_arr[0][0])
-#print(f"Start date: {start_date_str}")
-#print(f"History days: {history_days}")
-#start_date = datetime.strptime(start_date_str, "%d/%m/%y")
+start_date_string = barak_sheet.get(range_name=f"AA173")[0][0]
+start_date = datetime.strptime(start_date_string, "%d/%m/%y")
+
+history_days = int(barak_sheet.get(range_name=f"V51")[0][0])
 
 ib = IB()
 ib.connect('127.0.0.1', 7496, clientId=11)

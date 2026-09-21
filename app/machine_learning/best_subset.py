@@ -137,6 +137,10 @@ SCORE_METHODS: dict[str, ScoreMethod] = {
 }
 DEFAULT_SCORE_METHOD_NAME = "weighted_logloss"
 
+# Stop growing the subset size once this many consecutive sizes fail to
+# improve on the best score seen so far.
+MAX_STALE_SIZES = 4
+
 
 @dataclass
 class CandidateResult:
@@ -181,8 +185,13 @@ def search_best_subset_with_distribution(X: pd.DataFrame, ctx: pd.DataFrame, tra
     distribution_kinds = list(RESIDUAL_DISTRIBUTIONS) if score_method.needs_distribution else [None]
 
     results: list[CandidateResult] = []
+    best_score = np.inf
+    best_dist_kind = None
+    best_subset = None
+    stale_sizes = 0
     for size in range(1, len(feature_names) + 1):
         print(f"    Working on size {size}")
+        improved_this_size = False
         for subset in itertools.combinations(feature_names, size):
             subset = list(subset)
             X_subset = X[subset].to_numpy()
@@ -201,6 +210,10 @@ def search_best_subset_with_distribution(X: pd.DataFrame, ctx: pd.DataFrame, tra
                 fold_scores = [score_method.compute(y_transformed[test_idx], oof_mu[test_idx])
                                for _, test_idx in fold_splits]
                 results.append(CandidateResult(transform_name, subset, None, score, fold_scores))
+                if score < best_score:
+                    best_score = score
+                    improved_this_size = True
+                    print(f"    Size {size} improves best score to {score:.4f}, features: {subset}")
                 continue
 
             for dist_kind in distribution_kinds:
@@ -220,6 +233,21 @@ def search_best_subset_with_distribution(X: pd.DataFrame, ctx: pd.DataFrame, tra
                     w_fold = weight[test_idx] if score_method.needs_weight else None
                     fold_scores.append(score_method.compute(oof_p[test_idx], y_survived[test_idx], w_fold))
                 results.append(CandidateResult(transform_name, subset, dist_kind, score, fold_scores))
+                if score < best_score:
+                    best_score = score
+                    best_dist_kind = dist_kind
+                    best_subset = subset
+                    improved_this_size = True
+
+        if improved_this_size:
+            stale_sizes = 0
+            print(f"    Size {size} improves best score to {best_score:.4f}, "
+                  f"distribution: {best_dist_kind}, features: {best_subset}")
+        else:
+            stale_sizes += 1
+            if stale_sizes >= MAX_STALE_SIZES:
+                print(f"    No improvement for {MAX_STALE_SIZES} consecutive sizes, stopping at size {size}")
+                break
 
     return results
 
