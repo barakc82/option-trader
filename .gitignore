@@ -27,3 +27,4 @@ rmax_model/artifacts/
 raw_data/
 processed_data/
 shared/
+utilities/languages/*.csv

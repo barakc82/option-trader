@@ -9,7 +9,7 @@ from utilities.utils import REGULAR_HOURS_END_TIME, new_york_timezone
 barak_sheet = get_worksheet("ברק")
 quotes_sheet = get_worksheet("$$$$")
 
-start_date_string = barak_sheet.get(range_name=f"AA173")[0][0]
+start_date_string = barak_sheet.get(range_name=f"V54")[0][0]
 start_date = datetime.strptime(start_date_string, "%d/%m/%y")
 
 history_days = int(barak_sheet.get(range_name=f"V51")[0][0])

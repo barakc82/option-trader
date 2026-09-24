@@ -1,5 +1,6 @@
 import logging
 import math
+import time
 from utilities.utils import get_option_name
 from utilities.ib_utils import (extract_ask, get_delta, get_delta_for_sell, get_individual_deltas, get_model_gamma,
                                  get_model_vega, get_model_theta, get_minutes_to_expiration, get_distance_to_strike_pct,
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 OPTIONS_BLOCK_SIZE = 100
 OPTIONS_BLOCK_LOWER_PART_SIZE = OPTIONS_BLOCK_SIZE // 2
 OPTIONS_BLOCK_HIGHER_PART_SIZE = OPTIONS_BLOCK_SIZE - OPTIONS_BLOCK_LOWER_PART_SIZE
+FETCHED_BLOCK_MAX_AGE_SECONDS = 5 * 60
 
 class StrikeFinder:
     _instance = None
@@ -33,7 +35,17 @@ class StrikeFinder:
             self.price_estimator = PriceEstimator()
             self.middle_fetched_block = {'C': [], 'P': []}
             self.edge_fetched_block = {'C': [], 'P': []}
+            self.middle_fetched_block_last_update_time = {'C': 0.0, 'P': 0.0}
+            self.edge_fetched_block_last_update_time = {'C': 0.0, 'P': 0.0}
             self._initialized = True
+
+    def _set_middle_fetched_block(self, right, options_block):
+        self.middle_fetched_block[right] = options_block
+        self.middle_fetched_block_last_update_time[right] = time.time()
+
+    def _set_edge_fetched_block(self, right, options_block):
+        self.edge_fetched_block[right] = options_block
+        self.edge_fetched_block_last_update_time[right] = time.time()
 
     async def get_low_delta_put_option(self, put_options, target_delta):
         return await self._get_low_delta_option(put_options, target_delta, 'P')
@@ -80,13 +92,13 @@ class StrikeFinder:
                 if higher_idx + 1 < number_of_strikes:
                     logger.info(f"Fetching {right} option block: {strikes[higher_idx+1]} -> {strikes[number_of_strikes-1]}")
                     options_block = await self.fetch_options_block(higher_idx + 1, number_of_strikes - 1, strike_to_option, strikes)
-            self.edge_fetched_block[right] = options_block
+            self._set_edge_fetched_block(right, options_block)
 
         elif highest_delta < target_delta:
             logger.info(f"Initial block deltas too low for {right}. Highest: {highest_delta:.3f}")
             logger.info(f"Fetching {right} option block: {strikes[higher_idx]} -> {strikes[number_of_strikes - 1]}")
             options_block = await self.fetch_options_block(higher_idx, number_of_strikes - 1, strike_to_option, strikes)
-            self.edge_fetched_block[right] = options_block
+            self._set_edge_fetched_block(right, options_block)
 
         return options_block
 
@@ -107,8 +119,8 @@ class StrikeFinder:
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss(right)
         atm_iv = self.market_data_fetcher.get_cached_spx_implied_volatility(right)
 
-        best_option, best_expected_profit, best_probability, best_max_delta, best_estimated_sell_price = \
-            None, None, None, None, None
+        best_option, best_expected_profit, best_probability, best_max_delta, best_estimated_sell_price, best_stop_loss = \
+            None, None, None, None, None, None
 
         for option in self.middle_fetched_block[right]:
             if not hasattr(option, "ticker") or option.ticker is None:
@@ -116,6 +128,9 @@ class StrikeFinder:
 
             try:
                 estimated_sell_price = self.price_estimator.estimate_sell_price(option)
+                if estimated_sell_price > stop_loss_per_option:
+                    continue
+
                 bid_delta, ask_delta, last_delta, model_delta = get_individual_deltas(option.ticker)
                 gamma = get_model_gamma(option.ticker)
                 vega = get_model_vega(option.ticker)
@@ -143,6 +158,7 @@ class StrikeFinder:
                 best_probability = out_of_the_money_probability
                 best_max_delta = max(delta_values) if delta_values else None
                 best_estimated_sell_price = estimated_sell_price
+                best_stop_loss = estimated_sell_price + stop_loss_per_option
 
         if best_option is None:
             return
@@ -150,7 +166,7 @@ class StrikeFinder:
         max_delta_str = f"{best_max_delta:.3f}" if best_max_delta is not None else "n/a"
         logger.info(f"Best expected-profit {right} option in the scanned block: {get_option_name(best_option)}, "
                     f"expected profit: {best_expected_profit:.3f}, estimated sell price: {best_estimated_sell_price:.2f}, "
-                    f"stop loss: {stop_loss_per_option:.2f}, probability: {best_probability:.3f}, "
+                    f"stop loss: {best_stop_loss:.2f}, probability: {best_probability:.3f}, "
                     f"max delta: {max_delta_str}, target delta: {target_delta:.3f}")
 
     def _finalize_candidate(self, current_candidate, options_block, target_delta, right):
@@ -181,8 +197,6 @@ class StrikeFinder:
 
     async def _get_low_delta_option(self, options, target_delta, right):
         assert options
-        self.middle_fetched_block[right] = []
-        self.edge_fetched_block[right] = []
 
         strike_to_option = {option.strike: option for option in options}
         strikes = sorted(strike_to_option.keys(), reverse=(right == 'C'))
@@ -194,7 +208,7 @@ class StrikeFinder:
 
         logger.info(f"Fetching {right} option block: {strikes[lower_idx]} -> {strikes[higher_idx]}")
         options_block = await self.fetch_options_block(lower_idx, higher_idx, strike_to_option, strikes)
-        self.middle_fetched_block[right] = options_block
+        self._set_middle_fetched_block(right, options_block)
 
         lowest_delta, highest_delta, highest_delta_option = self._scan_block_extremes(options_block)
 
@@ -222,16 +236,21 @@ class StrikeFinder:
 
         return self._finalize_candidate(current_candidate, options_block, target_delta, right)
 
+    def _is_recently_updated(self, last_update_time) -> bool:
+        return last_update_time is not None and time.time() - last_update_time <= FETCHED_BLOCK_MAX_AGE_SECONDS
+
     def find_first_cheap_option(self, right):
         """
         Traverses middle and then edge fetched blocks to find the first option with ask 0.05.
         Calls: Traverses lower strikes to higher.
         Puts: Traverses higher strikes to lower.
+        Only blocks updated within the last FETCHED_BLOCK_MAX_AGE_SECONDS are considered.
         """
-        blocks_to_check = [
-            self.middle_fetched_block.get(right, []),
-            self.edge_fetched_block.get(right, [])
-        ]
+        blocks_to_check = []
+        if self._is_recently_updated(self.middle_fetched_block_last_update_time.get(right)):
+            blocks_to_check.append(self.middle_fetched_block.get(right, []))
+        if self._is_recently_updated(self.edge_fetched_block_last_update_time.get(right)):
+            blocks_to_check.append(self.edge_fetched_block.get(right, []))
 
         for block in blocks_to_check:
             if not block:
@@ -269,8 +288,6 @@ class StrikeFinder:
         return await self._get_available_cheap_option(put_options, max_strike, 'P')
 
     async def _get_available_cheap_option(self, options, strike_limit, right):
-        self.middle_fetched_block[right] = []
-        self.edge_fetched_block[right] = []
         strike_to_option = {o.strike: o for o in options}
         if right == 'C':
             relevant_strikes = sorted([s for s in strike_to_option.keys() if s > strike_limit])
@@ -288,7 +305,7 @@ class StrikeFinder:
         options_block = await self.fetch_options_block(l_idx, h_idx, strike_to_option, relevant_strikes)
         if not options_block: return None
 
-        self.middle_fetched_block[right] = options_block
+        self._set_middle_fetched_block(right, options_block)
         available_cheap = None
         
         # Check if we need to fetch more blocks based on liquidity/price
@@ -298,20 +315,20 @@ class StrikeFinder:
                 available_cheap = options_block[-1]
                 logger.info(f"Fetching {right} option block (edge): {relevant_strikes[h_idx+1]} -> {relevant_strikes[num_strikes-1]}, indices: {h_idx+1} -> {num_strikes-1}")
                 options_block = await self.fetch_options_block(h_idx + 1, num_strikes - 1, strike_to_option, relevant_strikes)
-                self.edge_fetched_block[right] = options_block
+                self._set_edge_fetched_block(right, options_block)
         else:
             if extract_ask(options_block[0].ticker) > 0.05:
                 if l_idx > 0:
                     logger.info(
                         f"Fetching {right} option block (edge): {relevant_strikes[0]} -> {relevant_strikes[l_idx-1]}, indices: 0 -> {l_idx-1}")
                     options_block = await self.fetch_options_block(0, l_idx - 1, strike_to_option, relevant_strikes)
-                    self.edge_fetched_block[right] = options_block
-            
+                    self._set_edge_fetched_block(right, options_block)
+
             if options_block and extract_ask(options_block[-1].ticker) == 0.05 and h_idx + 1 < num_strikes:
                 available_cheap = options_block[-1]
                 logger.info(f"Fetching {right} option block (edge): {relevant_strikes[h_idx+1]} -> {relevant_strikes[num_strikes-1]}, indices: {h_idx+1} -> {num_strikes-1}")
                 options_block = await self.fetch_options_block(h_idx + 1, num_strikes - 1, strike_to_option, relevant_strikes)
-                self.edge_fetched_block[right] = options_block
+                self._set_edge_fetched_block(right, options_block)
 
         for option in options_block:
             if not hasattr(option, "ticker"):
@@ -340,11 +357,8 @@ class StrikeFinder:
         cached_options = {}
 
         for right in ['C', 'P']:
-            strike_to_option = {}
-            if self.edge_fetched_block[right]:
-                strike_to_option = {option.strike: option for option in self.edge_fetched_block[right]}
-            if self.middle_fetched_block[right]:
-                strike_to_option.update({option.strike: option for option in self.middle_fetched_block[right]})
+            strike_to_option = {option.strike: option for option in self.edge_fetched_block[right]}
+            strike_to_option.update({option.strike: option for option in self.middle_fetched_block[right]})
 
             cached_options[right] = strike_to_option
 

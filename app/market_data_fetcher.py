@@ -224,17 +224,25 @@ class MarketDataFetcher:
                 logger.info(f"The following contracts were requested but not fetched as snapshots: {[get_option_name(c) for c in still_missing]}")
 
     def cancel_market_data(self, contract):
-        if not contract or not contract.conId:
+        if not contract:
+            logger.warning(f"Cannot cancel market data as not contract was provided")
             return
 
-        if contract.conId in self.registered_contracts:
-            ticker = self.ib.ticker(contract)
-            if ticker:
-                ticker.updateEvent -= self.on_ticker_update
-                self.ib.cancelMktData(contract)
+        if not contract.conId:
+            logger.warning(f"Cannot cancel market data for {get_option_name(contract)} because no contract ID was provided")
+            return
 
-            self.registered_contracts.pop(contract.conId)
-            logger.info(f"Unsubscribed from market data for {get_option_name(contract)}")
+        if contract.conId not in self.registered_contracts:
+            logger.warning(f"Cannot cancel market data for {get_option_name(contract)} because it is not part of the registered contracts")
+            return
+
+        ticker = self.ib.ticker(contract)
+        if ticker:
+            ticker.updateEvent -= self.on_ticker_update
+            self.ib.cancelMktData(contract)
+
+        self.registered_contracts.pop(contract.conId)
+        logger.info(f"Unsubscribed from market data for {get_option_name(contract)}")
 
     def get_ticker(self, option):
         ticker = self.ib.ticker(option)

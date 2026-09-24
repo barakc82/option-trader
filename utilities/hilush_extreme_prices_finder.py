@@ -9,14 +9,14 @@ history_days = 30
 hilush_sheet = get_worksheet("הילוש")
 quotes_sheet = get_worksheet("$$$$")
 
-start_date_string = hilush_sheet.get(range_name=f"S65")[0][0]
+start_date_string = hilush_sheet.get(range_name=f"P55")[0][0]
 start_date = datetime.strptime(start_date_string, "%d/%m/%y")
 
 ib = IB()
 ib.connect('127.0.0.1', 7496, clientId=10)
 
 security_names = ['VT', 'AVUV', 'AVDV', 'VGT', 'SCHD', 'SCHY', 'SPHD', 'VIG', 'VIGI']
-row_indices = range(73, 81)
+row_indices = range(73, 82)
 
 history_end_date = start_date - timedelta(days=1)
 print(f"History end date: {history_end_date}")

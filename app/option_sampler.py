@@ -280,7 +280,7 @@ class OptionSampler:
         logger.info(f"Collecting the next sample... target delta: {target_delta:.3f} (picked randomly from ({target_delta_bottom:.3f}, {target_delta_top:.3f}))")
         option = self.strike_finder.get_cached_low_delta_option(target_delta, right)
         if option is None:
-            logger.warning("No option could be found for sample collection")
+            logger.warning(f"No option could be found for sample collection (right: {right}, target_delta: {target_delta})")
             return FAILED
 
         estimated_sell_price = self.price_estimator.estimate_sell_price(option)

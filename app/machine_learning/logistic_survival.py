@@ -361,6 +361,7 @@ def search_logistic_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names
 
     results: list[CandidateResult] = []
     best_score = np.inf
+    best_subset = []
     stale_sizes = 0
     for size in range(1, len(searchable_features) + 1):
         print(f"    Working on size {size}")
@@ -399,11 +400,12 @@ def search_logistic_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names
             results.append(candidate)
             if score < best_score:
                 best_score = score
+                best_subset = subset
                 improved_this_size = True
-                print(f"    Size {size} improves best score to {score:.4f}, features: {subset}")
 
         if improved_this_size:
             stale_sizes = 0
+            print(f"    Size {size} improves best score to {best_score:.4f}, features: {best_subset}")
         else:
             stale_sizes += 1
             if stale_sizes >= MAX_STALE_SIZES:
