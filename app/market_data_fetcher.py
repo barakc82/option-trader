@@ -16,6 +16,9 @@ from .option_data_fetcher import OptionDataFetcher
 
 logger = logging.getLogger(__name__)
 
+NIGHT_BREAK_MINUTES = (datetime.combine(datetime.min, PREMARKET_START_TIME) -
+                        datetime.combine(datetime.min, AFTER_HOURS_END_TIME)).total_seconds() / 60
+
 class MarketDataFetcher:
     _instance = None
 
@@ -281,9 +284,9 @@ class MarketDataFetcher:
     async def qualify(self, contracts):
         try:
             return await asyncio.wait_for(self.ib.qualifyContractsAsync(*contracts), timeout=30)
-        except asyncio.TimeoutError:
+        except asyncio.TimeoutError as e:
             logger.error(f"Timeout while qualifying {len(contracts)} contract(s)")
-            raise
+            raise e
 
     async def find_max_ask(self, sample: PositionInitialState) -> float:
         option = Option(
@@ -301,6 +304,9 @@ class MarketDataFetcher:
         day_end = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
 
         minutes_to_expiration = sample.minutes_to_expiration or 0
+        option_start_time = day_end - timedelta(minutes=minutes_to_expiration)
+        if option_start_time.time() < AFTER_HOURS_END_TIME:
+            minutes_to_expiration = max(minutes_to_expiration - NIGHT_BREAK_MINUTES, 0)
         duration_seconds = max(int(minutes_to_expiration * 60), 60)
 
         # Below 5 minutes, a '5 mins' bar request would need padding out beyond the real
@@ -337,5 +343,8 @@ class MarketDataFetcher:
             request_end = request_end - timedelta(seconds=chunk_seconds)
             await asyncio.sleep(20)
 
-        max_high = max((bar.high for bar in bars), default=0)
+        max_bar = max(bars, key=lambda bar: bar.high, default=None)
+        max_high = max_bar.high
+        max_high_time = max_bar.date
+        logger.info(f"Max ask for {get_option_name(option)}: {max_high} at {max_high_time}")
         return max_high
