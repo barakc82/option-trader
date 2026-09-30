@@ -276,11 +276,16 @@ class OptionSampler:
         target_delta_base, _ = self.target_delta_calculator.calculate_max_loss_based_target_delta(right, stop_loss_per_option)
         target_delta_top = target_delta_base * self.target_delta_top_multiplier
         target_delta_bottom = target_delta_base * 0.75
-        target_delta = random.uniform(target_delta_bottom, target_delta_top)
-        logger.info(f"Collecting the next sample... target delta: {target_delta:.3f} (picked randomly from ({target_delta_bottom:.3f}, {target_delta_top:.3f}))")
-        option = self.strike_finder.get_cached_low_delta_option(target_delta, right)
+        option = None
+        for attempt in range(10):
+            target_delta = random.uniform(target_delta_bottom, target_delta_top)
+            logger.info(f"Collecting the next sample... target delta: {target_delta:.3f} (picked randomly from ({target_delta_bottom:.3f}, {target_delta_top:.3f}))")
+            option = self.strike_finder.get_cached_low_delta_option(target_delta, right)
+            if option is not None:
+                break
+            logger.warning(f"No option could be found for sample collection (right: {right}, target_delta: {target_delta}, attempt: {attempt + 1})")
+
         if option is None:
-            logger.warning(f"No option could be found for sample collection (right: {right}, target_delta: {target_delta})")
             return FAILED
 
         estimated_sell_price = self.price_estimator.estimate_sell_price(option)
