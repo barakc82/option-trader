@@ -54,7 +54,13 @@ last_sunday_expiration_check_date = None
 
 def monitor_option_trader():
     global state
-    is_process_alive = is_process_active()
+    try:
+        is_process_alive = is_process_active()
+    except ExcessiveTimeoutError as e:
+        logger.error(f"{e} Performing soft restart.")
+        soft_restart()
+        return
+
     if not is_process_alive:
         logger.warning(f"Option Trader is not alive.")
 

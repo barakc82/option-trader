@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import time
 import glob
 import random
@@ -12,6 +13,23 @@ logger = logging.getLogger(__name__)
 
 IBGATEWAY_RESTART_REQUIRED = "IBGATEWAY_RESTART_REQUIRED"
 UNKNOWN_ISSUE = "UNKNOWN_ISSUE"
+
+TIMEOUT_ERROR_THRESHOLD = 10
+LOG_TIMESTAMP_PATTERN = re.compile(r"^\[\w+\] (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
+
+
+class ExcessiveTimeoutError(Exception):
+    """Raised when 'TimeoutError' appears too many times in the recent option trader log."""
+
+
+def _parse_log_timestamp(line):
+    match = LOG_TIMESTAMP_PATTERN.match(line)
+    if not match:
+        return None
+    try:
+        return datetime.datetime.strptime(match.group(1), "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
 
 mem_limit_mb = 0
 paths = ['/sys/fs/cgroup/memory/memory.limit_in_bytes', '/sys/fs/cgroup/memory.max']
@@ -68,6 +86,28 @@ def check_process_state(process, should_print_health=False):
         if cpu_pct > 95.0:
             logger.warning(f"⚠️ WARNING: High CPU usage detected: {cpu_pct}%")
 
+        latest_log = find_latest_option_trader_log()
+        timeout_error_count = 0
+        try:
+            with open(latest_log, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+
+            one_hour_ago = datetime.datetime.now() - datetime.timedelta(hours=1)
+            for line in lines:
+                if "TimeoutError" not in line:
+                    continue
+                timestamp = _parse_log_timestamp(line)
+                if timestamp is not None and timestamp >= one_hour_ago:
+                    timeout_error_count += 1
+
+        except Exception as e:
+            logger.error(f"Error analyzing log {latest_log}: {e}")
+
+        if timeout_error_count >= TIMEOUT_ERROR_THRESHOLD:
+            raise ExcessiveTimeoutError(
+                f"'TimeoutError' appeared {timeout_error_count} times in the past hour ({latest_log})."
+            )
+
         if random.random() < 0.01 or should_print_health:
             logger.info(f"Subprocess Health - CPU: {cpu_pct}% | MEM: {mem_mb:.2f} MB")
             if should_print_health:
@@ -117,6 +157,8 @@ def is_process_active():
                 except psutil.NoSuchProcess:
                     pass
 
+        except ExcessiveTimeoutError:
+            raise
         except (Exception) as e:
             logger.error(f"Invalid data in heartbeat file: {e}")
 
