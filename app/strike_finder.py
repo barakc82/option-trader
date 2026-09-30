@@ -128,9 +128,6 @@ class StrikeFinder:
 
             try:
                 estimated_sell_price = self.price_estimator.estimate_sell_price(option)
-                if estimated_sell_price > stop_loss_per_option:
-                    continue
-
                 bid_delta, ask_delta, last_delta, model_delta = get_individual_deltas(option.ticker)
                 gamma = get_model_gamma(option.ticker)
                 vega = get_model_vega(option.ticker)

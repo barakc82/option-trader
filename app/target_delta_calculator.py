@@ -119,7 +119,6 @@ class TargetDeltaCalculator:
                 logger.error(f"Invalid implied volatility for '{right}': {implied_volatility}")
         except Exception as e:
             logger.error(f"Error fetching SPX IV for {right}: {e}")
-            traceback.print_exc()
 
         if not implied_volatility or math.isnan(implied_volatility):
             return self.last_target_delta[right]

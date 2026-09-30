@@ -134,6 +134,12 @@ class TradingBot:
         for i in self.price_increments:
             if raw_limit > i.lowEdge:
                 current_increment = i.increment
+        if current_increment == 0:
+            logger.error("current increment is 0, so cannot adjust the limit for the order")
+        if math.isnan(current_increment):
+            logger.error("current increment is NaN, so cannot adjust the limit for the order")
+        if math.isnan(raw_limit):
+            logger.error("raw limit is NaN, so cannot adjust the limit for the order")
         return round(round(raw_limit / current_increment) * current_increment, 6)
 
 

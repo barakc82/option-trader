@@ -20,7 +20,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from utilities.database_access import get_client
 
-SPREADSHEET_ID = "1edPqPRZ_IvkZjHnkJS2baiYjAEQcYpQjpvW_mH67h20"
+RUSSIAN_SPREADSHEET_ID = "1edPqPRZ_IvkZjHnkJS2baiYjAEQcYpQjpvW_mH67h20"
+SPANISH_SPREADSHEET_ID = "1wCfWem1FrIRzfF5bJQWuNSrfZv5K_Tp7pfojGlccbzg"
 OUTPUT_CSV = Path(__file__).resolve().parent / "vocabulary.csv"
 MIN_OCCURRENCES = 2
 
@@ -56,14 +57,16 @@ def extract_pairs(row: list[str]) -> list[tuple[str, str]]:
     return pairs
 
 
-def fetch_rows() -> list[list[str]]:
+def fetch_rows(spreadsheet_id) -> list[list[str]]:
     client = get_client()
-    worksheet = client.open_by_key(SPREADSHEET_ID).sheet1
+    worksheet = client.open_by_key(spreadsheet_id).sheet1
     return worksheet.get_all_values()
 
 
 def main():
-    rows = fetch_rows()
+    #spreadsheet_id = RUSSIAN_SPREADSHEET_ID
+    spreadsheet_id = SPANISH_SPREADSHEET_ID
+    rows = fetch_rows(spreadsheet_id)
 
     output_pairs = []
     for row in rows:

@@ -14,7 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from utilities.database_access import get_client
-from utilities.languages.export_vocabulary_csv import SPREADSHEET_ID
+from utilities.languages.export_vocabulary_csv import RUSSIAN_SPREADSHEET_ID
 
 OUTPUT_CSV = Path(__file__).resolve().parent / "vocabulary_decremented.csv"
 CLEAR_IF_EQUAL_TO = 1
@@ -52,7 +52,7 @@ def transform_row(row: list[str]) -> list[str]:
 
 def fetch_rows() -> list[list[str]]:
     client = get_client()
-    worksheet = client.open_by_key(SPREADSHEET_ID).sheet1
+    worksheet = client.open_by_key(RUSSIAN_SPREADSHEET_ID).sheet1
     return worksheet.get_all_values()
 
 
