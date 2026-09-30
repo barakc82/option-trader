@@ -207,3 +207,11 @@ class TransformedResidualClassifier:
                     f"{clip_rate:.1%} of raw probabilities fell outside [eps, 1-eps] and were clipped.")
         y_hat_dollar = self.transform["inverse"](mu_hat, extra_arr)
         return p_clipped, y_hat_dollar
+
+    def get_feature_subset(self) -> list[str]:
+        """The X_new columns __call__ actually reads: best_subset plus the
+        transform's extra_column (e.g. log_ratio's denominator), if any."""
+        features = list(self.best_subset)
+        if self.extra_column is not None and self.extra_column not in features:
+            features.append(self.extra_column)
+        return features

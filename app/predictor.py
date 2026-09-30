@@ -69,6 +69,9 @@ class Predictor:
         delta_values = [d for d in (bid_delta, ask_delta, last_delta, model_delta) if d is not None]
         max_delta = max(delta_values) if delta_values else None
 
+        if max_delta and max_delta > target_delta * 9:
+            return None
+
         feature_values = {
             "estimated_sell_price": estimated_sell_price,
             "target_delta": target_delta,
@@ -84,7 +87,8 @@ class Predictor:
             "atm_iv": atm_iv,
             "distance_to_strike_pct": distance_to_strike_pct,
         }
-        for key, value in feature_values.items():
+        for key in classifier.get_feature_subset():
+            value = feature_values.get(key)
             if value is None or (isinstance(value, float) and math.isnan(value)):
                 logger.warning(f"Cannot compute max ask probability for {get_option_name(option)}: {key} is NaN")
                 return None

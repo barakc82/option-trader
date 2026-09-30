@@ -489,3 +489,11 @@ class LogisticSurvivalClassifier:
                     f"{clip_rate:.1%} of raw probabilities fell outside [eps, 1-eps] and were clipped.")
         y_hat = np.full(len(X_new), np.nan)
         return p_clipped, y_hat
+
+    def get_feature_subset(self) -> list[str]:
+        """The X_new columns __call__ actually reads: subset plus
+        CREDIT_COLUMN (used to compute log_k)."""
+        features = list(self.subset)
+        if CREDIT_COLUMN not in features:
+            features.append(CREDIT_COLUMN)
+        return features

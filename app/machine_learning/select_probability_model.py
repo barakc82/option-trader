@@ -74,8 +74,11 @@ def _print_days_above_stop(subset: pd.DataFrame) -> None:
     stopped out. Printed fresh before each method/transform below since
     they don't all share the exact same filtered subset."""
     stop_col = survival_scoring.STOP_COLUMN
-    n_days = subset.loc[subset[TARGET_COLUMN] > subset[stop_col], GROUP_COLUMN].nunique()
+    above_stop = subset.loc[subset[TARGET_COLUMN] > subset[stop_col]]
+    n_days = above_stop[GROUP_COLUMN].nunique()
     print(f"  {n_days} day(s) with {TARGET_COLUMN} > {stop_col}")
+    if n_days:
+        print(f"  Last day with {TARGET_COLUMN} > {stop_col}: {above_stop[GROUP_COLUMN].max()}")
 
 
 def _select_best_model_rss(df: pd.DataFrame, right: str, score_method: ScoreMethod) -> tuple[ProbabilityClassifier, dict]:
@@ -87,6 +90,7 @@ def _select_best_model_rss(df: pd.DataFrame, right: str, score_method: ScoreMeth
     X = subset[CANDIDATE_FEATURE_COLUMNS]
     y_raw = subset[TARGET_COLUMN]
     groups = subset[GROUP_COLUMN]
+    _print_days_above_stop(subset)
 
     if (y_raw <= 0).any():
         n_bad = int((y_raw <= 0).sum())
@@ -105,7 +109,6 @@ def _select_best_model_rss(df: pd.DataFrame, right: str, score_method: ScoreMeth
 
     candidates = {}
     for method_name, transform in TRANSFORMS.items():
-        _print_days_above_stop(subset)
         print(f"  Method = {method_name}")
         extra_col = transform["extra_column"]
         extra_arr = X[extra_col].to_numpy() if extra_col is not None else None

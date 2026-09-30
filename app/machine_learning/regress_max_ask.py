@@ -40,6 +40,10 @@ class ProbabilityClassifier:
         idx = np.searchsorted(self.sorted_residuals, threshold - y_hat, side='left')
         return idx / len(self.sorted_residuals), y_hat
 
+    def get_feature_subset(self) -> list[str]:
+        """The X_new columns __call__ actually reads."""
+        return list(self.feature_columns)
+
 
 def select_best_subset(X, y, feature_names, groups, cv=CV_FOLDS):
     """Best-subset feature selection: try every non-empty subset of feature_names, score each

@@ -71,7 +71,7 @@ XGBOOST_PARAMS = dict(
 # vs. a single closed-form-ish logistic fit). Timed via one calibration fit
 # before the real search starts; if the projected total exceeds this, the
 # search raises instead of silently running for hours.
-XGBOOST_SEARCH_TIME_BUDGET_SEC = 14400.0
+XGBOOST_SEARCH_TIME_BUDGET_SEC = 28800.0
 
 
 class XgboostSearchBudgetExceeded(RuntimeError):
@@ -265,3 +265,13 @@ class XgboostSurvivalClassifier:
                     f"{clip_rate:.1%} of raw probabilities fell outside [eps, 1-eps] and were clipped.")
         y_hat = np.full(len(X_new), np.nan)
         return p_clipped, y_hat
+
+    def get_feature_subset(self) -> list[str]:
+        """The X_new columns __call__ actually reads: subset plus
+        CREDIT_COLUMN (used to compute log_k)."""
+        from .survival_scoring import CREDIT_COLUMN  # local import: avoids a module-level cycle risk
+
+        features = list(self.subset)
+        if CREDIT_COLUMN not in features:
+            features.append(CREDIT_COLUMN)
+        return features
