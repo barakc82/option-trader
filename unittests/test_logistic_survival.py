@@ -146,7 +146,7 @@ class TestSearchAndClassifier(unittest.TestCase):
         cls.results = ls.search_logistic_candidates(cls.X, cls.ctx, cls.features, SCORE_METHODS["weighted_logloss"])
 
     def test_search_returns_all_subsets(self):
-        expected_n = 2 ** len(self.features) - 1
+        expected_n = (2 ** len(self.features) - 1) * len(ls.LOGISTIC_C_GRID)
         self.assertEqual(len(self.results), expected_n)
 
     def test_all_candidates_carry_finite_score_and_coefs(self):

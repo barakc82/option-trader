@@ -58,6 +58,12 @@ LOGISTIC_K_GRID = {"n": 15, "lo": 1.25, "hi": 8.0, "spacing": "log"}
 LOGISTIC_C = 1.0
 LOGISTIC_MAX_ITER = 1000
 
+# C is searched as an extra axis alongside the feature subset (see
+# search_logistic_candidates), the same way xgboost_survival.py searches
+# reg_lambda alongside its subset -- so LOGISTIC_C above is only the default
+# used for cost calibration, not the value every candidate is fit with.
+LOGISTIC_C_GRID = [0.1, 1.0, 10.0]
+
 # Best-subset search over p non-log_k features is 2**p - 1 subsets, each
 # fitted n_folds times on n_train_trades * n_grid rows. Timed via one
 # calibration fit before the real search starts; if the projected total
@@ -291,14 +297,15 @@ def fit_logistic(X_rep: pd.DataFrame, y_rep: np.ndarray, weight_rep: np.ndarray,
 
 def estimate_and_check_cost(X: pd.DataFrame, ctx: pd.DataFrame, feature_names: list[str], k_grid: np.ndarray,
                              fold_splits: list, C: float,
-                             time_budget_sec: float = LOGISTIC_SEARCH_TIME_BUDGET_SEC) -> float:
+                             time_budget_sec: float = LOGISTIC_SEARCH_TIME_BUDGET_SEC,
+                             C_grid: list[float] = LOGISTIC_C_GRID) -> float:
     """Times ONE calibration fit (full feature set, fold 0's training
     split) and projects the total search time. Prints the estimate either
     way; raises LogisticSearchBudgetExceeded (not a silent proceed) if it
     exceeds the budget, naming concrete alternatives rather than just
     failing."""
     n_subsets = 2 ** len(feature_names) - 1
-    n_total_fits = n_subsets * len(fold_splits)
+    n_total_fits = n_subsets * len(fold_splits) * len(C_grid)
 
     train_idx0, _ = fold_splits[0]
     X_train0, ctx_train0 = X.iloc[train_idx0], ctx.iloc[train_idx0]
@@ -312,9 +319,10 @@ def estimate_and_check_cost(X: pd.DataFrame, ctx: pd.DataFrame, feature_names: l
     calibration_fit_seconds = time.time() - t0
 
     estimated_total_sec = calibration_fit_seconds * n_total_fits
-    print(f"    logistic best-subset search: {n_subsets} subsets x {len(fold_splits)} folds = "
-          f"{n_total_fits} fits; calibration fit took {calibration_fit_seconds:.3f}s -> "
-          f"estimated total {estimated_total_sec / 60:.1f} min (budget {time_budget_sec / 60:.1f} min)")
+    print(f"    logistic best-subset search: {n_subsets} subsets x {len(fold_splits)} folds x "
+          f"{len(C_grid)} C values = {n_total_fits} fits; calibration fit took "
+          f"{calibration_fit_seconds:.3f}s -> estimated total {estimated_total_sec / 60:.1f} min "
+          f"(budget {time_budget_sec / 60:.1f} min)")
 
     if estimated_total_sec > time_budget_sec:
         raise LogisticSearchBudgetExceeded(
@@ -334,16 +342,18 @@ def estimate_and_check_cost(X: pd.DataFrame, ctx: pd.DataFrame, feature_names: l
 def search_logistic_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names: list[str],
                                 score_method: ScoreMethod, cv: int = CV_FOLDS,
                                 k_grid_config: dict = LOGISTIC_K_GRID, C: float = LOGISTIC_C,
-                                time_budget_sec: float = LOGISTIC_SEARCH_TIME_BUDGET_SEC) -> list[CandidateResult]:
+                                time_budget_sec: float = LOGISTIC_SEARCH_TIME_BUDGET_SEC,
+                                C_grid: list[float] = LOGISTIC_C_GRID) -> list[CandidateResult]:
     """Exhaustive best-subset search over feature_names (log_k is always
-    included and never a candidate for removal -- see module docstring).
-    Fits on the replicated grid, scores on the one-row-per-trade prediction
-    representation (see build_predict_frame) using score_method, exactly
-    the representation every other registered method is scored on. Returns
-    every evaluated CandidateResult (transform_name="logistic",
-    distribution=None), meant to be pooled into the same list the other
-    methods' candidates go into -- the caller's pooling/SE/report code
-    needs no changes to accept them.
+    included and never a candidate for removal -- see module docstring),
+    crossed with C_grid the same way xgboost_survival.search_xgboost_candidates
+    crosses each subset with every reg_lambda value. Fits on the replicated
+    grid, scores on the one-row-per-trade prediction representation (see
+    build_predict_frame) using score_method, exactly the representation
+    every other registered method is scored on. Returns every evaluated
+    CandidateResult (transform_name="logistic", distribution=None), meant to
+    be pooled into the same list the other methods' candidates go into --
+    the caller's pooling/SE/report code needs no changes to accept them.
     """
     groups = ctx[GROUP_COLUMN]
     n_splits = max(2, min(cv, groups.nunique()))
@@ -353,7 +363,7 @@ def search_logistic_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names
     k_grid = build_k_grid(k_grid_config)
     searchable_features = _feature_columns(feature_names)
 
-    estimate_and_check_cost(X, ctx, searchable_features, k_grid, fold_splits, C, time_budget_sec)
+    estimate_and_check_cost(X, ctx, searchable_features, k_grid, fold_splits, C, time_budget_sec, C_grid)
 
     y_survived_trades = compute_survival_label(ctx)
     weight_trades = trade_weight(ctx)
@@ -361,6 +371,7 @@ def search_logistic_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names
     results: list[CandidateResult] = []
     best_score = np.inf
     best_subset = []
+    best_C = None
     stale_sizes = 0
     for size in range(1, len(searchable_features) + 1):
         print(f"    Working on size {size}")
@@ -369,42 +380,46 @@ def search_logistic_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names
             subset = list(subset)
             columns = columns_for_subset(subset)
 
-            oof_p = np.full(len(X), np.nan)
-            fold_scores = []
-            fold_max_abs_coef = []
-            fold_log_k_coef = []
-            for fold_idx, (train_idx, test_idx) in enumerate(fold_splits):
-                X_train, ctx_train = X.iloc[train_idx], ctx.iloc[train_idx]
-                X_rep, y_rep, w_rep, _ = replicate_for_training(X_train, ctx_train, subset, k_grid)
+            for candidate_C in C_grid:
+                oof_p = np.full(len(X), np.nan)
+                fold_scores = []
+                fold_max_abs_coef = []
+                fold_log_k_coef = []
+                for fold_idx, (train_idx, test_idx) in enumerate(fold_splits):
+                    X_train, ctx_train = X.iloc[train_idx], ctx.iloc[train_idx]
+                    X_rep, y_rep, w_rep, _ = replicate_for_training(X_train, ctx_train, subset, k_grid)
 
-                model, scaler, coefs = fit_logistic(X_rep, y_rep, w_rep, columns, C, fold_idx, subset)
-                fold_max_abs_coef.append(float(np.max(np.abs(coefs))))
-                fold_log_k_coef.append(float(coefs[columns.index(LOG_K_COLUMN)]))
+                    model, scaler, coefs = fit_logistic(X_rep, y_rep, w_rep, columns, candidate_C, fold_idx, subset)
+                    fold_max_abs_coef.append(float(np.max(np.abs(coefs))))
+                    fold_log_k_coef.append(float(coefs[columns.index(LOG_K_COLUMN)]))
 
-                X_test_pred = build_predict_frame(X.iloc[test_idx], ctx.iloc[test_idx], subset)
-                X_test_scaled = scaler.transform(X_test_pred[columns])
-                p_raw = model.predict_proba(X_test_scaled)[:, 1]
-                p_clipped, _ = clip_probabilities(p_raw)
-                oof_p[test_idx] = p_clipped
+                    X_test_pred = build_predict_frame(X.iloc[test_idx], ctx.iloc[test_idx], subset)
+                    X_test_scaled = scaler.transform(X_test_pred[columns])
+                    p_raw = model.predict_proba(X_test_scaled)[:, 1]
+                    p_clipped, _ = clip_probabilities(p_raw)
+                    oof_p[test_idx] = p_clipped
 
-                w_fold = weight_trades[test_idx] if score_method.needs_weight else None
-                fold_scores.append(score_method.compute(p_clipped, y_survived_trades[test_idx], w_fold))
+                    w_fold = weight_trades[test_idx] if score_method.needs_weight else None
+                    fold_scores.append(score_method.compute(p_clipped, y_survived_trades[test_idx], w_fold))
 
-            w_full = weight_trades if score_method.needs_weight else None
-            score = score_method.compute(oof_p, y_survived_trades, w_full)
-            candidate = CandidateResult(
-                TRANSFORM_NAME, subset, None, score, fold_scores,
-                log_k_coef=float(np.mean(fold_log_k_coef)), max_abs_coef=float(np.mean(fold_max_abs_coef)),
-            )
-            results.append(candidate)
-            if score < best_score:
-                best_score = score
-                best_subset = subset
-                improved_this_size = True
+                w_full = weight_trades if score_method.needs_weight else None
+                score = score_method.compute(oof_p, y_survived_trades, w_full)
+                candidate = CandidateResult(
+                    TRANSFORM_NAME, subset, None, score, fold_scores,
+                    log_k_coef=float(np.mean(fold_log_k_coef)), max_abs_coef=float(np.mean(fold_max_abs_coef)),
+                    logistic_c=candidate_C,
+                )
+                results.append(candidate)
+                if score < best_score:
+                    best_score = score
+                    best_subset = subset
+                    best_C = candidate_C
+                    improved_this_size = True
 
         if improved_this_size:
             stale_sizes = 0
-            print(f"    Size {size} improves best score to {best_score:.4f}, features: {best_subset}")
+            print(f"    Size {size} improves best score to {best_score:.4f}, features: {best_subset}, "
+                  f"C: {best_C}")
         else:
             stale_sizes += 1
             if stale_sizes >= MAX_STALE_SIZES:

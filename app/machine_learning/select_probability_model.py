@@ -219,7 +219,7 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
         per_transform_best["logistic"] = logistic_recommended
         print(f"    Best for logistic (1-SE + fewest-features rule): subset={logistic_recommended.subset}, "
               f"score={logistic_recommended.score:.4f}, log_k_coef={logistic_recommended.log_k_coef:.4f}, "
-              f"max|coef|={logistic_recommended.max_abs_coef:.4f}")
+              f"max|coef|={logistic_recommended.max_abs_coef:.4f}, C={logistic_recommended.logistic_c}")
 
         logistic_extrapolation_fraction = logistic_survival.extrapolation_fraction(ctx, logistic_survival.build_k_grid())
         print(f"    Out-of-grid extrapolation fraction (evaluated trades whose log(stop/credit) falls "
@@ -281,10 +281,10 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
         k_grid = logistic_survival.build_k_grid()
         X_rep, y_rep, w_rep, _ = logistic_survival.replicate_for_training(X, ctx, best.subset, k_grid)
         model, scaler, coefs = logistic_survival.fit_logistic(
-            X_rep, y_rep, w_rep, columns, logistic_survival.LOGISTIC_C, fold_idx="final", subset=best.subset,
+            X_rep, y_rep, w_rep, columns, best.logistic_c, fold_idx="final", subset=best.subset,
         )
         print(f"  Final logistic fit: log_k_coef={coefs[columns.index(logistic_survival.LOG_K_COLUMN)]:.4f}, "
-              f"max|coef|={float(np.max(np.abs(coefs))):.4f}")
+              f"max|coef|={float(np.max(np.abs(coefs))):.4f}, C={best.logistic_c}")
         for feature, coef in zip(columns, coefs):
             print(f"    {feature}: {coef:.4f}")
 
@@ -365,7 +365,8 @@ def print_selection_report(right: str, report: dict) -> None:
         if transform_name == "logistic":
             print(f"      logistic: subset={candidate.subset}, score={candidate.score:.4f}, "
                   f"log_k_coef={candidate.log_k_coef:.4f} (sign={'+' if candidate.log_k_coef > 0 else '-'}), "
-                  f"1/coef(log_k)={1.0 / candidate.log_k_coef:.4f}, max|coef|={candidate.max_abs_coef:.4f}")
+                  f"1/coef(log_k)={1.0 / candidate.log_k_coef:.4f}, max|coef|={candidate.max_abs_coef:.4f}, "
+                  f"C={candidate.logistic_c}")
         elif transform_name == "xgboost":
             print(f"      xgboost: subset={candidate.subset}, score={candidate.score:.4f}, "
                   f"reg_lambda={candidate.reg_lambda}")
