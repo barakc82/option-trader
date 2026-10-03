@@ -159,6 +159,7 @@ class CandidateResult:
     # methods' values or behavior changes.
     log_k_coef: float | None = None
     max_abs_coef: float | None = None
+    reg_lambda: float | None = None  # xgboost only -- which L2 leaf-weight penalty this candidate was fit with
 
 
 def search_best_subset_with_distribution(X: pd.DataFrame, ctx: pd.DataFrame, transform: dict, transform_name: str,
@@ -178,7 +179,6 @@ def search_best_subset_with_distribution(X: pd.DataFrame, ctx: pd.DataFrame, tra
     weight = (ctx[STOP_COLUMN] - ctx[CREDIT_COLUMN]).to_numpy()
 
     n_splits = max(2, min(cv, groups.nunique()))
-    print(f"    Number of trade days: {groups.nunique()}, number of samples: {X.shape[0]}")
     gkf = GroupKFold(n_splits=n_splits, shuffle=True, random_state=CV_RANDOM_STATE)
     fold_splits = list(gkf.split(np.zeros(len(X)), groups=groups))
 

@@ -65,6 +65,13 @@ XGBOOST_PARAMS = dict(
     verbosity=0,
 )
 
+# reg_lambda is searched as an extra axis alongside the feature subset (see
+# search_xgboost_candidates), the same way search_best_subset_with_distribution
+# searches the residual distribution alongside the subset -- so the L2
+# leaf-weight penalty in XGBOOST_PARAMS above is only the default used for
+# cost calibration, not the value every candidate is fit with.
+REG_LAMBDA_GRID = [0.1, 0.25, 0.28]
+
 # Best-subset search over p non-log_k features is 2**p - 1 subsets, each
 # fitted n_folds times on n_train_trades * n_grid rows -- same shape of cost
 # as logistic_survival's search, just a heavier per-fit cost (boosted trees
@@ -107,13 +114,14 @@ def fit_xgboost(X_rep: pd.DataFrame, y_rep: np.ndarray, weight_rep: np.ndarray, 
 
 def estimate_and_check_cost(X: pd.DataFrame, ctx: pd.DataFrame, feature_names: list[str], k_grid: np.ndarray,
                              fold_splits: list, params: dict = XGBOOST_PARAMS,
-                             time_budget_sec: float = XGBOOST_SEARCH_TIME_BUDGET_SEC) -> float:
+                             time_budget_sec: float = XGBOOST_SEARCH_TIME_BUDGET_SEC,
+                             reg_lambda_grid: list[float] = REG_LAMBDA_GRID) -> float:
     """Times ONE calibration fit (full feature set, fold 0's training split)
     and projects the total search time. Prints the estimate either way;
     raises XgboostSearchBudgetExceeded (not a silent proceed) if it exceeds
     the budget."""
     n_subsets = 2 ** len(feature_names) - 1
-    n_total_fits = n_subsets * len(fold_splits)
+    n_total_fits = n_subsets * len(fold_splits) * len(reg_lambda_grid)
 
     train_idx0, _ = fold_splits[0]
     X_train0, ctx_train0 = X.iloc[train_idx0], ctx.iloc[train_idx0]
@@ -126,9 +134,10 @@ def estimate_and_check_cost(X: pd.DataFrame, ctx: pd.DataFrame, feature_names: l
     calibration_fit_seconds = time.time() - t0
 
     estimated_total_sec = calibration_fit_seconds * n_total_fits
-    print(f"    xgboost best-subset search: {n_subsets} subsets x {len(fold_splits)} folds = "
-          f"{n_total_fits} fits; calibration fit took {calibration_fit_seconds:.3f}s -> "
-          f"estimated total {estimated_total_sec / 60:.1f} min (budget {time_budget_sec / 60:.1f} min)")
+    print(f"    xgboost best-subset search: {n_subsets} subsets x {len(fold_splits)} folds x "
+          f"{len(reg_lambda_grid)} reg_lambda values = {n_total_fits} fits; calibration fit took "
+          f"{calibration_fit_seconds:.3f}s -> estimated total {estimated_total_sec / 60:.1f} min "
+          f"(budget {time_budget_sec / 60:.1f} min)")
 
     if estimated_total_sec > time_budget_sec:
         raise XgboostSearchBudgetExceeded(
@@ -148,24 +157,27 @@ def estimate_and_check_cost(X: pd.DataFrame, ctx: pd.DataFrame, feature_names: l
 def search_xgboost_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names: list[str],
                                score_method: ScoreMethod, cv: int = CV_FOLDS,
                                params: dict = XGBOOST_PARAMS,
-                               time_budget_sec: float = XGBOOST_SEARCH_TIME_BUDGET_SEC) -> list[CandidateResult]:
+                               time_budget_sec: float = XGBOOST_SEARCH_TIME_BUDGET_SEC,
+                               reg_lambda_grid: list[float] = REG_LAMBDA_GRID) -> list[CandidateResult]:
     """Exhaustive best-subset search over feature_names (log_k is always
-    included and never a candidate for removal -- see module docstring).
-    Fits on the replicated grid, scores on the one-row-per-trade prediction
-    representation (see logistic_survival.build_predict_frame) using
-    score_method -- the exact representation every other registered method
-    is scored on. Returns every evaluated CandidateResult
-    (transform_name="xgboost", distribution=None), meant to be pooled into
-    the same list the other methods' candidates go into."""
+    included and never a candidate for removal -- see module docstring),
+    crossed with reg_lambda_grid the same way
+    search_best_subset_with_distribution crosses each subset with every
+    residual distribution. Fits on the replicated grid, scores on the
+    one-row-per-trade prediction representation (see
+    logistic_survival.build_predict_frame) using score_method -- the exact
+    representation every other registered method is scored on. Returns every
+    evaluated CandidateResult (transform_name="xgboost", distribution=None),
+    meant to be pooled into the same list the other methods' candidates go
+    into."""
     groups = ctx[GROUP_COLUMN]
     n_splits = max(2, min(cv, groups.nunique()))
-    print(f"    Number of trade days: {groups.nunique()}, number of samples: {X.shape[0]}")
     gkf = GroupKFold(n_splits=n_splits, shuffle=True, random_state=CV_RANDOM_STATE)
     fold_splits = list(gkf.split(np.zeros(len(X)), groups=groups))
 
     k_grid = build_k_grid()
 
-    estimate_and_check_cost(X, ctx, feature_names, k_grid, fold_splits, params, time_budget_sec)
+    estimate_and_check_cost(X, ctx, feature_names, k_grid, fold_splits, params, time_budget_sec, reg_lambda_grid)
 
     y_survived_trades = compute_survival_label(ctx)
     weight_trades = trade_weight(ctx)
@@ -173,6 +185,7 @@ def search_xgboost_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names:
     results: list[CandidateResult] = []
     best_score = np.inf
     best_subset = []
+    best_reg_lambda = None
     stale_sizes = 0
     for size in range(1, len(feature_names) + 1):
         print(f"    Working on size {size}")
@@ -181,33 +194,39 @@ def search_xgboost_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names:
             subset = list(subset)
             columns = columns_for_subset(subset)
 
-            oof_p = np.full(len(X), np.nan)
-            fold_scores = []
-            for fold_idx, (train_idx, test_idx) in enumerate(fold_splits):
-                X_train, ctx_train = X.iloc[train_idx], ctx.iloc[train_idx]
-                X_rep, y_rep, w_rep, _ = replicate_for_training(X_train, ctx_train, subset, k_grid)
+            for reg_lambda in reg_lambda_grid:
+                fit_params = {**params, "reg_lambda": reg_lambda}
 
-                model = fit_xgboost(X_rep, y_rep, w_rep, columns, params)
+                oof_p = np.full(len(X), np.nan)
+                fold_scores = []
+                for fold_idx, (train_idx, test_idx) in enumerate(fold_splits):
+                    X_train, ctx_train = X.iloc[train_idx], ctx.iloc[train_idx]
+                    X_rep, y_rep, w_rep, _ = replicate_for_training(X_train, ctx_train, subset, k_grid)
 
-                X_test_pred = build_predict_frame(X.iloc[test_idx], ctx.iloc[test_idx], subset)
-                p_raw = model.predict_proba(X_test_pred[columns])[:, 1]
-                p_clipped, _ = clip_probabilities(p_raw)
-                oof_p[test_idx] = p_clipped
+                    model = fit_xgboost(X_rep, y_rep, w_rep, columns, fit_params)
 
-                w_fold = weight_trades[test_idx] if score_method.needs_weight else None
-                fold_scores.append(score_method.compute(p_clipped, y_survived_trades[test_idx], w_fold))
+                    X_test_pred = build_predict_frame(X.iloc[test_idx], ctx.iloc[test_idx], subset)
+                    p_raw = model.predict_proba(X_test_pred[columns])[:, 1]
+                    p_clipped, _ = clip_probabilities(p_raw)
+                    oof_p[test_idx] = p_clipped
 
-            w_full = weight_trades if score_method.needs_weight else None
-            score = score_method.compute(oof_p, y_survived_trades, w_full)
-            results.append(CandidateResult(TRANSFORM_NAME, subset, None, score, fold_scores))
-            if score < best_score:
-                best_score = score
-                best_subset = subset
-                improved_this_size = True
+                    w_fold = weight_trades[test_idx] if score_method.needs_weight else None
+                    fold_scores.append(score_method.compute(p_clipped, y_survived_trades[test_idx], w_fold))
+
+                w_full = weight_trades if score_method.needs_weight else None
+                score = score_method.compute(oof_p, y_survived_trades, w_full)
+                results.append(CandidateResult(TRANSFORM_NAME, subset, None, score, fold_scores,
+                                                reg_lambda=reg_lambda))
+                if score < best_score:
+                    best_score = score
+                    best_subset = subset
+                    best_reg_lambda = reg_lambda
+                    improved_this_size = True
 
         if improved_this_size:
             stale_sizes = 0
-            print(f"    Size {size} improves best score to {best_score:.4f}, features: {best_subset}")
+            print(f"    Size {size} improves best score to {best_score:.4f}, features: {best_subset}, "
+                  f"reg_lambda: {best_reg_lambda}")
         else:
             stale_sizes += 1
             if stale_sizes >= MAX_STALE_SIZES:

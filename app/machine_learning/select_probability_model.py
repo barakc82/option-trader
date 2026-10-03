@@ -188,8 +188,10 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
 
     all_candidates = []
     per_transform_best = {}
+    _print_days_above_stop(ctx)
+    groups = ctx[GROUP_COLUMN]
+    print(f"    Number of trade days: {groups.nunique()}, number of samples: {X.shape[0]}")
     for transform_name, transform in TRANSFORMS.items():
-        _print_days_above_stop(ctx)
         print(f"  Transform = {transform_name}")
         results = search_best_subset_with_distribution(
             X, ctx, transform, transform_name, CANDIDATE_FEATURE_COLUMNS, score_method,
@@ -208,7 +210,6 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
     logistic_extrapolation_fraction = None
     logistic_spread_comparison = None
     try:
-        _print_days_above_stop(ctx)
         print(f"  Transform = logistic")
         logistic_results = logistic_survival.search_logistic_candidates(
             X, ctx, CANDIDATE_FEATURE_COLUMNS, score_method,
@@ -253,7 +254,6 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
     # construction, not by convention. Its candidates are more
     # CandidateResult objects pooled into the same all_candidates list.
     try:
-        _print_days_above_stop(ctx)
         print(f"  Transform = xgboost")
         xgboost_results = xgboost_survival.search_xgboost_candidates(
             X, ctx, CANDIDATE_FEATURE_COLUMNS, score_method,
@@ -262,7 +262,7 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
         xgboost_recommended = xgboost_survival.select_xgboost_recommended(xgboost_results, CANDIDATE_FEATURE_COLUMNS)
         per_transform_best["xgboost"] = xgboost_recommended
         print(f"    Best for xgboost (1-SE + fewest-features rule): subset={xgboost_recommended.subset}, "
-              f"score={xgboost_recommended.score:.4f}")
+              f"score={xgboost_recommended.score:.4f}, reg_lambda={xgboost_recommended.reg_lambda}")
     except xgboost_survival.XgboostSearchBudgetExceeded as e:
         print(f"  WARNING: skipping xgboost method for side {right}: {e}")
 
@@ -293,9 +293,10 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
         columns = logistic_survival.columns_for_subset(best.subset)
         k_grid = logistic_survival.build_k_grid()
         X_rep, y_rep, w_rep, _ = logistic_survival.replicate_for_training(X, ctx, best.subset, k_grid)
-        model = xgboost_survival.fit_xgboost(X_rep, y_rep, w_rep, columns)
+        final_params = {**xgboost_survival.XGBOOST_PARAMS, "reg_lambda": best.reg_lambda}
+        model = xgboost_survival.fit_xgboost(X_rep, y_rep, w_rep, columns, final_params)
         print(f"  Final xgboost fit: {xgboost_survival.XGBOOST_PARAMS['n_estimators']} trees, "
-              f"max_depth={xgboost_survival.XGBOOST_PARAMS['max_depth']}")
+              f"max_depth={xgboost_survival.XGBOOST_PARAMS['max_depth']}, reg_lambda={best.reg_lambda}")
 
         classifier = xgboost_survival.XgboostSurvivalClassifier(model, best.subset, columns)
     else:
@@ -366,7 +367,8 @@ def print_selection_report(right: str, report: dict) -> None:
                   f"log_k_coef={candidate.log_k_coef:.4f} (sign={'+' if candidate.log_k_coef > 0 else '-'}), "
                   f"1/coef(log_k)={1.0 / candidate.log_k_coef:.4f}, max|coef|={candidate.max_abs_coef:.4f}")
         elif transform_name == "xgboost":
-            print(f"      xgboost: subset={candidate.subset}, score={candidate.score:.4f}")
+            print(f"      xgboost: subset={candidate.subset}, score={candidate.score:.4f}, "
+                  f"reg_lambda={candidate.reg_lambda}")
         else:
             print(f"      {transform_name}: distribution={candidate.distribution}, subset={candidate.subset}, "
                   f"score={candidate.score:.4f}")

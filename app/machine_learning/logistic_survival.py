@@ -347,7 +347,6 @@ def search_logistic_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names
     """
     groups = ctx[GROUP_COLUMN]
     n_splits = max(2, min(cv, groups.nunique()))
-    print(f"    Number of trade days: {groups.nunique()}, number of samples: {X.shape[0]}")
     gkf = GroupKFold(n_splits=n_splits, shuffle=True, random_state=CV_RANDOM_STATE)
     fold_splits = list(gkf.split(np.zeros(len(X)), groups=groups))
 
