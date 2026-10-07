@@ -54,7 +54,7 @@ from sklearn.linear_model import LinearRegression
 
 from . import logistic_survival, pre_processing, survival_scoring, xgboost_survival
 from .best_subset import (
-    SCORE_METHODS, DEFAULT_SCORE_METHOD_NAME, ScoreMethod,
+    SCORE_METHODS, DEFAULT_SCORE_METHOD_NAME, SEARCH_TIME_BUDGET_SEC, ScoreMethod,
     best_subset_for_target, count_within_one_se, search_best_subset_with_distribution,
     standard_error_from_fold_scores,
 )
@@ -66,7 +66,6 @@ from .regress_max_ask import (
 import pandas as pd
 
 MODEL_PATH = "machine_learning/model/best_probability_model.pkl"
-
 
 def _print_days_above_stop(subset: pd.DataFrame) -> None:
     """Count of distinct days (GROUP_COLUMN) with at least one row whose
@@ -207,64 +206,57 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
     # candidates are just more CandidateResult objects pooled into the same
     # all_candidates list the min()/SE/count-within-1SE code below already
     # operates on, so that code needs no changes to accommodate it.
-    logistic_extrapolation_fraction = None
+    print(f"  Transform = logistic")
+    logistic_results = logistic_survival.search_logistic_candidates(
+        X, ctx, CANDIDATE_FEATURE_COLUMNS, score_method,
+    )
+    all_candidates.extend(logistic_results)
+    logistic_recommended = logistic_survival.select_logistic_recommended(logistic_results, CANDIDATE_FEATURE_COLUMNS)
+    per_transform_best["logistic"] = logistic_recommended
+    print(f"    Best for logistic (1-SE + fewest-features rule): subset={logistic_recommended.subset}, "
+          f"score={logistic_recommended.score:.4f}, log_k_coef={logistic_recommended.log_k_coef:.4f}, "
+          f"max|coef|={logistic_recommended.max_abs_coef:.4f}, C={logistic_recommended.logistic_c}")
+
+    logistic_extrapolation_fraction = logistic_survival.extrapolation_fraction(ctx, logistic_survival.build_k_grid())
+    print(f"    Out-of-grid extrapolation fraction (evaluated trades whose log(stop/credit) falls "
+          f"outside the training grid): {logistic_extrapolation_fraction:.3f}")
+
+    # Diagnostic: a linear regression on log(max_ask/credit) with normal
+    # residuals is algebraically a probit with log_k as a feature, where
+    # the log_k coefficient is 1/s. Both estimate the same spread by
+    # different routes; if they disagree wildly, one of the two is
+    # misspecified.
     logistic_spread_comparison = None
-    try:
-        print(f"  Transform = logistic")
-        logistic_results = logistic_survival.search_logistic_candidates(
-            X, ctx, CANDIDATE_FEATURE_COLUMNS, score_method,
-        )
-        all_candidates.extend(logistic_results)
-        logistic_recommended = logistic_survival.select_logistic_recommended(logistic_results, CANDIDATE_FEATURE_COLUMNS)
-        per_transform_best["logistic"] = logistic_recommended
-        print(f"    Best for logistic (1-SE + fewest-features rule): subset={logistic_recommended.subset}, "
-              f"score={logistic_recommended.score:.4f}, log_k_coef={logistic_recommended.log_k_coef:.4f}, "
-              f"max|coef|={logistic_recommended.max_abs_coef:.4f}, C={logistic_recommended.logistic_c}")
-
-        logistic_extrapolation_fraction = logistic_survival.extrapolation_fraction(ctx, logistic_survival.build_k_grid())
-        print(f"    Out-of-grid extrapolation fraction (evaluated trades whose log(stop/credit) falls "
-              f"outside the training grid): {logistic_extrapolation_fraction:.3f}")
-
-        # Diagnostic: a linear regression on log(max_ask/credit) with normal
-        # residuals is algebraically a probit with log_k as a feature, where
-        # the log_k coefficient is 1/s. Both estimate the same spread by
-        # different routes; if they disagree wildly, one of the two is
-        # misspecified.
-        log_ratio_normal_candidates = [c for c in all_candidates
-                                        if c.transform_name == "log_ratio" and c.distribution == "normal"]
-        if log_ratio_normal_candidates:
-            best_lrn = min(log_ratio_normal_candidates, key=lambda c: c.score)
-            lrn_transform = TRANSFORMS["log_ratio"]
-            lrn_extra_col = lrn_transform["extra_column"]
-            lrn_extra_arr = ctx[lrn_extra_col].to_numpy() if lrn_extra_col is not None else None
-            lrn_y = pd.Series(lrn_transform["forward"](ctx[TARGET_COLUMN].to_numpy(), lrn_extra_arr), index=X.index)
-            lrn_model = LinearRegression().fit(X[best_lrn.subset], lrn_y)
-            lrn_residuals = lrn_y.to_numpy() - lrn_model.predict(X[best_lrn.subset])
-            lrn_std = float(np.std(lrn_residuals, ddof=1)) if len(lrn_residuals) > 1 else float("nan")
-            inv_log_k_coef = 1.0 / logistic_recommended.log_k_coef
-            print(f"    Spread comparison: 1/coef(log_k) [logistic] = {inv_log_k_coef:.4f} vs "
-                  f"residual std [log_ratio_normal, subset={best_lrn.subset}] = {lrn_std:.4f}")
-            logistic_spread_comparison = {"inv_log_k_coef": inv_log_k_coef, "log_ratio_normal_residual_std": lrn_std}
-    except logistic_survival.LogisticSearchBudgetExceeded as e:
-        print(f"  WARNING: skipping logistic method for side {right}: {e}")
+    log_ratio_normal_candidates = [c for c in all_candidates
+                                    if c.transform_name == "log_ratio" and c.distribution == "normal"]
+    if log_ratio_normal_candidates:
+        best_lrn = min(log_ratio_normal_candidates, key=lambda c: c.score)
+        lrn_transform = TRANSFORMS["log_ratio"]
+        lrn_extra_col = lrn_transform["extra_column"]
+        lrn_extra_arr = ctx[lrn_extra_col].to_numpy() if lrn_extra_col is not None else None
+        lrn_y = pd.Series(lrn_transform["forward"](ctx[TARGET_COLUMN].to_numpy(), lrn_extra_arr), index=X.index)
+        lrn_model = LinearRegression().fit(X[best_lrn.subset], lrn_y)
+        lrn_residuals = lrn_y.to_numpy() - lrn_model.predict(X[best_lrn.subset])
+        lrn_std = float(np.std(lrn_residuals, ddof=1)) if len(lrn_residuals) > 1 else float("nan")
+        inv_log_k_coef = 1.0 / logistic_recommended.log_k_coef
+        print(f"    Spread comparison: 1/coef(log_k) [logistic] = {inv_log_k_coef:.4f} vs "
+              f"residual std [log_ratio_normal, subset={best_lrn.subset}] = {lrn_std:.4f}")
+        logistic_spread_comparison = {"inv_log_k_coef": inv_log_k_coef, "log_ratio_normal_residual_std": lrn_std}
 
     # XGBoost: an eighth method, built on the exact same k-grid replication
     # scaffolding as logistic (see xgboost_survival.py) and searched over the
     # same CANDIDATE_FEATURE_COLUMNS -- "same features as logistic" by
     # construction, not by convention. Its candidates are more
     # CandidateResult objects pooled into the same all_candidates list.
-    try:
-        print(f"  Transform = xgboost")
-        xgboost_results = xgboost_survival.search_xgboost_candidates(
-            X, ctx, CANDIDATE_FEATURE_COLUMNS, score_method,
-        )
-        all_candidates.extend(xgboost_results)
-        xgboost_recommended = xgboost_survival.select_xgboost_recommended(xgboost_results, CANDIDATE_FEATURE_COLUMNS)
-        per_transform_best["xgboost"] = xgboost_recommended
-        print(f"    Best for xgboost (1-SE + fewest-features rule): subset={xgboost_recommended.subset}, "
-              f"score={xgboost_recommended.score:.4f}, reg_lambda={xgboost_recommended.reg_lambda}")
-    except xgboost_survival.XgboostSearchBudgetExceeded as e:
-        print(f"  WARNING: skipping xgboost method for side {right}: {e}")
+    print(f"  Transform = xgboost")
+    xgboost_results = xgboost_survival.search_xgboost_candidates(
+        X, ctx, CANDIDATE_FEATURE_COLUMNS, score_method,
+    )
+    all_candidates.extend(xgboost_results)
+    xgboost_recommended = xgboost_survival.select_xgboost_recommended(xgboost_results, CANDIDATE_FEATURE_COLUMNS)
+    per_transform_best["xgboost"] = xgboost_recommended
+    print(f"    Best for xgboost (1-SE + fewest-features rule): subset={xgboost_recommended.subset}, "
+          f"score={xgboost_recommended.score:.4f}, reg_lambda={xgboost_recommended.reg_lambda}")
 
     best = min(all_candidates, key=lambda c: c.score)
     se = standard_error_from_fold_scores(best.fold_scores)

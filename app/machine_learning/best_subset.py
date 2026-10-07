@@ -141,6 +141,13 @@ DEFAULT_SCORE_METHOD_NAME = "weighted_logloss"
 # improve on the best score seen so far.
 MAX_STALE_SIZES = 4
 
+# Shared wall-clock search budget (seconds) for the logistic and xgboost
+# methods (see logistic_survival.py / xgboost_survival.py). Lives here,
+# rather than in select_probability_model.py, because both of those modules
+# need it and select_probability_model.py imports both of them -- defining
+# it there would create a circular import.
+SEARCH_TIME_BUDGET_SEC = 7200
+
 
 @dataclass
 class CandidateResult:

@@ -176,11 +176,18 @@ class TestSearchAndClassifier(unittest.TestCase):
         recommended = ls.select_logistic_recommended(self.results, self.features)
         self.assertIn(recommended, self.results)
 
-    def test_budget_guard_raises_when_exceeded(self):
-        with self.assertRaises(ls.LogisticSearchBudgetExceeded):
-            ls.search_logistic_candidates(
-                self.X, self.ctx, self.features, SCORE_METHODS["weighted_logloss"], time_budget_sec=1e-9,
-            )
+    def test_time_budget_stops_search_early_with_partial_results(self):
+        """An effectively-zero budget should still let the search complete
+        at least one full candidate (never cut off mid-fold) and return
+        early with fewer candidates than the exhaustive search, rather than
+        raising or running to completion."""
+        partial_results = ls.search_logistic_candidates(
+            self.X, self.ctx, self.features, SCORE_METHODS["weighted_logloss"], time_budget_sec=1e-9,
+        )
+        self.assertGreaterEqual(len(partial_results), 1)
+        self.assertLess(len(partial_results), len(self.results))
+        for c in partial_results:
+            self.assertEqual(len(c.fold_scores), len(self.results[0].fold_scores))
 
 
 if __name__ == "__main__":

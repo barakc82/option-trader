@@ -36,7 +36,7 @@ import pandas as pd
 from sklearn.model_selection import GroupKFold
 from xgboost import XGBClassifier
 
-from .best_subset import MAX_STALE_SIZES, CandidateResult, ScoreMethod
+from .best_subset import MAX_STALE_SIZES, SEARCH_TIME_BUDGET_SEC, CandidateResult, ScoreMethod
 from .logistic_survival import (
     LOG_K_COLUMN, build_k_grid, build_predict_frame, columns_for_subset,
     replicate_for_training, select_logistic_recommended, trade_weight,
@@ -51,8 +51,8 @@ TRANSFORM_NAME = "xgboost"
 # --- config -----------------------------------------------------------------
 # Deliberately small trees/few rounds: this is fit 2**p - 1 times per fold
 # (best-subset search), so per-fit cost matters far more here than it would
-# for a single production fit. Raise these only after checking the search
-# still finishes inside XGBOOST_SEARCH_TIME_BUDGET_SEC.
+# for a single production fit. Raising these just means fewer candidates fit
+# inside XGBOOST_SEARCH_TIME_BUDGET_SEC before the search cuts itself off.
 XGBOOST_PARAMS = dict(
     n_estimators=100,
     max_depth=3,
@@ -70,22 +70,17 @@ XGBOOST_PARAMS = dict(
 # searches the residual distribution alongside the subset -- so the L2
 # leaf-weight penalty in XGBOOST_PARAMS above is only the default used for
 # cost calibration, not the value every candidate is fit with.
-REG_LAMBDA_GRID = [0.1, 0.25, 0.28]
+REG_LAMBDA_GRID = [0.0001, 0.001, 0.01, 0.1]
 
 # Best-subset search over p non-log_k features is 2**p - 1 subsets, each
 # fitted n_folds times on n_train_trades * n_grid rows -- same shape of cost
 # as logistic_survival's search, just a heavier per-fit cost (boosted trees
-# vs. a single closed-form-ish logistic fit). Timed via one calibration fit
-# before the real search starts; if the projected total exceeds this, the
-# search raises instead of silently running for hours.
-XGBOOST_SEARCH_TIME_BUDGET_SEC = 28800.0
-
-
-class XgboostSearchBudgetExceeded(RuntimeError):
-    """Raised by estimate_and_check_cost when the projected search runtime
-    exceeds XGBOOST_SEARCH_TIME_BUDGET_SEC. Callers should catch this
-    specifically and skip the xgboost method for this side rather than
-    aborting the whole run -- the other methods' results are still valid."""
+# vs. a single closed-form-ish logistic fit). search_xgboost_candidates
+# enforces this as a running wall-clock deadline: once reached, the search
+# stops early (after finishing whatever candidate it was mid-evaluation of)
+# and returns the candidates collected so far, rather than running for hours
+# or refusing to run at all.
+XGBOOST_SEARCH_TIME_BUDGET_SEC = SEARCH_TIME_BUDGET_SEC
 
 
 # ---------------------------------------------------------------------------
@@ -109,17 +104,18 @@ def fit_xgboost(X_rep: pd.DataFrame, y_rep: np.ndarray, weight_rep: np.ndarray, 
 
 
 # ---------------------------------------------------------------------------
-# Cost guard
+# Cost estimate
 # ---------------------------------------------------------------------------
 
-def estimate_and_check_cost(X: pd.DataFrame, ctx: pd.DataFrame, feature_names: list[str], k_grid: np.ndarray,
-                             fold_splits: list, params: dict = XGBOOST_PARAMS,
-                             time_budget_sec: float = XGBOOST_SEARCH_TIME_BUDGET_SEC,
-                             reg_lambda_grid: list[float] = REG_LAMBDA_GRID) -> float:
+def estimate_cost(X: pd.DataFrame, ctx: pd.DataFrame, feature_names: list[str], k_grid: np.ndarray,
+                   fold_splits: list, params: dict = XGBOOST_PARAMS,
+                   time_budget_sec: float = XGBOOST_SEARCH_TIME_BUDGET_SEC,
+                   reg_lambda_grid: list[float] = REG_LAMBDA_GRID) -> float:
     """Times ONE calibration fit (full feature set, fold 0's training split)
-    and projects the total search time. Prints the estimate either way;
-    raises XgboostSearchBudgetExceeded (not a silent proceed) if it exceeds
-    the budget."""
+    and projects the total search time, purely for visibility --
+    search_xgboost_candidates itself enforces time_budget_sec as a running
+    wall-clock deadline (see there), stopping early and returning whatever
+    candidates were evaluated by then rather than refusing to run at all."""
     n_subsets = 2 ** len(feature_names) - 1
     n_total_fits = n_subsets * len(fold_splits) * len(reg_lambda_grid)
 
@@ -137,16 +133,7 @@ def estimate_and_check_cost(X: pd.DataFrame, ctx: pd.DataFrame, feature_names: l
     print(f"    xgboost best-subset search: {n_subsets} subsets x {len(fold_splits)} folds x "
           f"{len(reg_lambda_grid)} reg_lambda values = {n_total_fits} fits; calibration fit took "
           f"{calibration_fit_seconds:.3f}s -> estimated total {estimated_total_sec / 60:.1f} min "
-          f"(budget {time_budget_sec / 60:.1f} min)")
-
-    if estimated_total_sec > time_budget_sec:
-        raise XgboostSearchBudgetExceeded(
-            f"xgboost best-subset search estimated at {estimated_total_sec / 60:.1f} min, exceeding the "
-            f"{time_budget_sec / 60:.1f} min budget (XGBOOST_SEARCH_TIME_BUDGET_SEC). Not running silently "
-            f"for hours. Options: reduce XGBOOST_PARAMS['n_estimators']/['max_depth'], cap the max subset "
-            f"size searched (e.g. only sizes 1..6), or switch to forward stepwise selection instead of "
-            f"exhaustive best-subset. Raise the budget explicitly if you actually want the full search to run."
-        )
+          f"(budget {time_budget_sec / 60:.1f} min, enforced as a running deadline on the search itself)")
     return estimated_total_sec
 
 
@@ -177,16 +164,18 @@ def search_xgboost_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names:
 
     k_grid = build_k_grid()
 
-    estimate_and_check_cost(X, ctx, feature_names, k_grid, fold_splits, params, time_budget_sec, reg_lambda_grid)
+    estimate_cost(X, ctx, feature_names, k_grid, fold_splits, params, time_budget_sec, reg_lambda_grid)
 
     y_survived_trades = compute_survival_label(ctx)
     weight_trades = trade_weight(ctx)
 
+    deadline = time.time() + time_budget_sec
     results: list[CandidateResult] = []
     best_score = np.inf
     best_subset = []
     best_reg_lambda = None
     stale_sizes = 0
+    stop_search = False
     for size in range(1, len(feature_names) + 1):
         print(f"    Working on size {size}")
         improved_this_size = False
@@ -222,6 +211,20 @@ def search_xgboost_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names:
                     best_subset = subset
                     best_reg_lambda = reg_lambda
                     improved_this_size = True
+
+                # Checked only after a candidate's full CV is complete, so every
+                # CandidateResult in `results` is always fully evaluated -- never
+                # cut off mid-fold. Guarantees at least one candidate is returned
+                # even if time_budget_sec is smaller than a single candidate's cost.
+                if time.time() >= deadline:
+                    stop_search = True
+                    break
+            if stop_search:
+                break
+        if stop_search:
+            print(f"    Time budget of {time_budget_sec / 60:.1f} min reached after {len(results)} "
+                  f"candidate(s); stopping the search early and using the results collected so far.")
+            break
 
         if improved_this_size:
             stale_sizes = 0

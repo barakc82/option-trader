@@ -35,6 +35,7 @@ from __future__ import annotations
 import itertools
 import logging
 import random
+import sys
 import time
 from dataclasses import dataclass
 
@@ -44,7 +45,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GroupKFold
 from sklearn.preprocessing import StandardScaler
 
-from .best_subset import MAX_STALE_SIZES, CandidateResult, ScoreMethod
+from .best_subset import MAX_STALE_SIZES, SEARCH_TIME_BUDGET_SEC, CandidateResult, ScoreMethod
 from .regress_max_ask import CV_FOLDS, CV_RANDOM_STATE, GROUP_COLUMN
 from .survival_scoring import CREDIT_COLUMN, STOP_COLUMN, TARGET_COLUMN, clip_probabilities, compute_survival_label
 
@@ -62,13 +63,15 @@ LOGISTIC_MAX_ITER = 1000
 # search_logistic_candidates), the same way xgboost_survival.py searches
 # reg_lambda alongside its subset -- so LOGISTIC_C above is only the default
 # used for cost calibration, not the value every candidate is fit with.
-LOGISTIC_C_GRID = [0.1, 1.0, 10.0]
+LOGISTIC_C_GRID = [0.03, 0.05, 10000000.0, sys.float_info.max]
 
 # Best-subset search over p non-log_k features is 2**p - 1 subsets, each
-# fitted n_folds times on n_train_trades * n_grid rows. Timed via one
-# calibration fit before the real search starts; if the projected total
-# exceeds this, the search raises instead of silently running for hours.
-LOGISTIC_SEARCH_TIME_BUDGET_SEC = 3600.0
+# fitted n_folds times on n_train_trades * n_grid rows. search_logistic_candidates
+# enforces this as a running wall-clock deadline: once reached, the search
+# stops early (after finishing whatever candidate it was mid-evaluation of)
+# and returns the candidates collected so far, rather than running for hours
+# or refusing to run at all.
+LOGISTIC_SEARCH_TIME_BUDGET_SEC = SEARCH_TIME_BUDGET_SEC
 
 # Optional, off by default -- see module docstring section in the change
 # request. Both are deliberately simplified from the literal ask (a real
@@ -84,13 +87,6 @@ class LogisticFitError(ValueError):
     non-finite, or a non-positive log_k coefficient. Never caught to
     silently fall back to returning probabilities anyway; see
     _assert_valid_coefficients."""
-
-
-class LogisticSearchBudgetExceeded(RuntimeError):
-    """Raised by estimate_and_check_cost when the projected search runtime
-    exceeds LOGISTIC_SEARCH_TIME_BUDGET_SEC. Callers should catch this
-    specifically and skip the logistic method for this side rather than
-    aborting the whole run -- the other methods' results are still valid."""
 
 
 # ---------------------------------------------------------------------------
@@ -292,18 +288,18 @@ def fit_logistic(X_rep: pd.DataFrame, y_rep: np.ndarray, weight_rep: np.ndarray,
 
 
 # ---------------------------------------------------------------------------
-# Cost guard
+# Cost estimate
 # ---------------------------------------------------------------------------
 
-def estimate_and_check_cost(X: pd.DataFrame, ctx: pd.DataFrame, feature_names: list[str], k_grid: np.ndarray,
-                             fold_splits: list, C: float,
-                             time_budget_sec: float = LOGISTIC_SEARCH_TIME_BUDGET_SEC,
-                             C_grid: list[float] = LOGISTIC_C_GRID) -> float:
+def estimate_cost(X: pd.DataFrame, ctx: pd.DataFrame, feature_names: list[str], k_grid: np.ndarray,
+                   fold_splits: list, C: float,
+                   time_budget_sec: float = LOGISTIC_SEARCH_TIME_BUDGET_SEC,
+                   C_grid: list[float] = LOGISTIC_C_GRID) -> float:
     """Times ONE calibration fit (full feature set, fold 0's training
-    split) and projects the total search time. Prints the estimate either
-    way; raises LogisticSearchBudgetExceeded (not a silent proceed) if it
-    exceeds the budget, naming concrete alternatives rather than just
-    failing."""
+    split) and projects the total search time, purely for visibility --
+    search_logistic_candidates itself enforces time_budget_sec as a running
+    wall-clock deadline (see there), stopping early and returning whatever
+    candidates were evaluated by then rather than refusing to run at all."""
     n_subsets = 2 ** len(feature_names) - 1
     n_total_fits = n_subsets * len(fold_splits) * len(C_grid)
 
@@ -322,16 +318,7 @@ def estimate_and_check_cost(X: pd.DataFrame, ctx: pd.DataFrame, feature_names: l
     print(f"    logistic best-subset search: {n_subsets} subsets x {len(fold_splits)} folds x "
           f"{len(C_grid)} C values = {n_total_fits} fits; calibration fit took "
           f"{calibration_fit_seconds:.3f}s -> estimated total {estimated_total_sec / 60:.1f} min "
-          f"(budget {time_budget_sec / 60:.1f} min)")
-
-    if estimated_total_sec > time_budget_sec:
-        raise LogisticSearchBudgetExceeded(
-            f"logistic best-subset search estimated at {estimated_total_sec / 60:.1f} min, exceeding the "
-            f"{time_budget_sec / 60:.1f} min budget (LOGISTIC_SEARCH_TIME_BUDGET_SEC). Not running silently "
-            f"for hours. Options: cap the max subset size searched (e.g. only sizes 1..6), or switch to "
-            f"forward stepwise selection instead of exhaustive best-subset. Raise the budget explicitly if "
-            f"you actually want the full search to run."
-        )
+          f"(budget {time_budget_sec / 60:.1f} min, enforced as a running deadline on the search itself)")
     return estimated_total_sec
 
 
@@ -363,16 +350,18 @@ def search_logistic_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names
     k_grid = build_k_grid(k_grid_config)
     searchable_features = _feature_columns(feature_names)
 
-    estimate_and_check_cost(X, ctx, searchable_features, k_grid, fold_splits, C, time_budget_sec, C_grid)
+    estimate_cost(X, ctx, searchable_features, k_grid, fold_splits, C, time_budget_sec, C_grid)
 
     y_survived_trades = compute_survival_label(ctx)
     weight_trades = trade_weight(ctx)
 
+    deadline = time.time() + time_budget_sec
     results: list[CandidateResult] = []
     best_score = np.inf
     best_subset = []
     best_C = None
     stale_sizes = 0
+    stop_search = False
     for size in range(1, len(searchable_features) + 1):
         print(f"    Working on size {size}")
         improved_this_size = False
@@ -415,6 +404,20 @@ def search_logistic_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names
                     best_subset = subset
                     best_C = candidate_C
                     improved_this_size = True
+
+                # Checked only after a candidate's full CV is complete, so every
+                # CandidateResult in `results` is always fully evaluated -- never
+                # cut off mid-fold. Guarantees at least one candidate is returned
+                # even if time_budget_sec is smaller than a single candidate's cost.
+                if time.time() >= deadline:
+                    stop_search = True
+                    break
+            if stop_search:
+                break
+        if stop_search:
+            print(f"    Time budget of {time_budget_sec / 60:.1f} min reached after {len(results)} "
+                  f"candidate(s); stopping the search early and using the results collected so far.")
+            break
 
         if improved_this_size:
             stale_sizes = 0
