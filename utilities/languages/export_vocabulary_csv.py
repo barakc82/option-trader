@@ -64,8 +64,8 @@ def fetch_rows(spreadsheet_id) -> list[list[str]]:
 
 
 def main():
-    #spreadsheet_id = RUSSIAN_SPREADSHEET_ID
-    spreadsheet_id = SPANISH_SPREADSHEET_ID
+    spreadsheet_id = RUSSIAN_SPREADSHEET_ID
+    #spreadsheet_id = SPANISH_SPREADSHEET_ID
     rows = fetch_rows(spreadsheet_id)
 
     output_pairs = []

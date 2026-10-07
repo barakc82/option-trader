@@ -221,7 +221,7 @@ class OptionSampler:
 
                 now_nyc = datetime.now(new_york_timezone)
 
-                if is_after_hours():
+                if is_after_hours() or True:
                     logger.info("Starting storing the expired samples...")
                     for sample in list(self.collected_samples):
                         expiry_date = datetime.strptime(sample.expiry, '%Y%m%d').date()

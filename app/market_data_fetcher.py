@@ -308,6 +308,7 @@ class MarketDataFetcher:
         if option_start_time.time() < AFTER_HOURS_END_TIME:
             minutes_to_expiration = max(minutes_to_expiration - NIGHT_BREAK_MINUTES, 0)
         duration_seconds = max(int(minutes_to_expiration * 60), 60)
+        logger.info(f"Finding max ask for {get_option_name(option)} with duration of {duration_seconds} seconds")
 
         # Below 5 minutes, a '5 mins' bar request would need padding out beyond the real
         # duration just to get a single bar, so use 1-min bars instead.
@@ -321,7 +322,7 @@ class MarketDataFetcher:
         request_end = day_end
         while remaining_seconds > 0:
             chunk_seconds = max(min(remaining_seconds, 28800), min_chunk_seconds)
-            logger.info(f"barak: calling reqHistoricalDataAsync with {chunk_seconds} seconds, endDateTime {request_end}")
+            logger.info(f"barak: calling reqHistoricalDataAsync with {chunk_seconds} seconds, endDateTime {request_end}, for {get_option_name(option)}")
             chunk_bars = await self.ib.reqHistoricalDataAsync(
                 option,
                 endDateTime=request_end,

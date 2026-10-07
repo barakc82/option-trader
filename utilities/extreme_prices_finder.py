@@ -17,8 +17,8 @@ history_days = int(barak_sheet.get(range_name=f"V51")[0][0])
 ib = IB()
 ib.connect('127.0.0.1', 7496, clientId=11)
 
-security_names = ['VT', 'AVUV', 'AVDV', 'VGT', 'UPRO', 'SPYU', 'SP5Y', 'SCHD', 'SCHY', 'SPHD', 'VIG', 'VIGI', 'ACWD', 'GBTC', 'SPYU', 'INTU', 'MA', 'SPGI', 'AXP', 'META', 'GE', 'MCO', 'ASML', 'OXY', 'GOOG']
-row_indices = [177, 178, 179, None, None, None, None, 182, 183, 184, 185, 186, None, None, None, 189, 195, 196, 198, 199, 200, 201, 203, 204, 205]
+security_names = ['VT', 'AVUV', 'AVDV', 'VGT', 'UPRO', 'SPYU', 'SP5Y', 'SCHD', 'SCHY', 'SPHD', 'VIG', 'VIGI', 'ACWD', 'GBTC', 'SPYU', 'INTU', 'MA', 'SPGI', 'V', 'AXP', 'META', 'GE', 'MCO', 'ASML', 'OXY', 'GOOG']
+row_indices = [177, 178, 179, None, None, None, None, 182, 183, 184, 185, 186, None, None, None, 189, 195, 196, 197, 198, 199, 200, 201, 203, 204, 205]
 
 history_end_date = start_date - timedelta(days=1)
 print(f"History end date: {history_end_date}")
