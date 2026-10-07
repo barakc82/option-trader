@@ -4,7 +4,7 @@ import time
 from utilities.utils import get_option_name
 from utilities.ib_utils import (extract_ask, get_delta, get_delta_for_sell, get_individual_deltas, get_model_gamma,
                                  get_model_vega, get_model_theta, get_minutes_to_expiration, get_distance_to_strike_pct,
-                                 calculate_expected_profit)
+                                 get_model_iv, calculate_expected_profit)
 from .market_data_fetcher import MarketDataFetcher
 from .max_loss_calculator import MaxLossCalculator
 from .predictor import Predictor
@@ -134,6 +134,7 @@ class StrikeFinder:
                 theta = get_model_theta(option.ticker)
                 minutes_to_expiration = get_minutes_to_expiration(option)
                 distance_to_strike_pct = get_distance_to_strike_pct(option, self.market_data_fetcher)
+                contract_iv = get_model_iv(option.ticker)
             except (TypeError, ValueError) as e:
                 logger.warning(f"Skipping {get_option_name(option)} in expected-profit scan: {e}")
                 continue
@@ -141,7 +142,7 @@ class StrikeFinder:
             out_of_the_money_probability = self.predictor.predict_out_of_the_money_probability(
                 option, right, target_delta, estimated_sell_price, stop_loss_per_option,
                 bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
-                minutes_to_expiration, atm_iv, distance_to_strike_pct,
+                minutes_to_expiration, atm_iv, contract_iv, distance_to_strike_pct,
             )
             if out_of_the_money_probability is None:
                 continue

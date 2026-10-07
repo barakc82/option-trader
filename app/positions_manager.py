@@ -86,6 +86,7 @@ class PositionsManager:
                 minutes_to_expiration_raw = pos.get('minutes_to_expiration')
                 minutes_to_expiration = int(minutes_to_expiration_raw) if minutes_to_expiration_raw not in (None, '') else None
                 distance_to_strike_pct = as_float(pos.get('distance_to_strike_pct'))
+                distance_to_stop_pct = as_float(pos.get('distance_to_stop_pct'))
                 atm_iv = as_float(pos.get('atm_iv'))
                 contract_iv = as_float(pos.get('contract_iv'))
 
@@ -97,7 +98,7 @@ class PositionsManager:
                     out_of_the_money_probability = self.predictor.predict_out_of_the_money_probability(
                         option_stub, right, target_delta, estimated_sell_price, stop_loss_per_option,
                         bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
-                        minutes_to_expiration, atm_iv, distance_to_strike_pct,
+                        minutes_to_expiration, atm_iv, contract_iv, distance_to_strike_pct,
                     )
                     expected_profit = calculate_expected_profit(estimated_sell_price, stop_loss_per_option, out_of_the_money_probability)
 
@@ -119,6 +120,7 @@ class PositionsManager:
                     theta=theta,
                     minutes_to_expiration=minutes_to_expiration,
                     distance_to_strike_pct=distance_to_strike_pct,
+                    distance_to_stop_pct=distance_to_stop_pct,
                     atm_iv=atm_iv,
                     contract_iv=contract_iv,
                     out_of_the_money_probability=out_of_the_money_probability,
@@ -229,68 +231,8 @@ class PositionsManager:
                     'estimated_sell_price',
                     'target_delta', 'bid_delta', 'ask_delta', 'last_delta', 'model_delta', 'gamma',
                     'vega', 'theta',
-                    'minutes_to_expiration', 'atm_iv', 'distance_to_strike_pct',
-                    'max_ask',
-                ])
-            writer.writerow([
-                datetime.now().isoformat(), position_initial_state.is_executed,
-                position_initial_state.right, position_initial_state.strike,
-                position_initial_state.expiry,
-                position_initial_state.estimated_sell_price,
-                position_initial_state.target_delta, position_initial_state.bid_delta,
-                position_initial_state.ask_delta, position_initial_state.last_delta,
-                position_initial_state.model_delta, position_initial_state.gamma,
-                position_initial_state.vega, position_initial_state.theta,
-                position_initial_state.minutes_to_expiration,
-                position_initial_state.atm_iv, position_initial_state.distance_to_strike_pct,
-                position_initial_state.max_ask
-            ])
-
-        self._log_close_event_with_stop_loss(position_initial_state)
-
-    def _log_close_event_with_stop_loss(self, position_initial_state: PositionInitialState):
-        csv_path = 'cache/close_events_with_stop_loss.csv'
-        write_header = not os.path.exists(csv_path)
-        with open(csv_path, 'a', newline='') as f:
-            writer = csv.writer(f)
-            if write_header:
-                writer.writerow([
-                    'datetime', 'is_executed', 'right', 'strike', 'expiration',
-                    'estimated_sell_price',
-                    'target_delta', 'bid_delta', 'ask_delta', 'last_delta', 'model_delta', 'gamma',
-                    'vega', 'theta',
-                    'minutes_to_expiration', 'atm_iv', 'distance_to_strike_pct',
-                    'max_ask', 'stop_loss',
-                ])
-            writer.writerow([
-                datetime.now().isoformat(), position_initial_state.is_executed,
-                position_initial_state.right, position_initial_state.strike,
-                position_initial_state.expiry,
-                position_initial_state.estimated_sell_price,
-                position_initial_state.target_delta, position_initial_state.bid_delta,
-                position_initial_state.ask_delta, position_initial_state.last_delta,
-                position_initial_state.model_delta, position_initial_state.gamma,
-                position_initial_state.vega, position_initial_state.theta,
-                position_initial_state.minutes_to_expiration,
-                position_initial_state.atm_iv, position_initial_state.distance_to_strike_pct,
-                position_initial_state.max_ask, position_initial_state.stop_loss,
-            ])
-
-            self._log_close_event_with_stop_loss_and_contract_iv(position_initial_state)
-
-    def _log_close_event_with_stop_loss_and_contract_iv(self, position_initial_state: PositionInitialState):
-        csv_path = 'cache/close_events_with_stop_loss_and_contract_iv.csv'
-        write_header = not os.path.exists(csv_path)
-        with open(csv_path, 'a', newline='') as f:
-            writer = csv.writer(f)
-            if write_header:
-                writer.writerow([
-                    'datetime', 'is_executed', 'right', 'strike', 'expiration',
-                    'estimated_sell_price',
-                    'target_delta', 'bid_delta', 'ask_delta', 'last_delta', 'model_delta', 'gamma',
-                    'vega', 'theta',
                     'minutes_to_expiration', 'atm_iv', 'contract_iv', 'distance_to_strike_pct',
-                    'max_ask', 'stop_loss',
+                    'distance_to_stop_pct', 'max_ask', 'stop_loss',
                 ])
             writer.writerow([
                 datetime.now().isoformat(), position_initial_state.is_executed,
@@ -304,8 +246,10 @@ class PositionsManager:
                 position_initial_state.minutes_to_expiration,
                 position_initial_state.atm_iv, position_initial_state.contract_iv,
                 position_initial_state.distance_to_strike_pct,
+                position_initial_state.distance_to_stop_pct,
                 position_initial_state.max_ask, position_initial_state.stop_loss,
             ])
+
 
     def add_position_entry(self, position_initial_state: PositionInitialState, trade):
         c = trade.contract

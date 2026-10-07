@@ -82,6 +82,7 @@ class OptionSampler:
                 minutes_to_expiration_raw = sample.get('minutes_to_expiration')
                 minutes_to_expiration = int(minutes_to_expiration_raw) if minutes_to_expiration_raw not in (None, '') else None
                 distance_to_strike_pct = as_float(sample.get('distance_to_strike_pct'))
+                distance_to_stop_pct = as_float(sample.get('distance_to_stop_pct'))
                 atm_iv = as_float(sample.get('atm_iv'))
                 contract_iv = as_float(sample.get('contract_iv'))
                 max_ask = as_float(sample.get('max_ask')) or 0.0
@@ -94,7 +95,7 @@ class OptionSampler:
                     out_of_the_money_probability = self.predictor.predict_out_of_the_money_probability(
                         option_stub, right, target_delta, estimated_sell_price, stop_loss_per_option,
                         bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
-                        minutes_to_expiration, atm_iv, distance_to_strike_pct,
+                        minutes_to_expiration, atm_iv, contract_iv, distance_to_strike_pct,
                     )
                     expected_profit = calculate_expected_profit(estimated_sell_price, stop_loss_per_option, out_of_the_money_probability)
 
@@ -109,6 +110,7 @@ class OptionSampler:
                     gamma=gamma, vega=vega, theta=theta,
                     minutes_to_expiration=minutes_to_expiration,
                     distance_to_strike_pct=distance_to_strike_pct,
+                    distance_to_stop_pct=distance_to_stop_pct,
                     atm_iv=atm_iv,
                     contract_iv=contract_iv,
                     out_of_the_money_probability=out_of_the_money_probability,
@@ -302,11 +304,13 @@ class OptionSampler:
         minutes_to_expiration = get_minutes_to_expiration(option)
         atm_iv = self.market_data_fetcher.get_cached_spx_implied_volatility(right)
         distance_to_strike_pct = get_distance_to_strike_pct(option, self.market_data_fetcher)
+        distance_to_stop_pct = get_distance_to_stop_pct(option, self.market_data_fetcher, stop_loss)
+        contract_iv = get_model_iv(option.ticker)
 
         out_of_the_money_probability = self.predictor.predict_out_of_the_money_probability(
             option, right, target_delta, estimated_sell_price, stop_loss_per_option,
             bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
-            minutes_to_expiration, atm_iv, distance_to_strike_pct,
+            minutes_to_expiration, atm_iv, contract_iv, distance_to_strike_pct,
         )
         expected_profit = calculate_expected_profit(estimated_sell_price, stop_loss_per_option, out_of_the_money_probability)
 
@@ -321,8 +325,9 @@ class OptionSampler:
             gamma=gamma, vega=vega, theta=theta,
             minutes_to_expiration=minutes_to_expiration,
             atm_iv=atm_iv,
-            contract_iv=get_model_iv(option.ticker),
+            contract_iv=contract_iv,
             distance_to_strike_pct=distance_to_strike_pct,
+            distance_to_stop_pct=distance_to_stop_pct,
             out_of_the_money_probability=out_of_the_money_probability,
             expected_profit=expected_profit,
         )

@@ -59,7 +59,7 @@ class Predictor:
 
     def predict_out_of_the_money_probability(self, option, right, target_delta, estimated_sell_price, stop_loss_per_option,
                                              bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
-                                             minutes_to_expiration, atm_iv, distance_to_strike_pct):
+                                             minutes_to_expiration, atm_iv, contract_iv, distance_to_strike_pct):
         self._load_probability_classifier()
 
         classifier = self.probability_classifier.get(right) if self.probability_classifier else None
@@ -85,6 +85,7 @@ class Predictor:
             "theta": theta,
             "minutes_to_expiration": minutes_to_expiration,
             "atm_iv": atm_iv,
+            "contract_iv": contract_iv,
             "distance_to_strike_pct": distance_to_strike_pct,
         }
         for key in classifier.get_feature_subset():

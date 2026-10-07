@@ -62,6 +62,7 @@ class PositionInitialState:
     atm_iv: float | None = None
     contract_iv: float | None = None
     distance_to_strike_pct: float | None = None
+    distance_to_stop_pct: float | None = None
     is_max_ask_scan_required: bool = False
     out_of_the_money_probability: float | None = None
     expected_profit: float | None = None
@@ -274,6 +275,15 @@ def calculate_distance_to_strike_pct(option, spot_price):
     return distance / spot_price * 100
 
 
+def calculate_distance_to_stop_pct(option, spot_price, stop_loss):
+    """Same as calculate_distance_to_strike_pct, but measured against stop_loss instead of
+    the option's strike. Positive means spot_price is still on the safe side of stop_loss."""
+    if spot_price == 0:
+        return math.nan
+    distance = spot_price - stop_loss if option.right == 'P' else stop_loss - spot_price
+    return distance / spot_price * 100
+
+
 def get_minutes_to_expiration(option):
     expiry_date = datetime.strptime(option.lastTradeDateOrContractMonth, '%Y%m%d').date()
     expiry_datetime = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
@@ -284,3 +294,9 @@ def get_distance_to_strike_pct(option, market_data_fetcher):
     indices_difference = market_data_fetcher.calculate_spx_es_difference()
     spot_price = market_data_fetcher.get_spx_price() if is_regular_hours() else market_data_fetcher.get_es_price() + indices_difference
     return calculate_distance_to_strike_pct(option, spot_price)
+
+
+def get_distance_to_stop_pct(option, market_data_fetcher, stop_loss):
+    indices_difference = market_data_fetcher.calculate_spx_es_difference()
+    spot_price = market_data_fetcher.get_spx_price() if is_regular_hours() else market_data_fetcher.get_es_price() + indices_difference
+    return calculate_distance_to_stop_pct(option, spot_price, stop_loss)

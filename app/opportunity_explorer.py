@@ -191,11 +191,13 @@ class OpportunityExplorer:
         minutes_to_expiration = get_minutes_to_expiration(call_option)
         atm_iv = self.market_data_fetcher.get_cached_spx_implied_volatility('C')
         distance_to_strike_pct = get_distance_to_strike_pct(call_option, self.market_data_fetcher)
+        distance_to_stop_pct = get_distance_to_stop_pct(call_option, self.market_data_fetcher, stop_loss)
+        contract_iv = get_model_iv(call_option.ticker)
 
         out_of_the_money_probability = self.predictor.predict_out_of_the_money_probability(
             call_option, 'C', target_delta, estimated_sell_price, stop_loss_per_option,
             bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
-            minutes_to_expiration, atm_iv, distance_to_strike_pct,
+            minutes_to_expiration, atm_iv, contract_iv, distance_to_strike_pct,
         )
         expected_profit = calculate_expected_profit(estimated_sell_price, stop_loss_per_option, out_of_the_money_probability)
 
@@ -212,8 +214,9 @@ class OpportunityExplorer:
             vega=vega, theta=theta,
             minutes_to_expiration=minutes_to_expiration,
             atm_iv=atm_iv,
-            contract_iv=get_model_iv(call_option.ticker),
+            contract_iv=contract_iv,
             distance_to_strike_pct=distance_to_strike_pct,
+            distance_to_stop_pct=distance_to_stop_pct,
             out_of_the_money_probability=out_of_the_money_probability,
             expected_profit=expected_profit,
         )
@@ -370,11 +373,13 @@ class OpportunityExplorer:
         minutes_to_expiration = get_minutes_to_expiration(put_option)
         atm_iv = self.market_data_fetcher.get_cached_spx_implied_volatility('P')
         distance_to_strike_pct = get_distance_to_strike_pct(put_option, self.market_data_fetcher)
+        distance_to_stop_pct = get_distance_to_stop_pct(put_option, self.market_data_fetcher, stop_loss)
+        contract_iv = get_model_iv(put_option.ticker)
 
         out_of_the_money_probability = self.predictor.predict_out_of_the_money_probability(
             put_option, 'P', target_delta, estimated_sell_price, stop_loss_per_option,
             bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
-            minutes_to_expiration, atm_iv, distance_to_strike_pct,
+            minutes_to_expiration, atm_iv, contract_iv, distance_to_strike_pct,
         )
         expected_profit = calculate_expected_profit(estimated_sell_price, stop_loss_per_option, out_of_the_money_probability)
 
@@ -391,8 +396,9 @@ class OpportunityExplorer:
             vega=vega, theta=theta,
             minutes_to_expiration=minutes_to_expiration,
             atm_iv=atm_iv,
-            contract_iv=get_model_iv(put_option.ticker),
+            contract_iv=contract_iv,
             distance_to_strike_pct=distance_to_strike_pct,
+            distance_to_stop_pct=distance_to_stop_pct,
             out_of_the_money_probability=out_of_the_money_probability,
             expected_profit=expected_profit,
         )
