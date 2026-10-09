@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_NUMBER_OF_SAMPLES_PER_DAY = 4
 DEFAULT_TARGET_DELTA_TOP_MULTIPLIER = 3
+DEFAULT_RUN_AFTER_HOURS_ONLY = True
 
 
 class OptionSampler:
@@ -44,6 +45,7 @@ class OptionSampler:
 
             self.number_of_samples_per_day = DEFAULT_NUMBER_OF_SAMPLES_PER_DAY
             self.target_delta_top_multiplier = DEFAULT_TARGET_DELTA_TOP_MULTIPLIER
+            self.run_after_hours_only = DEFAULT_RUN_AFTER_HOURS_ONLY
             self.schedule_date = None
             self.sample_times = []
             self.collected_samples = []
@@ -138,6 +140,11 @@ class OptionSampler:
                 if new_target_delta_top_multiplier != self.target_delta_top_multiplier:
                     logger.info(f"OptionSampler: target_delta_top_multiplier changed from {self.target_delta_top_multiplier} to {new_target_delta_top_multiplier}")
                     self.target_delta_top_multiplier = new_target_delta_top_multiplier
+
+                new_run_after_hours_only = config.get("run_after_hours_only", DEFAULT_RUN_AFTER_HOURS_ONLY)
+                if new_run_after_hours_only != self.run_after_hours_only:
+                    logger.info(f"OptionSampler: run_after_hours_only changed from {self.run_after_hours_only} to {new_run_after_hours_only}")
+                    self.run_after_hours_only = new_run_after_hours_only
         except Exception as e:
             logger.error(f"OptionSampler: Error reading config: {e}")
 
@@ -221,7 +228,7 @@ class OptionSampler:
 
                 now_nyc = datetime.now(new_york_timezone)
 
-                if is_after_hours() or True:
+                if is_after_hours() or not self.run_after_hours_only:
                     logger.info("Starting storing the expired samples...")
                     for sample in list(self.collected_samples):
                         expiry_date = datetime.strptime(sample.expiry, '%Y%m%d').date()
