@@ -305,10 +305,16 @@ class MarketDataFetcher:
 
         minutes_to_expiration = sample.minutes_to_expiration or 0
         option_start_time = day_end - timedelta(minutes=minutes_to_expiration)
-        if option_start_time.time() < AFTER_HOURS_END_TIME:
+        # The night break only falls inside [option_start_time, day_end] when the option was
+        # sampled on an earlier calendar day than it expires (e.g. premarket the evening
+        # before) and before that day's own break started. For same-day (0DTE) samples,
+        # option_start_time and day_end share a date and day_end (4pm) is always before
+        # AFTER_HOURS_END_TIME (5pm), so the break never occurs in that window at all.
+        if option_start_time.date() < day_end.date() and option_start_time.time() < AFTER_HOURS_END_TIME:
             minutes_to_expiration = max(minutes_to_expiration - NIGHT_BREAK_MINUTES, 0)
         duration_seconds = max(int(minutes_to_expiration * 60), 60)
         logger.info(f"Finding max ask for {get_option_name(option)} with duration of {duration_seconds} seconds")
+        logger.info(f"barak: sample.minutes_to_expiration = {sample.minutes_to_expiration}")
 
         # Below 5 minutes, a '5 mins' bar request would need padding out beyond the real
         # duration just to get a single bar, so use 1-min bars instead.
