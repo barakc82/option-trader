@@ -63,7 +63,7 @@ LOGISTIC_MAX_ITER = 1000
 # search_logistic_candidates), the same way xgboost_survival.py searches
 # reg_lambda alongside its subset -- so LOGISTIC_C above is only the default
 # used for cost calibration, not the value every candidate is fit with.
-LOGISTIC_C_GRID = [0.03, 0.05, 10000000.0, sys.float_info.max]
+LOGISTIC_C_GRID = [0.01, 0.05, sys.float_info.max]
 
 # Best-subset search over p non-log_k features is 2**p - 1 subsets, each
 # fitted n_folds times on n_train_trades * n_grid rows. search_logistic_candidates

@@ -146,7 +146,7 @@ MAX_STALE_SIZES = 4
 # rather than in select_probability_model.py, because both of those modules
 # need it and select_probability_model.py imports both of them -- defining
 # it there would create a circular import.
-SEARCH_TIME_BUDGET_SEC = 7200
+SEARCH_TIME_BUDGET_SEC = 10800
 
 
 @dataclass
