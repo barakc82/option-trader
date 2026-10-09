@@ -1,5 +1,7 @@
 import asyncio
+import csv
 import math
+import os
 from datetime import datetime, date, timedelta
 
 from utilities.utils import *
@@ -200,6 +202,10 @@ class OpportunityExplorer:
             minutes_to_expiration, atm_iv, contract_iv, distance_to_strike_pct,
         )
         expected_profit = calculate_expected_profit(estimated_sell_price, stop_loss_per_option, out_of_the_money_probability)
+        self._log_sell_opportunity(
+            call_option.strike, call_option.right, call_option.lastTradeDateOrContractMonth,
+            estimated_sell_price, stop_loss, expected_profit,
+        )
 
         position_initial_state = PositionInitialState(
             is_executed=1,
@@ -293,6 +299,21 @@ class OpportunityExplorer:
                     price = 0.15
                 self.last_put_option_price = price
 
+    def _log_sell_opportunity(self, strike, right, expiry, estimated_sell_price, stop_loss, expected_profit):
+        csv_path = f"cache/predictions_{expiry}.csv"
+        write_header = not os.path.exists(csv_path)
+        with open(csv_path, 'a', newline='') as f:
+            writer = csv.writer(f)
+            if write_header:
+                writer.writerow([
+                    'datetime', 'strike', 'right', 'expiration', 'estimated_sell_price',
+                    'stop_loss', 'expected_profit'
+                ])
+            writer.writerow([
+                datetime.now().isoformat(), strike, right, expiry, estimated_sell_price,
+                stop_loss, expected_profit,
+            ])
+
     def try_to_publish_available_cheap_option(self, right):
         strike_finder = StrikeFinder()
         available_cheap_option = strike_finder.find_first_cheap_option(right)
@@ -382,6 +403,10 @@ class OpportunityExplorer:
             minutes_to_expiration, atm_iv, contract_iv, distance_to_strike_pct,
         )
         expected_profit = calculate_expected_profit(estimated_sell_price, stop_loss_per_option, out_of_the_money_probability)
+        self._log_sell_opportunity(
+            put_option.strike, put_option.right, put_option.lastTradeDateOrContractMonth,
+            estimated_sell_price, stop_loss, expected_profit,
+        )
 
         position_initial_state = PositionInitialState(
             is_executed=1,
