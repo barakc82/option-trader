@@ -12,6 +12,7 @@ from .option_safeguard import OptionSafeguard
 from .subscription_manager import SubscriptionManager
 from .state_updater import StateUpdater
 from .option_sampler import OptionSampler
+from .predictions_evaluator import PredictionsEvaluator
 from .machine_learning.regress_max_ask import ProbabilityClassifier
 
 OPTION_TRADER_CLIENT_ID = 1
@@ -54,6 +55,7 @@ async def main():
     subscription_manager = SubscriptionManager()
     state_updater = StateUpdater()
     option_sampler = OptionSampler()
+    predictions_evaluator = PredictionsEvaluator()
 
     try:
         # Run everything concurrently under supervision
@@ -63,7 +65,8 @@ async def main():
             supervisor(safeguard.run, "OptionSafeguard"),
             supervisor(subscription_manager.run, "SubscriptionManager"),
             supervisor(state_updater.run, "StateUpdater"),
-            supervisor(option_sampler.run, "OptionSampler")
+            supervisor(option_sampler.run, "OptionSampler"),
+            supervisor(predictions_evaluator.run, "PredictionsEvaluator")
         )
     except asyncio.CancelledError:
         logger.info("Tasks were cancelled during shutdown.")

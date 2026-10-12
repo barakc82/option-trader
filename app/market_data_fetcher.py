@@ -288,22 +288,28 @@ class MarketDataFetcher:
             logger.error(f"Timeout while qualifying {len(contracts)} contract(s)")
             raise e
 
-    async def find_max_ask(self, sample: PositionInitialState) -> float:
+    async def get_minute_bars(self, strike, right, expiry, minutes_to_expiration):
+        """Fetches historical bars (1-min, or 5-min for windows >= 5 minutes) for the SPXW
+        option identified by (strike, right, expiry), covering the minutes_to_expiration-minute
+        window ending at that expiry's regular-session close (day_end) -- the same
+        night-break-aware duration this.find_max_ask uses. Returns bars sorted chronologically
+        (oldest first), each carrying .high and .date; empty list if the contract couldn't be
+        qualified."""
         option = Option(
-            symbol='SPX', lastTradeDateOrContractMonth=sample.expiry, strike=sample.strike,
-            right=sample.right, exchange='CBOE', currency='USD', tradingClass='SPXW',
+            symbol='SPX', lastTradeDateOrContractMonth=expiry, strike=strike,
+            right=right, exchange='CBOE', currency='USD', tradingClass='SPXW',
         )
 
         qualified = await self.qualify([option])
         if not qualified:
-            logger.error(f"Could not qualify {get_option_name(option)} to find max ask")
-            return 0
+            logger.error(f"Could not qualify {get_option_name(option)} to fetch minute bars")
+            return []
         option = qualified[0]
 
-        expiry_date = datetime.strptime(sample.expiry, '%Y%m%d').date()
+        expiry_date = datetime.strptime(expiry, '%Y%m%d').date()
         day_end = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
 
-        minutes_to_expiration = sample.minutes_to_expiration or 0
+        minutes_to_expiration = minutes_to_expiration or 0
         option_start_time = day_end - timedelta(minutes=minutes_to_expiration)
         # The night break only falls inside [option_start_time, day_end] when the option was
         # sampled on an earlier calendar day than it expires (e.g. premarket the evening
@@ -313,8 +319,7 @@ class MarketDataFetcher:
         if option_start_time.date() < day_end.date() and option_start_time.time() < AFTER_HOURS_END_TIME:
             minutes_to_expiration = max(minutes_to_expiration - NIGHT_BREAK_MINUTES, 0)
         duration_seconds = max(int(minutes_to_expiration * 60), 60)
-        logger.info(f"Finding max ask for {get_option_name(option)} with duration of {duration_seconds} seconds")
-        logger.info(f"barak: sample.minutes_to_expiration = {sample.minutes_to_expiration}")
+        logger.info(f"Fetching minute bars for {get_option_name(option)} with duration of {duration_seconds} seconds")
 
         # Below 5 minutes, a '5 mins' bar request would need padding out beyond the real
         # duration just to get a single bar, so use 1-min bars instead.
@@ -327,8 +332,7 @@ class MarketDataFetcher:
         remaining_seconds = duration_seconds
         request_end = day_end
         while remaining_seconds > 0:
-            chunk_seconds = max(min(remaining_seconds, 28800), min_chunk_seconds)
-            logger.info(f"barak: calling reqHistoricalDataAsync with {chunk_seconds} seconds, endDateTime {request_end}, for {get_option_name(option)}")
+            chunk_seconds = max(min(remaining_seconds, 86400), min_chunk_seconds)
             chunk_bars = await self.ib.reqHistoricalDataAsync(
                 option,
                 endDateTime=request_end,
@@ -338,10 +342,8 @@ class MarketDataFetcher:
                 useRTH=False
             )
 
-            logger.info(
-                f"barak: reqHistoricalDataAsync ended successfully, numbers of bars retrieved: {len(chunk_bars)}")
             if not chunk_bars:
-                logger.error(f"No bars were found for {get_option_name(option)} during search for max ask")
+                logger.error(f"No bars were found for {get_option_name(option)} while fetching minute bars")
                 await asyncio.sleep(20)
                 continue
 
@@ -350,8 +352,13 @@ class MarketDataFetcher:
             request_end = request_end - timedelta(seconds=chunk_seconds)
             await asyncio.sleep(20)
 
-        max_bar = max(bars, key=lambda bar: bar.high, default=None)
-        max_high = max_bar.high
-        max_high_time = max_bar.date
-        logger.info(f"Max ask for {get_option_name(option)}: {max_high} at {max_high_time}")
-        return max_high
+        return bars
+
+    async def find_max_ask(self, sample: PositionInitialState) -> float:
+        bars = await self.get_minute_bars(sample.strike, sample.right, sample.expiry, sample.minutes_to_expiration)
+        if not bars:
+            return 0
+
+        max_bar = max(bars, key=lambda bar: bar.high)
+        logger.info(f"Max ask for {sample.right} {sample.strike}: {max_bar.high} at {max_bar.date}")
+        return max_bar.high
