@@ -155,7 +155,7 @@ class PredictionsEvaluator:
 
         average_realized_profit = round(sum(realized_profits) / len(realized_profits), 3)
         average_expected_profit = round(sum(expected_profits) / len(expected_profits), 3)
-        profit_deviation = average_realized_profit - average_expected_profit
+        profit_deviation = round(average_realized_profit - average_expected_profit, 3)
         self._log_averages(expiration_date_str, average_expected_profit, average_realized_profit, profit_deviation)
 
         logger.info(f"PredictionsEvaluator: Processed {csv_path} into {len(grouped)} strike/right group(s); "
