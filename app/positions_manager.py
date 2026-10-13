@@ -90,7 +90,6 @@ class PositionsManager:
                 atm_iv = as_float(pos.get('atm_iv'))
                 contract_iv = as_float(pos.get('contract_iv'))
 
-                logger.info(f"barak 1")
                 out_of_the_money_probability = None
                 expected_profit = None
                 if stop_loss is not None:
@@ -103,7 +102,6 @@ class PositionsManager:
                     )
                     expected_profit = calculate_expected_profit(estimated_sell_price, stop_loss_per_option, out_of_the_money_probability)
 
-                logger.info(f"barak 2")
                 self.position_initial_state_map.setdefault(key, []).append(PositionInitialState(
                     is_executed=int(is_executed) if is_executed not in (None, '') else 1,
                     strike=strike, right=right, expiry=expiry,
