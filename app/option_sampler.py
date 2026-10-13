@@ -15,6 +15,7 @@ from .price_estimator import PriceEstimator
 from .market_data_fetcher import MarketDataFetcher
 from .positions_manager import PositionsManager
 from .predictor import Predictor
+from .limit_adjuster import LimitAdjuster
 from .trading_bot import TradingBot
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ class OptionSampler:
             self.target_delta_calculator = TargetDeltaCalculator()
             self.strike_finder = StrikeFinder()
             self.trading_bot = TradingBot()
+            self.limit_adjuster = LimitAdjuster()
             self.price_estimator = PriceEstimator()
             self.predictor = Predictor()
 
@@ -298,7 +300,7 @@ class OptionSampler:
             return FAILED
 
         estimated_sell_price = self.price_estimator.estimate_sell_price(option)
-        stop_loss = self.trading_bot.adjust_limit_to_market_rules(estimated_sell_price + stop_loss_per_option)
+        stop_loss = self.limit_adjuster.adjust_limit_to_market_rules(estimated_sell_price + stop_loss_per_option)
         minimal_sell_price = self.trading_bot.calculate_minimal_sell_price(option.ticker.last, option.lastTradeDateOrContractMonth)
         if estimated_sell_price < minimal_sell_price:
             logger.warning(f"Sampled option is sold for {estimated_sell_price} but the minimal sell price is {minimal_sell_price}")

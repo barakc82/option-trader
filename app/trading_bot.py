@@ -10,6 +10,7 @@ from utilities.utils import *
 
 from .account_data import AccountData
 from .connection_manager import ConnectionManager
+from .limit_adjuster import LimitAdjuster
 
 
 logger = logging.getLogger(__name__)
@@ -32,8 +33,8 @@ class TradingBot:
             # Accessing shared singleton dependencies
             self.ib = ConnectionManager().ib
             self.account_data = AccountData()
+            self.limit_adjuster = LimitAdjuster()
 
-            self.price_increments = []
             self.req_id_to_order_metadata = {}
 
             logger.info("TradingBot singleton initialized.")
@@ -79,7 +80,7 @@ class TradingBot:
         return self.cancel_order(trade.order)
 
     async def close_short_option(self, option, quantity, limit):
-        limit = self.adjust_limit_to_market_rules(limit)
+        limit = self.limit_adjuster.adjust_limit_to_market_rules(limit)
         open_trades = self.get_open_trades()
 
         for t in open_trades:
@@ -104,44 +105,6 @@ class TradingBot:
 
     async def close_short_option_position(self, position, limit=None):
         return await self.close_short_option(position.contract, abs(position.position), limit)
-
-    async def fetch_price_increments(self, contract):
-        while not self.price_increments:
-            try:
-                details = await asyncio.wait_for(self.ib.reqContractDetailsAsync(contract), timeout=10)
-                if not details:
-                    logger.error(f"No contract details found for {contract}. Retrying...")
-                    await asyncio.sleep(5)
-                    continue
-
-                market_rule_id = int(details[0].marketRuleIds.split(',')[0])
-                rule = await asyncio.wait_for(self.ib.reqMarketRuleAsync(market_rule_id), timeout=10)
-                if rule:
-                    self.price_increments = sorted(rule, key=lambda i: i.lowEdge)
-                    logger.info(f"Successfully fetched {len(self.price_increments)} price increments")
-                else:
-                    logger.error(f"Market rule {market_rule_id} returned no increments. Retrying...")
-                    await asyncio.sleep(5)
-            except asyncio.TimeoutError:
-                logger.error(f"Timeout while fetching price increments for {contract}. Retrying...")
-                await asyncio.sleep(5)
-            except Exception as e:
-                logger.error(f"Error while fetching price increments for {contract}: {e}. Retrying...")
-                await asyncio.sleep(5)
-
-    def adjust_limit_to_market_rules(self, raw_limit):
-        current_increment = self.price_increments[0].increment
-        for i in self.price_increments:
-            if raw_limit > i.lowEdge:
-                current_increment = i.increment
-        if current_increment == 0:
-            logger.error("current increment is 0, so cannot adjust the limit for the order")
-        if math.isnan(current_increment):
-            logger.error("current increment is NaN, so cannot adjust the limit for the order")
-        if math.isnan(raw_limit):
-            logger.error("raw limit is NaN, so cannot adjust the limit for the order")
-        return round(round(raw_limit / current_increment) * current_increment, 6)
-
 
     async def test_order(self, option, number_of_options, limit):
         assert number_of_options > 0
@@ -195,7 +158,7 @@ class TradingBot:
             return ask
         spread = ask - bid
         raw_limit = bid + spread / 2
-        return self.adjust_limit_to_market_rules(raw_limit)
+        return self.limit_adjuster.adjust_limit_to_market_rules(raw_limit)
 
     async def sell(self, contract, quantity, order_metadata):
         ticker = contract.ticker
@@ -302,7 +265,7 @@ class TradingBot:
         return float(order_state.initMarginChange)
 
     async def modify_limit_order(self, limit_buy_trade, raw_limit):
-        limit_price = self.adjust_limit_to_market_rules(raw_limit)
+        limit_price = self.limit_adjuster.adjust_limit_to_market_rules(raw_limit)
         if limit_price == limit_buy_trade.order.lmtPrice:
             logger.info(f"Skipping modification for {get_option_name(limit_buy_trade.contract)} as limit price {limit_price} is unchanged")
             return limit_buy_trade

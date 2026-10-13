@@ -15,6 +15,7 @@ from .price_estimator import PriceEstimator
 from .strike_finder import StrikeFinder
 from .target_delta_calculator import TargetDeltaCalculator
 from .connection_manager import ConnectionManager
+from .limit_adjuster import LimitAdjuster
 from .trading_bot import TradingBot
 
 TIME_UNTIL_NEXT_SELL_CHECK = 120
@@ -47,6 +48,7 @@ class OpportunityExplorer:
             self.market_data_fetcher = MarketDataFetcher()
             self.option_data_fetcher = OptionDataFetcher()
             self.trading_bot = TradingBot()
+            self.limit_adjuster = LimitAdjuster()
             self.price_estimator = PriceEstimator()
             self.predictor = Predictor()
             self.net_worth_calculator = NetWorthCalculator()
@@ -184,7 +186,7 @@ class OpportunityExplorer:
         await self.cancel_all_buy_trades(open_trades, call_option)
 
         bid_delta, ask_delta, last_delta, model_delta = get_individual_deltas(call_option.ticker)
-        stop_loss = self.trading_bot.adjust_limit_to_market_rules(estimated_sell_price + stop_loss_per_option)
+        stop_loss = self.limit_adjuster.adjust_limit_to_market_rules(estimated_sell_price + stop_loss_per_option)
         gamma = get_model_gamma(call_option.ticker)
         vega = get_model_vega(call_option.ticker)
         theta = get_model_theta(call_option.ticker)
@@ -366,7 +368,7 @@ class OpportunityExplorer:
         await self.cancel_all_buy_trades(open_trades, put_option)
 
         bid_delta, ask_delta, last_delta, model_delta = get_individual_deltas(put_option.ticker)
-        stop_loss = self.trading_bot.adjust_limit_to_market_rules(estimated_sell_price + stop_loss_per_option)
+        stop_loss = self.limit_adjuster.adjust_limit_to_market_rules(estimated_sell_price + stop_loss_per_option)
         gamma = get_model_gamma(put_option.ticker)
         vega = get_model_vega(put_option.ticker)
         theta = get_model_theta(put_option.ticker)

@@ -18,6 +18,7 @@ from .account_data import AccountData
 from .market_data_fetcher import MarketDataFetcher
 from .max_loss_calculator import MaxLossCalculator
 from .target_delta_calculator import TargetDeltaCalculator
+from .limit_adjuster import LimitAdjuster
 from .trading_bot import TradingBot
 from .opportunity_explorer import OpportunityExplorer
 from .subscription_manager import SubscriptionManager
@@ -51,6 +52,7 @@ class StateUpdater:
             self.account_data = AccountData()
             self.market_data_fetcher = MarketDataFetcher()
             self.trading_bot = TradingBot()
+            self.limit_adjuster = LimitAdjuster()
             self.subscription_manager = SubscriptionManager()
             self.target_delta_calculator = TargetDeltaCalculator()
             self.max_loss_calculator = MaxLossCalculator()
@@ -172,7 +174,7 @@ class StateUpdater:
         open_trades = self.trading_bot.get_open_trades()
 
         if positions:
-            await self.trading_bot.fetch_price_increments(positions[0].contract)
+            await self.limit_adjuster.fetch_price_increments(positions[0].contract)
 
         state_positions = []
         position_initial_states = []
@@ -194,7 +196,7 @@ class StateUpdater:
             stop_loss_per_option = self.max_loss_calculator.calculate_max_loss(option.right)
             if not math.isnan(stop_loss_per_option):
                 raw_stop_loss = position.avgCost / 100 + stop_loss_per_option
-                stop_loss = self.trading_bot.adjust_limit_to_market_rules(raw_stop_loss)
+                stop_loss = self.limit_adjuster.adjust_limit_to_market_rules(raw_stop_loss)
             
                 ticker = self.market_data_fetcher.get_ticker(option)
                 distance_to_stop = calculate_distance_to_stop(option, ticker, stop_loss, spot_price, r) if ticker else math.nan

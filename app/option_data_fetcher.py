@@ -170,8 +170,8 @@ class OptionDataFetcher:
             self.mdf.notify_switch_to_new_options()
 
         if options:
-            from .trading_bot import TradingBot
-            await TradingBot().fetch_price_increments(options[0])
+            from .limit_adjuster import LimitAdjuster
+            await LimitAdjuster().fetch_price_increments(options[0])
 
         assert options
         return options

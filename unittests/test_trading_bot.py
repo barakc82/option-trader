@@ -12,15 +12,16 @@ class TestTradingBot(unittest.IsolatedAsyncioTestCase):
     @patch('app.trading_bot.ConnectionManager')
     @patch('app.trading_bot.MarketDataFetcher')
     @patch('app.trading_bot.AccountData')
-    async def test_modify_limit_order_skips_if_same_price(self, mock_account, mock_mdf, mock_cm):
+    @patch('app.trading_bot.LimitAdjuster')
+    async def test_modify_limit_order_skips_if_same_price(self, mock_limit_adjuster, mock_account, mock_mdf, mock_cm):
         # Setup mocks
         mock_ib = MagicMock()
         mock_cm.return_value.ib = mock_ib
-        
-        bot = TradingBot()
-        
+
         # Mock adjust_limit_to_market_rules to return the same price
-        bot.adjust_limit_to_market_rules = AsyncMock(return_value=1.5)
+        mock_limit_adjuster.return_value.adjust_limit_to_market_rules = MagicMock(return_value=1.5)
+
+        bot = TradingBot()
         
         contract = Contract(conId=123)
         order = Order(lmtPrice=1.5)
@@ -44,15 +45,16 @@ class TestTradingBot(unittest.IsolatedAsyncioTestCase):
     @patch('app.trading_bot.ConnectionManager')
     @patch('app.trading_bot.MarketDataFetcher')
     @patch('app.trading_bot.AccountData')
-    async def test_modify_limit_order_updates_if_different_price(self, mock_account, mock_mdf, mock_cm):
+    @patch('app.trading_bot.LimitAdjuster')
+    async def test_modify_limit_order_updates_if_different_price(self, mock_limit_adjuster, mock_account, mock_mdf, mock_cm):
         # Setup mocks
         mock_ib = MagicMock()
         mock_cm.return_value.ib = mock_ib
-        
-        bot = TradingBot()
-        
+
         # Mock adjust_limit_to_market_rules to return a different price
-        bot.adjust_limit_to_market_rules = AsyncMock(return_value=1.6)
+        mock_limit_adjuster.return_value.adjust_limit_to_market_rules = MagicMock(return_value=1.6)
+
+        bot = TradingBot()
         
         contract = Contract(conId=123)
         order = Order(lmtPrice=1.5)
