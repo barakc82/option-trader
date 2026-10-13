@@ -1,7 +1,7 @@
 import time
 
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.common import ElementNotVisibleException
+from selenium.common import ElementNotVisibleException, InvalidElementStateException
 from selenium.webdriver.common.by import By
 
 from utilities.meitav.meitav_common import *
@@ -51,7 +51,10 @@ def fill_in_operation(driver, operation_type, security_id, units, price, target_
     units_input.send_keys(str(units))
 
     price_input = inputs[1]
-    price_input.clear()
+    try:
+        price_input.clear()
+    except InvalidElementStateException:
+        pass
     price_input.send_keys(str(price))
 
     buttons = driver.find_elements(By.CSS_SELECTOR, "button[aria-label*='לחץ לבחירת תאריך']")
@@ -65,7 +68,12 @@ def fill_in_operation(driver, operation_type, security_id, units, price, target_
 
     hebrew_month = hebrew_months[target_date.month]
     today = datetime.now()
-    assert target_date.year == today.year
+    if target_date.year == today.year + 1:
+        button = driver.find_element(
+            By.XPATH,
+            "(//button[contains(@class, 'pull-right') and contains(@ng-click, 'move')])[2]"
+        )
+        button.click()
 
     month_button = driver.find_element(By.XPATH, f"//button[span[normalize-space()='{hebrew_month}']]")
     month_button.click()
