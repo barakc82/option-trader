@@ -67,15 +67,12 @@ import pandas as pd
 
 MODEL_PATH = "machine_learning/model/best_probability_model.pkl"
 
-def _print_days_above_stop(subset: pd.DataFrame) -> None:
+def _print_days_above_stop(stop_col, above_stop) -> None:
     """Count of distinct days (GROUP_COLUMN) with at least one row whose
     max_ask exceeded that row's own stop_loss -- i.e. would have been
     stopped out. Printed fresh before each method/transform below since
     they don't all share the exact same filtered subset."""
-    stop_col = survival_scoring.STOP_COLUMN
-    above_stop = subset.loc[subset[TARGET_COLUMN] > subset[stop_col]]
     n_days = above_stop[GROUP_COLUMN].nunique()
-    print(f"  {n_days} day(s) with {TARGET_COLUMN} > {stop_col}")
     if n_days:
         print(f"  Last day with {TARGET_COLUMN} > {stop_col}: {above_stop[GROUP_COLUMN].max()}")
 
@@ -89,7 +86,9 @@ def _select_best_model_rss(df: pd.DataFrame, right: str, score_method: ScoreMeth
     X = subset[CANDIDATE_FEATURE_COLUMNS]
     y_raw = subset[TARGET_COLUMN]
     groups = subset[GROUP_COLUMN]
-    _print_days_above_stop(subset)
+    stop_col = survival_scoring.STOP_COLUMN
+    above_stop = subset.loc[subset[TARGET_COLUMN] > subset[stop_col]]
+    _print_days_above_stop(stop_col, above_stop)
 
     if (y_raw <= 0).any():
         n_bad = int((y_raw <= 0).sum())
@@ -187,9 +186,12 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
 
     all_candidates = []
     per_transform_best = {}
-    _print_days_above_stop(ctx)
     groups = ctx[GROUP_COLUMN]
-    print(f"    Number of trade days: {groups.nunique()}, number of samples: {X.shape[0]}")
+    stop_col = survival_scoring.STOP_COLUMN
+    above_stop = subset.loc[subset[TARGET_COLUMN] > subset[stop_col]]
+    _print_days_above_stop(stop_col, above_stop)
+    n_days = above_stop[GROUP_COLUMN].nunique()
+    print(f"  Number of trade days: {groups.nunique()}, number of samples: {X.shape[0]}, {n_days} day(s) with {TARGET_COLUMN} > {stop_col}")
     for transform_name, transform in TRANSFORMS.items():
         print(f"  Transform = {transform_name}")
         results = search_best_subset_with_distribution(

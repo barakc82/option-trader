@@ -80,7 +80,7 @@ def best_subset_for_target(X: pd.DataFrame, y: pd.Series, groups: pd.Series, fea
     Returns (best_subset, best_score, oof_predictions_for_best_subset).
     """
     n_splits = max(2, min(cv, groups.nunique()))
-    print(f"    Number of trade days: {groups.nunique()}, number of samples: {X.shape[0]}")
+    print(f"  Number of trade days: {groups.nunique()}, number of samples: {X.shape[0]}")
     group_kfold = GroupKFold(n_splits=n_splits, shuffle=True, random_state=CV_RANDOM_STATE)
 
     best_subset, best_score, best_oof_pred = [], np.inf, None
@@ -146,7 +146,7 @@ MAX_STALE_SIZES = 4
 # rather than in select_probability_model.py, because both of those modules
 # need it and select_probability_model.py imports both of them -- defining
 # it there would create a circular import.
-SEARCH_TIME_BUDGET_SEC = 14400
+SEARCH_TIME_BUDGET_SEC = 9500
 
 
 @dataclass

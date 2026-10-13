@@ -106,6 +106,9 @@ def try_to_read_text(btn):
 def login(driver, name, account_type):
     print(f"Starting login")
     account_data = users_data[name][account_type]
+    wait_object = WebDriverWait(driver, 50, 1, ([ElementNotVisibleException]))
+    wait_object.until(lambda x: x.find_element(By.XPATH, '//*[text()="הזנת פרטי כניסה"]') is not None)
+
     username_field = driver.find_element(By.NAME, "username")
     print(f"Is the username field enabled? {username_field.is_enabled()}")
     username_field.clear()
