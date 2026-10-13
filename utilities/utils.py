@@ -76,6 +76,31 @@ def get_current_trading_day():
     return cal.next_open(now_in_nyc).strftime('%Y%m%d')
 
 
+def get_closed_market_minutes(start_time, end_time):
+    """Total minutes the market was closed within [start_time, end_time) -- nightly
+    breaks, weekends, and holidays alike -- found via the NYSE calendar's actual
+    session boundaries (consecutive trading sessions more than a day apart mean a
+    weekend/holiday closure, not just that day's nightly break) rather than assuming
+    a single fixed-length break. start_time and end_time must be timezone-aware,
+    localized to new_york_timezone."""
+    if end_time <= start_time:
+        return 0.0
+    cal = get_nyse_calendar()
+    sessions = cal.sessions_in_range(start_time.date(), end_time.date())
+    total_minutes = 0.0
+    for prev_session, next_session in zip(sessions[:-1], sessions[1:]):
+        period_start = new_york_timezone.localize(datetime.combine(prev_session.date(), AFTER_HOURS_END_TIME))
+        period_end = new_york_timezone.localize(
+            datetime.combine(next_session.date() - timedelta(days=1), PREMARKET_START_TIME))
+        if period_end <= period_start:
+            continue
+        overlap_start = max(period_start, start_time)
+        overlap_end = min(period_end, end_time)
+        if overlap_end > overlap_start:
+            total_minutes += (overlap_end - overlap_start).total_seconds() / 60
+    return total_minutes
+
+
 def is_trade_cancelled(trade_result):
     return trade_result.orderStatus.status in ['Cancelled', 'Inactive']
 
