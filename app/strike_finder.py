@@ -8,6 +8,7 @@ from utilities.utils import get_option_name
 from utilities.ib_utils import (extract_ask, get_delta, get_delta_for_sell, get_individual_deltas, get_model_gamma,
                                  get_model_vega, get_model_theta, get_minutes_to_expiration, get_distance_to_strike_pct,
                                  get_model_iv, calculate_expected_profit)
+from .limit_adjuster import LimitAdjuster
 from .market_data_fetcher import MarketDataFetcher
 from .max_loss_calculator import MaxLossCalculator
 from .predictor import Predictor
@@ -36,6 +37,7 @@ class StrikeFinder:
             self.max_loss_calculator = MaxLossCalculator()
             self.predictor = Predictor()
             self.price_estimator = PriceEstimator()
+            self.limit_adjuster = LimitAdjuster()
             self.middle_fetched_block = {'C': [], 'P': []}
             self.edge_fetched_block = {'C': [], 'P': []}
             self.middle_fetched_block_last_update_time = {'C': 0.0, 'P': 0.0}
@@ -159,7 +161,7 @@ class StrikeFinder:
                 best_probability = out_of_the_money_probability
                 best_max_delta = max(delta_values) if delta_values else None
                 best_estimated_sell_price = estimated_sell_price
-                best_stop_loss = estimated_sell_price + stop_loss_per_option
+                best_stop_loss = self.limit_adjuster.adjust_limit_to_market_rules(estimated_sell_price + stop_loss_per_option)
                 best_minutes_to_expiration = minutes_to_expiration
 
         if best_option is None:
@@ -489,5 +491,5 @@ class StrikeFinder:
                 ])
             writer.writerow([
                 datetime.now().isoformat(), strike, right, expiry, estimated_sell_price,
-                stop_loss, expected_profit, minutes_to_expiration,
+                stop_loss, f"{expected_profit:.2f}", minutes_to_expiration,
             ])

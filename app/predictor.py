@@ -7,6 +7,8 @@ import pandas as pd
 
 from utilities.utils import get_option_name
 
+from .limit_adjuster import LimitAdjuster
+
 logger = logging.getLogger(__name__)
 
 # Produced by app.machine_learning.select_probability_model (best-subset
@@ -36,6 +38,7 @@ class Predictor:
         if not self._initialized:
             self.probability_classifier = None
             self.probability_classifier_mtime = None
+            self.limit_adjuster = LimitAdjuster()
             self._load_probability_classifier()
             self._initialized = True
 
@@ -96,6 +99,8 @@ class Predictor:
 
         X_new = pd.DataFrame([feature_values])
         stop_loss = estimated_sell_price + stop_loss_per_option
+        if self.limit_adjuster.is_ready():
+            stop_loss = self.limit_adjuster.adjust_limit_to_market_rules(stop_loss)
         try:
             probabilities, predicted_max_asks = classifier(X_new, stop_loss)
             probability, predicted_max_ask = probabilities[0], predicted_max_asks[0]
