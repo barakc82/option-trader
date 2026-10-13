@@ -1,6 +1,9 @@
 import logging
 import math
+import os
 import time
+import csv
+from datetime import datetime
 from utilities.utils import get_option_name
 from utilities.ib_utils import (extract_ask, get_delta, get_delta_for_sell, get_individual_deltas, get_model_gamma,
                                  get_model_vega, get_model_theta, get_minutes_to_expiration, get_distance_to_strike_pct,
@@ -119,8 +122,8 @@ class StrikeFinder:
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss(right)
         atm_iv = self.market_data_fetcher.get_cached_spx_implied_volatility(right)
 
-        best_option, best_expected_profit, best_probability, best_max_delta, best_estimated_sell_price, best_stop_loss = \
-            None, None, None, None, None, None
+        best_option, best_expected_profit, best_probability, best_max_delta, best_estimated_sell_price, best_stop_loss,\
+            best_minutes_to_expiration = None, None, None, None, None, None, None
 
         for option in self.middle_fetched_block[right]:
             if not hasattr(option, "ticker") or option.ticker is None:
@@ -157,6 +160,7 @@ class StrikeFinder:
                 best_max_delta = max(delta_values) if delta_values else None
                 best_estimated_sell_price = estimated_sell_price
                 best_stop_loss = estimated_sell_price + stop_loss_per_option
+                best_minutes_to_expiration = minutes_to_expiration
 
         if best_option is None:
             return
@@ -166,6 +170,12 @@ class StrikeFinder:
                     f"expected profit: {best_expected_profit:.3f}, estimated sell price: {best_estimated_sell_price:.2f}, "
                     f"stop loss: {best_stop_loss:.2f}, probability: {best_probability:.3f}, "
                     f"max delta: {max_delta_str}, target delta: {target_delta:.3f}")
+
+        if best_expected_profit is not None:
+            self._log_best_opportunity(
+                best_option.strike, best_option.right, best_option.lastTradeDateOrContractMonth,
+                best_estimated_sell_price, best_stop_loss, best_expected_profit, best_minutes_to_expiration,
+            )
 
     def _finalize_candidate(self, current_candidate, options_block, target_delta, right):
         final_delta = get_delta_for_sell(current_candidate.ticker)
@@ -465,3 +475,19 @@ class StrikeFinder:
         logger.info(log_message)
 
         return current_candidate
+
+    def _log_best_opportunity(self, strike, right, expiry, estimated_sell_price, stop_loss, expected_profit,
+                              minutes_to_expiration):
+        csv_path = f"cache/predictions_{expiry}.csv"
+        write_header = not os.path.exists(csv_path)
+        with open(csv_path, 'a', newline='') as f:
+            writer = csv.writer(f)
+            if write_header:
+                writer.writerow([
+                    'datetime', 'strike', 'right', 'expiration', 'estimated_sell_price',
+                    'stop_loss', 'expected_profit', 'minutes_to_expiration'
+                ])
+            writer.writerow([
+                datetime.now().isoformat(), strike, right, expiry, estimated_sell_price,
+                stop_loss, expected_profit, minutes_to_expiration,
+            ])

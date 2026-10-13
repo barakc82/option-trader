@@ -16,8 +16,7 @@ PROCESS_LOOP_INTERVAL_SECONDS = 300
 
 
 class PredictionsEvaluator:
-    """Groups each day's sampled sell-opportunity predictions (see
-    OpportunityExplorer._log_sell_opportunity) by (strike, right) once that
+    """Groups each day's sampled sell-opportunity predictions by (strike, right) once that
     expiration's regular session has closed, then -- for each record --
     fetches that option's minute-by-minute bar highs from the record's own
     sampling time through expiration to determine whether the stop loss was
@@ -122,7 +121,7 @@ class PredictionsEvaluator:
             )
             # Paces successive reqHistoricalDataAsync calls across distinct (strike, right)
             # groups so this loop doesn't trip IB's historical-data pacing limits.
-            await asyncio.sleep(2)
+            await asyncio.sleep(4)
             if not bars:
                 logger.warning(f"PredictionsEvaluator: No bars found for {right} {strike} "
                                 f"({expiration_date_str}); skipping its {len(records)} record(s)")
