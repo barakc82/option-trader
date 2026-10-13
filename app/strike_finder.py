@@ -486,10 +486,10 @@ class StrikeFinder:
             writer = csv.writer(f)
             if write_header:
                 writer.writerow([
-                    'datetime', 'strike', 'right', 'expiration', 'estimated_sell_price',
+                    'datetime', 'strike', 'right', 'estimated_sell_price',
                     'stop_loss', 'expected_profit', 'minutes_to_expiration'
                 ])
             writer.writerow([
-                datetime.now().isoformat(), strike, right, expiry, estimated_sell_price,
-                stop_loss, f"{expected_profit:.2f}", minutes_to_expiration,
+                datetime.now().isoformat(), strike, right, estimated_sell_price,
+                stop_loss, round(expected_profit, 2), minutes_to_expiration,
             ])
