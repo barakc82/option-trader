@@ -2,6 +2,7 @@ import asyncio
 import csv
 import glob
 import logging
+import math
 import os
 from datetime import datetime, timedelta
 
@@ -114,7 +115,7 @@ class PredictionsEvaluator:
             strike = float(records[0]['strike'])
             right = records[0]['right']
             logger.info(f"Processing the predictions for {right} {strike}")
-            oldest_minutes_to_expiration = max(int(r['minutes_to_expiration']) for r in records)
+            oldest_minutes_to_expiration = int(records[-1]['minutes_to_expiration'])
 
             bars = await self.market_data_fetcher.get_minute_bars(
                 strike, right, expiration_date_str, oldest_minutes_to_expiration,
@@ -141,15 +142,19 @@ class PredictionsEvaluator:
                 record['max_high'] = max_high
                 record['hit_stop_loss'] = hit_stop_loss
                 record['realized_profit'] = realized_profit
-                expected_profits.append(float(record['expected_profit']))
-                realized_profits.append(realized_profit)
+                expected_profit = float(record['expected_profit'])
+                if math.isnan(expected_profit):
+                   logger.error(f"Could not find expected profits for {right} {strike}")
+                else:
+                    expected_profits.append(expected_profit)
+                    realized_profits.append(realized_profit)
 
         if not realized_profits:
             logger.error(f"Could not find any realized profits for {expiration_date_str}")
             return False
 
-        average_realized_profit = sum(realized_profits) / len(realized_profits)
-        average_expected_profit = sum(expected_profits) / len(expected_profits)
+        average_realized_profit = round(sum(realized_profits) / len(realized_profits), 3)
+        average_expected_profit = round(sum(expected_profits) / len(expected_profits), 3)
         profit_deviation = average_realized_profit - average_expected_profit
         self._log_averages(expiration_date_str, average_expected_profit, average_realized_profit, profit_deviation)
 
