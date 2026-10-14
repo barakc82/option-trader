@@ -77,12 +77,6 @@ class PredictionsEvaluator:
             return None
         return filename[len(prefix):-len(suffix)]
 
-    @staticmethod
-    def _as_naive(dt):
-        """Strips tzinfo so bar.date (whatever tz-awareness ib_insync gives it) can be
-        compared against the tz-aware NY-localized record_start_time below."""
-        return dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
-
     async def _process_file(self, csv_path, expiration_date_str):
         """Groups every sampled record in csv_path by (strike, right) -- the
         same option can appear many times, once per sampling pass during the
@@ -124,30 +118,42 @@ class PredictionsEvaluator:
             # groups so this loop doesn't trip IB's historical-data pacing limits.
             await asyncio.sleep(4)
             if not bars:
-                logger.warning(f"PredictionsEvaluator: No bars found for {right} {strike} "
-                                f"({expiration_date_str}); skipping its {len(records)} record(s)")
+                logger.warning(f"No bars found for {right} {strike} ({expiration_date_str}); "
+                               f"skipping its {len(records)} record(s)")
                 continue
 
             for record in records:
-                record_start_time = day_end - timedelta(minutes=int(record['minutes_to_expiration']))
-                relevant_highs = [bar.high for bar in bars
-                                  if self._as_naive(bar.date) >= self._as_naive(record_start_time)]
-                max_high = max(relevant_highs) if relevant_highs else 0.0
+                expected_profit = float(record['expected_profit'])
+                if math.isnan(expected_profit):
+                    logger.error(f"Could not find expected profits for {right} {strike}")
+                    continue
+
+                minutes_to_expiration = int(record['minutes_to_expiration'])
+                record_start_time = day_end - timedelta(minutes=minutes_to_expiration)
+                # bar.date is tz-aware in TWS's timezone (US/Central) while record_start_time
+                # is NY-localized; comparing aware datetimes accounts for the offset.
+                relevant_highs = [bar.high for bar in bars if bar.date >= record_start_time]
+
+                if not relevant_highs:
+                    logger.info(f"Found no highs for {right} {strike}, minutes to expiration: {minutes_to_expiration}, "
+                                f"timezone of bar high: {bars[0].date.tzinfo}, timezone of record start: {record_start_time.tzinfo} ")
+                    continue
+
+                max_high = max(relevant_highs)
 
                 estimated_sell_price = float(record['estimated_sell_price'])
                 stop_loss = float(record['stop_loss'])
                 hit_stop_loss = max_high >= stop_loss
                 realized_profit = estimated_sell_price - stop_loss if hit_stop_loss else estimated_sell_price
+                if realized_profit < 0:
+                    logger.info(f"Negative realized profit for {right} {strike}: {realized_profit}, max ask: {max_high}, stop loss: {stop_loss}")
 
                 record['max_high'] = max_high
                 record['hit_stop_loss'] = hit_stop_loss
                 record['realized_profit'] = realized_profit
-                expected_profit = float(record['expected_profit'])
-                if math.isnan(expected_profit):
-                   logger.error(f"Could not find expected profits for {right} {strike}")
-                else:
-                    expected_profits.append(expected_profit)
-                    realized_profits.append(realized_profit)
+
+                expected_profits.append(expected_profit)
+                realized_profits.append(realized_profit)
 
         if not realized_profits:
             logger.error(f"Could not find any realized profits for {expiration_date_str}")
