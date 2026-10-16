@@ -51,6 +51,7 @@ class OptionSampler:
             self.schedule_date = None
             self.sample_times = []
             self.collected_samples = []
+            self.store_expired_samples_task = None
             self._load_cached_collected_samples()
             self._initialized = True
 
@@ -230,22 +231,11 @@ class OptionSampler:
 
                 now_nyc = datetime.now(new_york_timezone)
 
-                if is_after_hours() or not self.run_after_hours_only:
-                    logger.info("Starting storing the expired samples...")
-                    for sample in list(self.collected_samples):
-                        expiry_date = datetime.strptime(sample.expiry, '%Y%m%d').date()
-                        expiry_datetime = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
-                        if expiry_datetime < now_nyc:
-                            max_ask = await self.market_data_fetcher.find_max_ask(sample)
-                            if max_ask == 0:
-                                logger.error(f"No max ask found for {get_option_name(sample)}")
-                                continue
-                            sample.max_ask = max_ask
-                            logger.info(f"Storing an expired sample for {get_option_name(sample)}")
-                            PositionsManager()._log_close_event(sample)
-                            self.collected_samples.remove(sample)
-                            await asyncio.sleep(10)
-                    logger.info("Done storing the expired samples")
+                if self.collected_samples and (is_after_hours() or not self.run_after_hours_only):
+                    if self.store_expired_samples_task is None or self.store_expired_samples_task.done():
+                        self.store_expired_samples_task = asyncio.create_task(self._store_expired_samples())
+                    else:
+                        logger.info("Previous storing of the expired samples is still running, not starting another")
 
                 if self.schedule_date != get_current_trading_day() and not (
                         NEW_OPTION_EXPLORATION_START_TIME < now_nyc.time() < REGULAR_HOURS_END_TIME):
@@ -279,6 +269,27 @@ class OptionSampler:
                 logger.exception("OptionSampler: Loop error:")
 
             await asyncio.sleep(300)
+
+    async def _store_expired_samples(self):
+        try:
+            now_nyc = datetime.now(new_york_timezone)
+            logger.info("Starting storing the expired samples...")
+            for sample in list(self.collected_samples):
+                expiry_date = datetime.strptime(sample.expiry, '%Y%m%d').date()
+                expiry_datetime = new_york_timezone.localize(datetime.combine(expiry_date, REGULAR_HOURS_END_TIME))
+                if expiry_datetime < now_nyc:
+                    max_ask = await self.market_data_fetcher.find_max_ask(sample)
+                    if max_ask == 0:
+                        logger.error(f"No max ask found for {get_option_name(sample)}")
+                        continue
+                    sample.max_ask = max_ask
+                    logger.info(f"Storing an expired sample for {get_option_name(sample)}")
+                    PositionsManager()._log_close_event(sample)
+                    self.collected_samples.remove(sample)
+                    await asyncio.sleep(10)
+            logger.info("Done storing the expired samples")
+        except Exception:
+            logger.exception("OptionSampler: Error while storing the expired samples:")
 
     def collect_sample(self):
         right = random.choice(['C', 'P'])
