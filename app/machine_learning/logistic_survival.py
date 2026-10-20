@@ -41,7 +41,8 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import LogisticRegression
+from scipy.optimize import minimize
+from scipy.special import expit
 from sklearn.model_selection import GroupKFold
 from sklearn.preprocessing import StandardScaler
 
@@ -63,7 +64,8 @@ LOGISTIC_MAX_ITER = 1000
 # search_logistic_candidates), the same way xgboost_survival.py searches
 # reg_lambda alongside its subset -- so LOGISTIC_C above is only the default
 # used for cost calibration, not the value every candidate is fit with.
-LOGISTIC_C_GRID = [0.01, 0.05, sys.float_info.max]
+#LOGISTIC_C_GRID = [0.01, 0.05, np.inf]
+LOGISTIC_C_GRID = [np.inf]
 
 # Best-subset search over p non-log_k features is 2**p - 1 subsets, each
 # fitted n_folds times on n_train_trades * n_grid rows. search_logistic_candidates
@@ -259,12 +261,57 @@ def _assert_valid_coefficients(coefs: np.ndarray, columns: list[str], fold_idx, 
         )
 
 
+class OffsetLogisticModel:
+    """A fitted logistic model in the scaled feature space: p = sigmoid(X @ coef + intercept).
+    Exposes coef_ (shape (1, n_columns), in `columns` order, log_k included) and
+    predict_proba like sklearn's LogisticRegression, so the search, the final refit and
+    LogisticSurvivalClassifier use it unchanged."""
+
+    def __init__(self, coef: np.ndarray, intercept: float):
+        self.coef_ = coef.reshape(1, -1)
+        self.intercept_ = np.array([intercept])
+
+    def predict_proba(self, X_scaled: np.ndarray) -> np.ndarray:
+        p = expit(np.asarray(X_scaled) @ self.coef_[0] + self.intercept_[0])
+        return np.column_stack([1 - p, p])
+
+
+def _fit_weighted_logistic(X: np.ndarray, y: np.ndarray, w: np.ndarray, offset: np.ndarray,
+                           C: float | None) -> tuple[np.ndarray, float]:
+    """Weighted logistic regression with a fixed per-row offset added to the linear
+    predictor, fitted by L-BFGS. C=None is unpenalized; otherwise an L2 penalty on the
+    (non-intercept) coefficients with sklearn's lbfgs scaling -- mean weighted logloss +
+    ||beta||^2 / (2 * C * sum(w)) -- so C means the same thing it did with
+    LogisticRegression (and C=sys.float_info.max is effectively unpenalized without
+    overflowing). sklearn has no offset support, hence this hand-rolled fit."""
+    n_features = X.shape[1]
+    w_sum = w.sum()
+    l2_strength = 0.0 if C is None else 1.0 / C / w_sum
+
+    def objective(params):
+        beta, intercept = params[:n_features], params[n_features]
+        z = X @ beta + intercept + offset
+        loss = np.sum(w * (np.logaddexp(0, z) - y * z)) / w_sum + 0.5 * l2_strength * beta @ beta
+        residual = w * (expit(z) - y) / w_sum
+        grad = np.append(X.T @ residual + l2_strength * beta, residual.sum())
+        return loss, grad
+
+    result = minimize(objective, np.zeros(n_features + 1), jac=True, method="L-BFGS-B",
+                      options={"maxiter": LOGISTIC_MAX_ITER})
+    return result.x[:n_features], float(result.x[n_features])
+
+
 def fit_logistic(X_rep: pd.DataFrame, y_rep: np.ndarray, weight_rep: np.ndarray, columns: list[str],
-                  C: float, fold_idx, subset) -> tuple[LogisticRegression, StandardScaler, np.ndarray]:
+                  C: float, fold_idx, subset) -> tuple[OffsetLogisticModel, StandardScaler, np.ndarray]:
     """Standardizes features inside this fold (fit_transform here, transform
     only at predict time -- the scaler is part of what gets persisted/
-    returned), fits L2-penalized logistic regression, and asserts the fit
-    is trustworthy before returning it.
+    returned), then fits in two stages: (1) log_k alone, unpenalized, to
+    pin down its slope; (2) the remaining columns with L2 regularization
+    (strength C), holding log_k's contribution fixed as an offset
+    (slope * log_k), with a freshly fitted intercept. Keeps the stop-distance
+    slope -- the one coefficient the model can't do without -- from being
+    shrunk or traded off against correlated features by the penalty. Asserts
+    the fit is trustworthy before returning it.
 
     class_weight is deliberately NOT set (no 'balanced', no manual weights
     beyond the 1/n_grid replicate weight already in weight_rep).
@@ -275,16 +322,20 @@ def fit_logistic(X_rep: pd.DataFrame, y_rep: np.ndarray, weight_rep: np.ndarray,
     """
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X_rep[columns])
-    # L2 is sklearn's default penalty; passing penalty="l2" explicitly is
-    # deprecated as of sklearn 1.8 (superseded by l1_ratio), so L2 is
-    # enabled here simply by leaving `penalty` unset rather than by naming
-    # it -- still L2, not a behavior change.
-    model = LogisticRegression(C=C, max_iter=LOGISTIC_MAX_ITER)
-    model.fit(X_scaled, y_rep, sample_weight=weight_rep)
+    log_k_idx = columns.index(LOG_K_COLUMN)
+    log_k_scaled = X_scaled[:, [log_k_idx]]
+    other_idx = [i for i in range(len(columns)) if i != log_k_idx]
 
-    coefs = model.coef_[0]
+    (log_k_slope,), _ = _fit_weighted_logistic(log_k_scaled, y_rep, weight_rep,
+                                               offset=np.zeros(len(y_rep)), C=None)
+    other_coefs, intercept = _fit_weighted_logistic(X_scaled[:, other_idx], y_rep, weight_rep,
+                                                    offset=log_k_slope * log_k_scaled[:, 0], C=C)
+
+    coefs = np.empty(len(columns))
+    coefs[log_k_idx] = log_k_slope
+    coefs[other_idx] = other_coefs
     _assert_valid_coefficients(coefs, columns, fold_idx, subset)
-    return model, scaler, coefs
+    return OffsetLogisticModel(coefs, intercept), scaler, coefs
 
 
 # ---------------------------------------------------------------------------
@@ -478,7 +529,7 @@ class LogisticSurvivalClassifier:
     than silently repurposing the probability as if it meant something
     else."""
 
-    def __init__(self, model: LogisticRegression, scaler: StandardScaler, subset: list[str], columns: list[str]):
+    def __init__(self, model: OffsetLogisticModel, scaler: StandardScaler, subset: list[str], columns: list[str]):
         self.model = model
         self.scaler = scaler
         self.subset = subset

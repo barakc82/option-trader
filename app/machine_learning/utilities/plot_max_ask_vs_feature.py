@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 CSV_PATH = "machine_learning/data/options_data.csv"
-X_COLUMN = "contract_iv"
+X_COLUMN = "distance_to_strike_pct"
 Y_COLUMN = "max_ask"
 OUTPUT_PATH = f"machine_learning/data/{Y_COLUMN}_vs_{X_COLUMN}.png"
 

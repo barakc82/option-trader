@@ -80,17 +80,20 @@ class OpportunityExplorer:
 
                     new_write_overnight = config.get("should_write_options_overnight", True)
                     if new_write_overnight != self.should_write_options_overnight:
-                        logger.info(f"OpportunityExplorer: should_write_options_overnight changed from {self.should_write_options_overnight} to {new_write_overnight}")
+                        logger.info(
+                            f"OpportunityExplorer: should_write_options_overnight changed from {self.should_write_options_overnight} to {new_write_overnight}")
                         self.should_write_options_overnight = new_write_overnight
 
                     new_monitor_only = config.get("should_monitor_only", False)
                     if new_monitor_only != self.should_monitor_only:
-                        logger.info(f"OpportunityExplorer: should_monitor_only changed from {self.should_monitor_only} to {new_monitor_only}")
+                        logger.info(
+                            f"OpportunityExplorer: should_monitor_only changed from {self.should_monitor_only} to {new_monitor_only}")
                         self.should_monitor_only = new_monitor_only
 
                     new_resolve_margin_locks = config.get("should_resolve_margin_locks", True)
                     if new_resolve_margin_locks != self.should_resolve_margin_locks:
-                        logger.info(f"OpportunityExplorer: should_resolve_margin_locks changed from {self.should_resolve_margin_locks} to {new_resolve_margin_locks}")
+                        logger.info(
+                            f"OpportunityExplorer: should_resolve_margin_locks changed from {self.should_resolve_margin_locks} to {new_resolve_margin_locks}")
                         self.should_resolve_margin_locks = new_resolve_margin_locks
 
         except Exception as e:
@@ -99,7 +102,7 @@ class OpportunityExplorer:
     async def explore_opportunities(self):
         # 1. Refresh dynamic config at the start of each iteration
         self.load_config()
-        
+
         current_time = time.time()
         if self.call_margin_reduction and current_time - self.last_call_margin_reduction_record_time > 120:
             self.call_margin_reduction = None
@@ -114,7 +117,7 @@ class OpportunityExplorer:
         date = get_current_trading_day()
         options = await self.option_data_fetcher.get_options(date)
         options = [option for option in options if (option.right == 'P' and option.strike < reference_price) or (
-                    option.right == 'C' and option.strike > reference_price)]
+                option.right == 'C' and option.strike > reference_price)]
         open_trades = self.trading_bot.get_open_trades()
         short_options = self.trading_bot.get_short_options()
 
@@ -155,6 +158,9 @@ class OpportunityExplorer:
             logger.info(f"Next sell check will be at {date_str}")
 
     async def try_to_sell_call_options(self, open_trades, options):
+        if not self.limit_adjuster.is_ready():
+            return SellOptionResult()
+
         call_options = [option for option in options if option.right == 'C']
         if not call_options:
             logger.error("No call options found")
@@ -162,7 +168,7 @@ class OpportunityExplorer:
 
         target_delta_calculator = TargetDeltaCalculator()
         target_delta = await target_delta_calculator.calculate_target_delta('C')
-        
+
         call_option = await self.find_call_candidate(call_options, target_delta)
         if not call_option:
             return SellOptionResult()
@@ -175,8 +181,9 @@ class OpportunityExplorer:
 
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss('C')
         if stop_loss_per_option < estimated_sell_price:
-            logger.warning(f"Failed to sell {get_option_name(call_option)} since the acceptable loss ({stop_loss_per_option:2f})"
-                           f" is smaller than the option price ({estimated_sell_price})")
+            logger.warning(
+                f"Failed to sell {get_option_name(call_option)} since the acceptable loss ({stop_loss_per_option:2f})"
+                f" is smaller than the option price ({estimated_sell_price})")
             return SellOptionResult()
 
         max_options_for_market_rise = await self.calculate_max_allowed_call_options(call_option)
@@ -201,7 +208,8 @@ class OpportunityExplorer:
             bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
             minutes_to_expiration, atm_iv, contract_iv, distance_to_strike_pct,
         )
-        expected_profit = calculate_expected_profit(estimated_sell_price, stop_loss_per_option, out_of_the_money_probability)
+        expected_profit = calculate_expected_profit(estimated_sell_price, stop_loss_per_option,
+                                                    out_of_the_money_probability)
 
         position_initial_state = PositionInitialState(
             is_executed=1,
@@ -241,15 +249,23 @@ class OpportunityExplorer:
 
     async def handle_call_sell_failure(self, call_option, sell_option_result, call_options, open_trades):
         if sell_option_result.required_initial_margin and not is_switched_to_overnight_trading():
-            result = await self.try_to_reduce_initial_margin_for_call_options(call_option, sell_option_result.required_initial_margin, sell_option_result.initial_margin_after, call_options)
+            result = await self.try_to_reduce_initial_margin_for_call_options(call_option,
+                                                                              sell_option_result.required_initial_margin,
+                                                                              sell_option_result.initial_margin_after,
+                                                                              call_options)
             position_options = self.trading_bot.get_short_options()
-            number_of_position_calls = sum([-position.position for position in position_options if position.contract.right == 'C'])
-            number_of_position_puts = sum([-position.position for position in position_options if position.contract.right == 'P'])
+            number_of_position_calls = sum(
+                [-position.position for position in position_options if position.contract.right == 'C'])
+            number_of_position_puts = sum(
+                [-position.position for position in position_options if position.contract.right == 'P'])
             if result == FAILED and number_of_position_calls * 2 < number_of_position_puts:
-                logger.info(f"Margin lock detected, only {number_of_position_calls} call options versus {number_of_position_puts} put options")
+                logger.info(
+                    f"Margin lock detected, only {number_of_position_calls} call options versus {number_of_position_puts} put options")
                 position_puts = [position.contract for position in position_options if position.contract.right == 'P']
                 candidate = min(position_puts, key=lambda option: option.strike)
-                is_margin_lock_trade_already_open = any(trade.contract.right == 'P' and trade.contract.strike == candidate.strike and trade.order.action.upper() == 'BUY' and trade.order.lmtPrice > 0.05 for trade in open_trades)
+                is_margin_lock_trade_already_open = any(
+                    trade.contract.right == 'P' and trade.contract.strike == candidate.strike and trade.order.action.upper() == 'BUY' and trade.order.lmtPrice > 0.05
+                    for trade in open_trades)
                 if is_margin_lock_trade_already_open:
                     logger.info(f"Margin lock buy trade for {get_option_name(candidate)} is already open")
                 elif not self.should_resolve_margin_locks:
@@ -282,16 +298,20 @@ class OpportunityExplorer:
 
         if right == 'C':
             if self.last_call_option_price != price:
-                logger.info(f"The current price level for call options changed from {self.last_call_option_price} to {price}")
+                logger.info(
+                    f"The current price level for call options changed from {self.last_call_option_price} to {price}")
                 if self.last_call_option_price < 0.15 < price:
-                    logger.info(f"However, this is a high jump, slowing the pace of increase so that the price level for call options is {price}")
+                    logger.info(
+                        f"However, this is a high jump, slowing the pace of increase so that the price level for call options is {price}")
                     price = 0.15
                 self.last_call_option_price = price
         else:
             if self.last_put_option_price != price:
-                logger.info(f"The current price level for put options changed from {self.last_put_option_price} to {price}")
+                logger.info(
+                    f"The current price level for put options changed from {self.last_put_option_price} to {price}")
                 if self.last_put_option_price < 0.15 < price:
-                    logger.info(f"However, this is a high jump, slowing the pace of increase so that the price level for put options is {price}")
+                    logger.info(
+                        f"However, this is a high jump, slowing the pace of increase so that the price level for put options is {price}")
                     price = 0.15
                 self.last_put_option_price = price
 
@@ -334,10 +354,13 @@ class OpportunityExplorer:
             comment = f"Delta: {delta:.3f}, target delta: {target_delta:.3f}"
             req_id_to_comment[result.trade.order.orderId] = comment
             logger.info(f"Submitted sell option of {get_option_name(option)}, order ID: {result.trade.order.orderId}, "
-                      f"target delta: {target_delta:.3f}")
+                        f"target delta: {target_delta:.3f}")
         return result
 
     async def try_to_sell_put_options(self, open_trades, options):
+        if not self.limit_adjuster.is_ready():
+            return SellOptionResult()
+
         put_options = [option for option in options if option.right == 'P']
         if not put_options:
             logger.error("Np put options found")
@@ -358,7 +381,8 @@ class OpportunityExplorer:
 
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss('P')
         if stop_loss_per_option < estimated_sell_price:
-            logger.warning(f"Failed to sell {get_option_name(put_option)} since the acceptable loss ({stop_loss_per_option}) is smaller than the option price ({estimated_sell_price})")
+            logger.warning(
+                f"Failed to sell {get_option_name(put_option)} since the acceptable loss ({stop_loss_per_option}) is smaller than the option price ({estimated_sell_price})")
             return SellOptionResult()
 
         max_options_for_market_drop = await self.calculate_max_allowed_put_options(put_option)
@@ -383,7 +407,8 @@ class OpportunityExplorer:
             bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
             minutes_to_expiration, atm_iv, contract_iv, distance_to_strike_pct,
         )
-        expected_profit = calculate_expected_profit(estimated_sell_price, stop_loss_per_option, out_of_the_money_probability)
+        expected_profit = calculate_expected_profit(estimated_sell_price, stop_loss_per_option,
+                                                    out_of_the_money_probability)
 
         position_initial_state = PositionInitialState(
             is_executed=1,
@@ -441,16 +466,24 @@ class OpportunityExplorer:
 
     async def handle_put_sell_failure(self, put_option, sell_option_result, put_options, open_trades):
         if sell_option_result.required_initial_margin and not is_switched_to_overnight_trading():
-            result = await self.try_to_reduce_initial_margin_for_put_options(put_option, sell_option_result.required_initial_margin, sell_option_result.initial_margin_after, put_options)
+            result = await self.try_to_reduce_initial_margin_for_put_options(put_option,
+                                                                             sell_option_result.required_initial_margin,
+                                                                             sell_option_result.initial_margin_after,
+                                                                             put_options)
             position_options = self.trading_bot.get_short_options()
-            number_of_position_calls = sum([-position.position for position in position_options if position.contract.right == 'C'])
-            number_of_position_puts = sum([-position.position for position in position_options if position.contract.right == 'P'])
+            number_of_position_calls = sum(
+                [-position.position for position in position_options if position.contract.right == 'C'])
+            number_of_position_puts = sum(
+                [-position.position for position in position_options if position.contract.right == 'P'])
             if result == FAILED and number_of_position_puts * 2 < number_of_position_calls:
-                logger.info(f"Margin lock detected, only {number_of_position_puts} put options versus {number_of_position_calls} call options")
+                logger.info(
+                    f"Margin lock detected, only {number_of_position_puts} put options versus {number_of_position_calls} call options")
                 position_calls = [position.contract for position in position_options if
-                                    position.contract.right == 'C']
+                                  position.contract.right == 'C']
                 candidate = max(position_calls, key=lambda option: option.strike)
-                is_margin_lock_trade_already_open = any(trade.contract.right == 'C' and trade.contract.strike == candidate.strike and trade.order.action.upper() == 'BUY' and trade.order.lmtPrice > 0.05 for trade in open_trades)
+                is_margin_lock_trade_already_open = any(
+                    trade.contract.right == 'C' and trade.contract.strike == candidate.strike and trade.order.action.upper() == 'BUY' and trade.order.lmtPrice > 0.05
+                    for trade in open_trades)
                 if is_margin_lock_trade_already_open:
                     logger.info(f"Margin lock buy trade for {get_option_name(candidate)} is already open")
                 elif not self.should_resolve_margin_locks:
@@ -478,8 +511,8 @@ class OpportunityExplorer:
                 break
             await asyncio.sleep(0.1)
 
-
-    async def try_to_reduce_initial_margin_for_call_options(self, call_option_to_be_sold, required_initial_margin, initial_margin_after_sell, call_options):
+    async def try_to_reduce_initial_margin_for_call_options(self, call_option_to_be_sold, required_initial_margin,
+                                                            initial_margin_after_sell, call_options):
         if self.last_call_option_price < MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION:
             logger.info(
                 f"Will not try to reduce initial margin for call options since the price level of call options is {self.last_call_option_price} while the minimal sell price to close is {MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION}")
@@ -490,12 +523,14 @@ class OpportunityExplorer:
         min_strike = min(position.contract.strike for position in positions)
         available_cheap_call_option = await strike_finder.get_available_cheap_call_option(call_options, min_strike)
         initial_margin_change = await self.trading_bot.get_initial_margin_change(available_cheap_call_option, 1)
-        logger.info(f"try_to_reduce_initial_margin_for_call_options, required initial margin: {required_initial_margin}, initial margin after sell: {initial_margin_after_sell},"
-                    f"initial margin change due to buy: {initial_margin_change}, option to be sold: {get_option_name(call_option_to_be_sold)}, option to buy: {get_option_name(available_cheap_call_option)}")
+        logger.info(
+            f"try_to_reduce_initial_margin_for_call_options, required initial margin: {required_initial_margin}, initial margin after sell: {initial_margin_after_sell},"
+            f"initial margin change due to buy: {initial_margin_change}, option to be sold: {get_option_name(call_option_to_be_sold)}, option to buy: {get_option_name(available_cheap_call_option)}")
 
         missing_sum = required_initial_margin - initial_margin_after_sell
         if initial_margin_change == 0:
-            logger.info(f"Initial margin change for buying {get_option_name(available_cheap_call_option)} is 0, will not buy it")
+            logger.info(
+                f"Initial margin change for buying {get_option_name(available_cheap_call_option)} is 0, will not buy it")
             self.call_margin_reduction = {
                 'option': get_option_name(available_cheap_call_option),
                 'margin_deficiency': round(abs(missing_sum))
@@ -504,7 +539,7 @@ class OpportunityExplorer:
             return FAILED
 
         required_number_of_units = math.ceil(missing_sum / initial_margin_change)
-        
+
         margin_change = round(abs(initial_margin_change))
         required_level = round(self.calculate_required_level(required_number_of_units), 2)
         if margin_change < 100:
@@ -520,15 +555,17 @@ class OpportunityExplorer:
         }
         self.last_call_margin_reduction_record_time = time.time()
 
-        logger.info(f"try_to_reduce_initial_margin_for_call_options, required initial margin: {required_initial_margin}, initial margin after sell: {initial_margin_after_sell:.0f}, "
-                    f"initial margin change due to buy: {initial_margin_change:.0f}, option to be sold: {get_option_name(call_option_to_be_sold)}, option to buy: {get_option_name(available_cheap_call_option)}, missing sum: {missing_sum:.0f}, required number of units = {required_number_of_units}, last call price: {self.last_call_option_price}")
+        logger.info(
+            f"try_to_reduce_initial_margin_for_call_options, required initial margin: {required_initial_margin}, initial margin after sell: {initial_margin_after_sell:.0f}, "
+            f"initial margin change due to buy: {initial_margin_change:.0f}, option to be sold: {get_option_name(call_option_to_be_sold)}, option to buy: {get_option_name(available_cheap_call_option)}, missing sum: {missing_sum:.0f}, required number of units = {required_number_of_units}, last call price: {self.last_call_option_price}")
 
         if required_number_of_units < 0:
             logger.error(f"The required number of units is {required_number_of_units}")
             return FAILED
 
         if self.last_call_option_price * 0.4 > 0.07 * required_number_of_units + 0.02:
-            logger.info(f"Buying {required_number_of_units} units of {get_option_name(available_cheap_call_option)} would relax the required initial margin")
+            logger.info(
+                f"Buying {required_number_of_units} units of {get_option_name(available_cheap_call_option)} would relax the required initial margin")
             trade = self.trading_bot.buy_low_cost(available_cheap_call_option, required_number_of_units)
             comment = f"Margin Reduction of {round(abs(initial_margin_change))}"
             req_id_to_comment[trade.order.orderId] = comment
@@ -536,16 +573,19 @@ class OpportunityExplorer:
             self.max_loss_calculator.notify_spread_usage('C')
             return SUCCESS
 
-        logger.info(f"Will not buy {get_option_name(available_cheap_call_option)} since the potential sell price is too low ({self.last_call_option_price})")
+        logger.info(
+            f"Will not buy {get_option_name(available_cheap_call_option)} since the potential sell price is too low ({self.last_call_option_price})")
         return FAILED
 
     def calculate_required_level(self, required_number_of_units):
         """Calculates the required level based on the number of units."""
         return math.ceil((0.07 * required_number_of_units + 0.02) / 0.02) * 0.05
 
-    async def try_to_reduce_initial_margin_for_put_options(self, put_option_to_be_sold, required_initial_margin, initial_margin_after_sell, put_options):
+    async def try_to_reduce_initial_margin_for_put_options(self, put_option_to_be_sold, required_initial_margin,
+                                                           initial_margin_after_sell, put_options):
         if self.last_put_option_price < MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION:
-            logger.info(f"Will not try to reduce initial margin for put options since the price level of put options is {self.last_put_option_price} while the minimal sell price to close is {MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION}")
+            logger.info(
+                f"Will not try to reduce initial margin for put options since the price level of put options is {self.last_put_option_price} while the minimal sell price to close is {MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION}")
             return FAILED
 
         strike_finder = StrikeFinder()
@@ -555,7 +595,8 @@ class OpportunityExplorer:
         initial_margin_change = await self.trading_bot.get_initial_margin_change(available_cheap_put_option, 1)
         missing_sum = required_initial_margin - initial_margin_after_sell
         if initial_margin_change == 0:
-            logger.info(f"Initial margin change for buying {get_option_name(available_cheap_put_option)} is 0, will not buy it")
+            logger.info(
+                f"Initial margin change for buying {get_option_name(available_cheap_put_option)} is 0, will not buy it")
             initial_margin_change = await self.trading_bot.get_initial_margin_change(available_cheap_put_option, 2)
             logger.info(
                 f"Initial margin change for 2 units is {initial_margin_change}")
@@ -582,36 +623,42 @@ class OpportunityExplorer:
         }
         self.last_put_margin_reduction_record_time = time.time()
 
-        logger.info(f"try_to_reduce_initial_margin_for_put_options, required initial margin: {required_initial_margin:.0f}, initial margin after sell: {initial_margin_after_sell:.0f}, "
-                    f"initial margin change due to buy: {initial_margin_change:.0f}, option to be sold: {get_option_name(put_option_to_be_sold)}, option to buy: {get_option_name(available_cheap_put_option)}, missing sum: {missing_sum:.0f}, required number of units = {required_number_of_units}, last put price: {self.last_put_option_price}")
+        logger.info(
+            f"try_to_reduce_initial_margin_for_put_options, required initial margin: {required_initial_margin:.0f}, initial margin after sell: {initial_margin_after_sell:.0f}, "
+            f"initial margin change due to buy: {initial_margin_change:.0f}, option to be sold: {get_option_name(put_option_to_be_sold)}, option to buy: {get_option_name(available_cheap_put_option)}, missing sum: {missing_sum:.0f}, required number of units = {required_number_of_units}, last put price: {self.last_put_option_price}")
 
         if required_number_of_units < 0:
             logger.error(f"The required number of units is {required_number_of_units}")
             return FAILED
 
         if self.last_put_option_price * 0.4 > 0.07 * required_number_of_units + 0.02:
-            logger.info(f"Buying {required_number_of_units} units of {get_option_name(available_cheap_put_option)} would relax the required initial margin")
+            logger.info(
+                f"Buying {required_number_of_units} units of {get_option_name(available_cheap_put_option)} would relax the required initial margin")
             trade = self.trading_bot.buy_low_cost(available_cheap_put_option, required_number_of_units)
             comment = f"Margin Reduction of {round(abs(initial_margin_change))}"
             req_id_to_comment[trade.order.orderId] = comment
             self.can_submit_orders = True
             return SUCCESS
 
-        logger.info(f"Will not buy {get_option_name(available_cheap_put_option)} since the potential sell price is too low ({self.last_put_option_price})")
+        logger.info(
+            f"Will not buy {get_option_name(available_cheap_put_option)} since the potential sell price is too low ({self.last_put_option_price})")
         return FAILED
 
     async def try_to_resolve_margin_lock(self, candidate_option, missing_sum, minority_fraction):
         time_from_last_margin_lock_resolution_attempt = time.time() - self.last_margin_lock_resolution_attempt_time
         if time_from_last_margin_lock_resolution_attempt < 15 * 60:
             time_to_next_margin_lock_resolution_attempt = 15 * 60 - time_from_last_margin_lock_resolution_attempt
-            logger.warning(f"An attempt to resolve the margin lock has been carried out recently, more time is required for the next attempt ({time_to_next_margin_lock_resolution_attempt} seconds)")
+            logger.warning(
+                f"An attempt to resolve the margin lock has been carried out recently, more time is required for the next attempt ({time_to_next_margin_lock_resolution_attempt} seconds)")
             return
 
-        initial_margin_change = await self.trading_bot.get_initial_margin_change(candidate_option, quantity=1, limit=0.1)
+        initial_margin_change = await self.trading_bot.get_initial_margin_change(candidate_option, quantity=1,
+                                                                                 limit=0.1)
         initial_margin_change_coefficient = 2 if minority_fraction < 0.25 else 1
         if initial_margin_change_coefficient * abs(initial_margin_change) < abs(missing_sum):
-            logger.info(f"Initial margin change for buying {get_option_name(candidate_option)} is {initial_margin_change}, "
-                        f"which is not enough to cover for the missing sum of {missing_sum}, will not buy it as part of margin lock resolution")
+            logger.info(
+                f"Initial margin change for buying {get_option_name(candidate_option)} is {initial_margin_change}, "
+                f"which is not enough to cover for the missing sum of {missing_sum}, will not buy it as part of margin lock resolution")
             return
 
         logger.info(f"Initial margin change for buying {get_option_name(candidate_option)} is {initial_margin_change}, "

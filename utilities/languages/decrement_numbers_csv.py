@@ -14,9 +14,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from utilities.database_access import get_client
-from utilities.languages.export_vocabulary_csv import RUSSIAN_SPREADSHEET_ID
+from utilities.languages.export_vocabulary_csv import RUSSIAN_SPREADSHEET_ID, SPANISH_SPREADSHEET_ID
 
-SPREADSHEET_ID = RUSSIAN_SPREADSHEET_ID
+#SPREADSHEET_ID = RUSSIAN_SPREADSHEET_ID
+SPREADSHEET_ID = SPANISH_SPREADSHEET_ID
 OUTPUT_CSV = Path(__file__).resolve().parent / "vocabulary_decremented.csv"
 CLEAR_IF_EQUAL_TO = 1
 

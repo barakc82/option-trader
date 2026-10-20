@@ -150,6 +150,7 @@ class MarketDataFetcher:
         for entry in PositionsManager().position_initial_state_map.get(contract.conId, []):
             if entry.max_ask is None or current_ask > entry.max_ask:
                 if not fairness_checker.is_unfair_ask_value(contract, es_options):
+                    logger.info(f"Updating new max ask for {get_option_name(contract)}: {current_ask}")
                     entry.max_ask = current_ask
 
     def get_last_tick_time(self, con_id):
@@ -319,7 +320,7 @@ class MarketDataFetcher:
 
         # Below 5 minutes, a '5 mins' bar request would need padding out beyond the real
         # duration just to get a single bar, so use 1-min bars instead.
-        bar_size_setting = '1 min' if duration_seconds < 300 else '5 mins'
+        bar_size_setting = '1 min' if duration_seconds <= 300 else '5 mins'
         min_chunk_seconds = 60 if bar_size_setting == '1 min' else 300
 
         # IB caps a single 5-min-bar request at 86400 seconds (24h), so page backwards from

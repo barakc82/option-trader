@@ -9,5 +9,9 @@
     "iv_history_max_entries": 20000,
     "number_of_samples_per_day": 20,
     "target_delta_top_multiplier": 3,
-    "run_after_hours_only": true
+    "run_after_hours_only": true,
+    "put_max_delta": 0.02,
+    "call_max_delta": 0.02,
+    "put_ml_slot_count": 0,
+    "call_ml_slot_count": 0
 }

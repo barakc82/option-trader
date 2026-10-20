@@ -25,6 +25,7 @@ def get_nyse_calendar():
 # These are still used for internal logic relative to session boundaries
 JUST_BEFORE_TRADE_END_TIME = dt_time(20, 10)
 PREMARKET_START_TIME = dt_time(20, 15)  # 20:15 (usually for overnight/early start)
+END_OF_EARLY_TRADE_TIME = dt_time(22, 15)  # 05:15
 PREMARKET_END_TIME = dt_time(9, 25)  # 16:25
 REGULAR_HOURS_START_TIME = dt_time(9, 30)  # 16:30
 LATE_REGULAR_HOURS_START_TIME = dt_time(14, 30)  # 21:30
@@ -154,9 +155,21 @@ def is_after_hours():
     return is_market_open() and REGULAR_HOURS_END_TIME < now_in_nyc < AFTER_HOURS_END_TIME
 
 
+def is_early_closing_time(moment):
+    """Whether a tz-aware datetime falls in the early-closing window, judged by NY wall-clock
+    time whatever timezone it carries. Naive datetimes are rejected rather than guessed at."""
+    if moment.tzinfo is None:
+        raise ValueError(f"is_early_closing_time needs a tz-aware datetime, got naive {moment}")
+    nyc_time = moment.astimezone(new_york_timezone).time()
+    return REGULAR_HOURS_END_TIME < nyc_time < EARLY_CLOSING_END_TIME
+
+
+def is_early_trade(moment):
+    nyc_time = moment.astimezone(new_york_timezone).time()
+    return PREMARKET_START_TIME < nyc_time < END_OF_EARLY_TRADE_TIME
+
 def is_early_closing_hours():
-    now_in_nyc = datetime.now(new_york_timezone).time()
-    return is_market_open() and REGULAR_HOURS_END_TIME < now_in_nyc < EARLY_CLOSING_END_TIME
+    return is_market_open() and is_early_closing_time(datetime.now(new_york_timezone))
 
 
 def get_elapsed_day_fraction():
