@@ -66,6 +66,7 @@ class PositionInitialState:
     is_max_ask_scan_required: bool = False
     out_of_the_money_probability: float | None = None
     expected_profit: float | None = None
+    is_ml_derived: bool = False
 
 
 def calculate_expected_profit(estimated_sell_price, stop_loss_per_option, out_of_the_money_probability):

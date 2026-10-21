@@ -265,6 +265,7 @@ class StateUpdater:
                                              3) if td_entry and td_entry.expected_profit is not None else '',
                     'max_ask': round(td_entry.max_ask, 3) if td_entry and td_entry.max_ask is not None else '',
                     'is_max_ask_scan_required': td_entry.is_max_ask_scan_required if td_entry else False,
+                    'is_ml_derived': td_entry.is_ml_derived if td_entry else False,
                 })
         state['position_initial_states'] = sorted(position_initial_states, key=lambda x: (x['right'], x['date'], x['strike']))
 
@@ -345,9 +346,6 @@ class StateUpdater:
             state['after_hours_profit'] = self._read_cached_after_hours_profit()
             if not has_expired_fill:
                 state['daily_profit'] += state['after_hours_profit']
-
-
-
 
         opportunity_explorer = OpportunityExplorer()
         state['last_put_option_price'] = round(opportunity_explorer.last_put_option_price, 2)

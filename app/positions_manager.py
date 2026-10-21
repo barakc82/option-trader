@@ -6,7 +6,7 @@ from datetime import datetime
 from types import SimpleNamespace
 
 from utilities.utils import is_trade_cancelled, write_heartbeat, get_option_name, is_final_hours, CACHED_JSON_PATH, \
-    is_night_break
+    is_night_break, OPTION_TRADER_CONFIG_PATH
 from utilities.ib_utils import *
 from .market_data_fetcher import MarketDataFetcher
 
@@ -19,6 +19,8 @@ from .trading_bot import TradingBot
 logger = logging.getLogger(__name__)
 
 MINIMAL_SELL_PRICE_TO_CLOSE_POSITION = MINIMAL_SELL_PRICE + 0.05
+DEFAULT_ML_SLOT_COUNT = 0
+RIGHT_CONFIG_PREFIXES = {'C': 'call', 'P': 'put'}
 
 
 class PositionsManager:
@@ -41,10 +43,35 @@ class PositionsManager:
             self.done_contract_ids = set()
             self.position_initial_state_map = {}
             self._dumped_during_night_break = False
+            self.ml_slot_count = {'C': DEFAULT_ML_SLOT_COUNT, 'P': DEFAULT_ML_SLOT_COUNT}
+            self.load_config()
             self._load_cached_position_initial_states()
             logger.info("PositionsManager singleton initialized.")
             self._initialized = True
 
+
+    def load_config(self):
+        """Reads {put,call}_ml_slot_count from OPTION_TRADER_CONFIG_PATH."""
+        try:
+            if os.path.exists(OPTION_TRADER_CONFIG_PATH):
+                with open(OPTION_TRADER_CONFIG_PATH, "r") as f:
+                    config = json.load(f)
+
+                for right, prefix in RIGHT_CONFIG_PREFIXES.items():
+                    new_ml_slot_count = config.get(f"{prefix}_ml_slot_count", DEFAULT_ML_SLOT_COUNT)
+                    if new_ml_slot_count != self.ml_slot_count[right]:
+                        logger.info(f"PositionsManager: {prefix}_ml_slot_count changed from {self.ml_slot_count[right]} to {new_ml_slot_count}")
+                        self.ml_slot_count[right] = new_ml_slot_count
+        except Exception as e:
+            logger.error(f"PositionsManager: Error reading config: {e}")
+
+    def has_available_ml_slot(self, right):
+        """False if and only if the ML-derived position initial states of this right already
+        number at least the configured {put,call}_ml_slot_count."""
+        self.load_config()
+        ml_derived_count = sum(1 for entries in self.position_initial_state_map.values() for entry in entries
+                               if entry.right == right and entry.is_ml_derived)
+        return ml_derived_count < self.ml_slot_count[right]
 
     def _load_cached_position_initial_states(self):
         def as_float(value):
@@ -78,6 +105,7 @@ class PositionsManager:
                 ask_delta = as_float(pos.get('ask_delta'))
                 max_ask = as_float(pos.get('max_ask'))
                 is_max_ask_scan_required = pos.get('is_max_ask_scan_required')
+                is_ml_derived = pos.get('is_ml_derived', False)
                 last_delta = as_float(pos.get('last_delta'))
                 model_delta = as_float(pos.get('model_delta'))
                 gamma = as_float(pos.get('gamma'))
@@ -113,6 +141,7 @@ class PositionsManager:
                     ask_delta=ask_delta,
                     max_ask=max_ask,
                     is_max_ask_scan_required=bool(is_max_ask_scan_required),
+                    is_ml_derived=bool(is_ml_derived),
                     last_delta=last_delta,
                     model_delta=model_delta,
                     gamma=gamma,
