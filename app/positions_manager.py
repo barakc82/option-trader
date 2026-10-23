@@ -4,6 +4,7 @@ import json
 import os
 from datetime import datetime
 from types import SimpleNamespace
+from dataclasses import dataclass
 
 from utilities.utils import is_trade_cancelled, write_heartbeat, get_option_name, is_final_hours, CACHED_JSON_PATH, \
     is_night_break, OPTION_TRADER_CONFIG_PATH
@@ -21,6 +22,12 @@ logger = logging.getLogger(__name__)
 MINIMAL_SELL_PRICE_TO_CLOSE_POSITION = MINIMAL_SELL_PRICE + 0.05
 DEFAULT_ML_SLOT_COUNT = 0
 RIGHT_CONFIG_PREFIXES = {'C': 'call', 'P': 'put'}
+
+
+@dataclass
+class PositionData:
+    contract_id: int
+    ml_derived_count: int = 0
 
 
 class PositionsManager:
@@ -41,10 +48,10 @@ class PositionsManager:
             self.max_loss_calculator = MaxLossCalculator()
             self.predictor = Predictor()
             self.done_contract_ids = set()
+            self.contract_id_to_position_data = {}
             self.position_initial_state_map = {}
             self._dumped_during_night_break = False
             self.ml_slot_count = {'C': DEFAULT_ML_SLOT_COUNT, 'P': DEFAULT_ML_SLOT_COUNT}
-            self.load_config()
             self._load_cached_position_initial_states()
             logger.info("PositionsManager singleton initialized.")
             self._initialized = True
@@ -65,13 +72,26 @@ class PositionsManager:
         except Exception as e:
             logger.error(f"PositionsManager: Error reading config: {e}")
 
-    def has_available_ml_slot(self, right):
-        """False if and only if the ML-derived position initial states of this right already
-        number at least the configured {put,call}_ml_slot_count."""
+
+    def get_available_ml_slots_count(self, right):
+        """How many more ML-derived contracts of this right may be sold: the configured
+        {put,call}_ml_slot_count minus the quantities of the ML-derived position initial
+        states already held, never below 0."""
         self.load_config()
-        ml_derived_count = sum(1 for entries in self.position_initial_state_map.values() for entry in entries
-                               if entry.right == right and entry.is_ml_derived)
-        return ml_derived_count < self.ml_slot_count[right]
+        positions = self.trading_bot.get_short_options()
+        ml_derived_positions = sum(self.contract_id_to_position_data[position.contract.conId].ml_derived_count
+                                   for position in positions
+                                   if position.contract.conId in self.contract_id_to_position_data)
+
+        trades = self.trading_bot.get_open_trades()
+        req_id_to_order_metadata = self.trading_bot.req_id_to_order_metadata
+        ml_derived_trades = sum(trade.remaining() for trade in trades
+                                if trade.order.orderId in req_id_to_order_metadata
+                                and req_id_to_order_metadata[trade.order.orderId] is not None
+                                and req_id_to_order_metadata[trade.order.orderId].is_ml_derived)
+        ml_derived_taken_slots = ml_derived_positions + ml_derived_trades
+        return max(self.ml_slot_count[right] - ml_derived_taken_slots, 0)
+
 
     def _load_cached_position_initial_states(self):
         def as_float(value):
@@ -124,7 +144,7 @@ class PositionsManager:
                     stop_loss_per_option = stop_loss - estimated_sell_price
                     option_stub = SimpleNamespace(right=right, strike=strike)
                     out_of_the_money_probability = self.predictor.predict_out_of_the_money_probability(
-                        option_stub, right, target_delta, estimated_sell_price, stop_loss_per_option,
+                        option_stub, right, estimated_sell_price, stop_loss_per_option,
                         bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
                         minutes_to_expiration, atm_iv, contract_iv, distance_to_strike_pct,
                     )
@@ -230,15 +250,33 @@ class PositionsManager:
     def can_buy_options(self):
         return not is_final_hours()
 
-    def on_fill(self, trade):
+    def on_fill(self, trade, fill):
+        logger.info(
+            f"Trade: {get_option_name(trade.contract)} {trade.order.action}, fill: {fill}, number of fills: {len(trade.fills)}")
+
+        contract_id = trade.contract.conId
+        position_data = self.contract_id_to_position_data.get(contract_id, None)
+        if not position_data:
+            position_data = PositionData(contract_id=contract_id)
+        self.contract_id_to_position_data[contract_id] = position_data
+
+        position_initial_state = self.trading_bot.req_id_to_order_metadata.get(trade.order.orderId)
+        if trade.order.action.upper() == 'SELL' and position_initial_state and position_initial_state.is_ml_derived:
+            position_data.ml_derived_count += fill.execution.shares
+
+        if trade.order.action.upper() == 'BUY':
+            position_data.ml_derived_count -= min(fill.execution.shares, position_data.ml_derived_count)
+
+
+    def on_filled(self, trade):
         position_initial_state = self.trading_bot.req_id_to_order_metadata.get(trade.order.orderId)
         logger.info(f"Trade filled: {get_option_name(trade.contract)} {trade.order.action}, position initial state: {position_initial_state}")
         if trade.order.action.upper() == 'SELL' and position_initial_state is not None:
             self.add_position_entry(position_initial_state, trade)
         if trade.order.action.upper() == 'BUY':
             self.done_contract_ids.add(trade.contract.conId)
-            c = trade.contract
             if trade.order.lmtPrice > 0.1:
+                c = trade.contract
                 for entry in self.position_initial_state_map.get(c.conId, []):
                     entry.is_max_ask_scan_required = True
         if not position_initial_state:

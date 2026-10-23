@@ -32,6 +32,7 @@ LATE_REGULAR_HOURS_START_TIME = dt_time(14, 30)  # 21:30
 REDUCE_SAFE_CUSHION_TIME = dt_time(15, 40)  # 22:40
 NEW_OPTION_EXPLORATION_START_TIME = dt_time(15, 55)  # 22:55
 REGULAR_HOURS_END_TIME = dt_time(16, 00)  # 23:00
+FIVE_MINUTES_AFTER_REGULAR_HOURS_END_TIME = dt_time(16, 5)  # 23:05
 EARLY_CLOSING_END_TIME = dt_time(16, 15)  # 23:15
 AFTER_HOURS_END_TIME = dt_time(17, 0)  # 00:00
 JUST_AFTER_TRADE_END_TIME = dt_time(17, 5)
@@ -163,6 +164,8 @@ def is_early_closing_time(moment):
     nyc_time = moment.astimezone(new_york_timezone).time()
     return REGULAR_HOURS_END_TIME < nyc_time < EARLY_CLOSING_END_TIME
 
+def is_first_five_minutes_of_closing_time(nyc_time):
+    return REGULAR_HOURS_END_TIME < nyc_time < FIVE_MINUTES_AFTER_REGULAR_HOURS_END_TIME
 
 def is_early_trade(moment):
     nyc_time = moment.astimezone(new_york_timezone).time()

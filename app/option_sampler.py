@@ -94,11 +94,12 @@ class OptionSampler:
 
                 out_of_the_money_probability = None
                 expected_profit = None
+
                 if stop_loss is not None:
                     stop_loss_per_option = stop_loss - estimated_sell_price
                     option_stub = SimpleNamespace(right=right, strike=strike)
                     out_of_the_money_probability = self.predictor.predict_out_of_the_money_probability(
-                        option_stub, right, target_delta, estimated_sell_price, stop_loss_per_option,
+                        option_stub, right, estimated_sell_price, stop_loss_per_option,
                         bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
                         minutes_to_expiration, atm_iv, contract_iv, distance_to_strike_pct,
                     )
@@ -327,8 +328,14 @@ class OptionSampler:
         distance_to_stop_pct = get_distance_to_stop_pct(option, self.market_data_fetcher, stop_loss)
         contract_iv = get_model_iv(option.ticker)
 
+        delta_values = [d for d in (bid_delta, ask_delta, last_delta, model_delta) if d is not None]
+        max_delta = max(delta_values) if delta_values else None
+        if max_delta and max_delta > target_delta * self.target_delta_top_multiplier:
+            logger.info(f"Error during sample collection: max delta ({max_delta}) is greater than the multiplied target delta ({target_delta * self.target_delta_top_multiplier})")
+            return FAILED
+
         out_of_the_money_probability = self.predictor.predict_out_of_the_money_probability(
-            option, right, target_delta, estimated_sell_price, stop_loss_per_option,
+            option, right, estimated_sell_price, stop_loss_per_option,
             bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
             minutes_to_expiration, atm_iv, contract_iv, distance_to_strike_pct,
         )

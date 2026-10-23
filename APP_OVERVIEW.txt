@@ -1,0 +1,202 @@
+OPTION TRADER - OVERVIEW
+=======================
+
+1. WHAT THE APP DOES
+--------------------
+Option Trader is an automated seller of far out-of-the-money SPX index
+options (SPXW, nearest expiration). It runs continuously inside a Docker
+container next to an IB Gateway (Interactive Brokers), and earns the premium
+of short calls and puts that are expected to expire worthless, while
+limiting the loss on the ones that don't.
+
+The app (app/main.py) runs several supervised asyncio tasks side by side;
+each is restarted automatically if it crashes or the IB connection drops:
+
+  - ConnectionManager   Keeps the connection to IB Gateway alive.
+  - OptionTrader        The main trading loop. While the market is open it
+                        asks OpportunityExplorer to look for something to
+                        sell, and PositionsManager to manage what is held.
+  - OptionSafeguard     Watches every short position's price and closes it
+                        with a buy order once it reaches its stop loss.
+  - SubscriptionManager Maintains streaming market-data subscriptions
+                        (SPX options and their ES futures-option
+                        counterparts, used to sanity-check SPX quotes).
+  - StateUpdater        Builds a snapshot of the account and positions,
+                        caches it locally and posts it to the web dashboard
+                        (frontend/).
+  - OptionSampler       Collects training data (see section 2).
+  - PredictionsEvaluator Checks, after each expiration, how well the model's
+                        predictions held up (see section 4).
+
+How a sale is decided (OpportunityExplorer + StrikeFinder):
+  1. Max loss per option (MaxLossCalculator): how much the account is
+     willing to lose on one contract, derived from the cash balance and how
+     many contracts are / may be held. The stop loss of a new position is
+     its sell price plus this amount.
+  2. Target delta (TargetDeltaCalculator): the highest delta a sold option
+     may have, proportional to the max loss per option (and reduced late in
+     the day / overnight). Lower delta = further from the money = safer.
+  3. Strike selection (StrikeFinder): fetches market snapshots for a block
+     of strikes and picks the option with the highest delta that is still
+     below the target delta.
+     When a machine-learning slot is free ({call,put}_ml_slot_count in
+     config/option_trader_config.json), it can instead pick the option with
+     the highest *expected profit* according to the trained model, among
+     options whose delta is at most {call,put}_max_delta. Such positions are
+     marked is_ml_derived and occupy a slot until they are closed.
+  4. Checks before selling: price estimate (PriceEstimator), minimum sell
+     price, margin / exposure limits (NetWorthCalculator), then a limit
+     sell order through TradingBot.
+
+Expected profit of a candidate (utilities/ib_utils.py):
+    expected_profit = p * sell_price - (1 - p) * max_loss_per_option
+where p is the model's probability that the option's ask never reaches
+the stop loss before expiration.
+
+Runtime settings are read from config/option_trader_config.json and can be
+changed without restarting (e.g. should_monitor_only, number of daily
+samples, ML slot counts, max deltas).
+
+
+2. HOW DATA ITEMS ARE COLLECTED
+-------------------------------
+Every training row describes one option at the moment it was (or could
+have been) sold, plus what then happened to it. In code a row starts life
+as a PositionInitialState (utilities/ib_utils.py).
+
+Two sources of rows:
+
+  a) Real trades (is_executed = 1)
+     When OpportunityExplorer sells an option it records the option's
+     state at that moment. When the sell order fills, PositionsManager
+     stores it in position_initial_state_map, keyed by contract id.
+
+  b) Random samples (is_executed = 0) - OptionSampler
+     Real trades are few and all chosen by the same rule, so the app also
+     records "would-be" trades that are never actually sold. Each trading
+     day is divided into number_of_samples_per_day equal slices of
+     open-market time (nightly breaks / holidays excluded); at each slice
+     it picks a random right (C/P), a random stop loss distance (50%-150%
+     of the current max loss) and a random target delta (0.75x to
+     target_delta_top_multiplier x the normal one), finds the matching
+     option, and records its state. This spreads the data over many more
+     deltas and stop distances than real trading alone would.
+
+What is recorded at sale/sample time (the features):
+  estimated_sell_price, stop_loss, target_delta, bid/ask/last/model delta,
+  gamma, vega, theta, minutes_to_expiration, atm_iv (SPX implied
+  volatility), contract_iv, distance_to_strike_pct, distance_to_stop_pct.
+
+What is filled in afterwards (the outcome):
+  max_ask - the highest ask price the option reached between the moment
+  it was recorded and its expiration. While the market is open, every
+  incoming quote updates max_ask if it is higher (quotes flagged as unfair
+  against the ES counterpart are ignored). For samples, and for positions
+  that were bought back at a high price, the max ask is re-checked after
+  expiration from IB historical minute bars (MarketDataFetcher.find_max_ask).
+
+When the option has expired, the completed row is appended to
+cache/close_events.csv inside the container (PositionsManager._log_close_event)
+and removed from memory. Rows waiting for their expiration are kept in the
+cached state file so they survive restarts.
+
+Getting the data for training (docker/update_model.ps1, step 1):
+docker/fetch_options_data.ps1 copies cache/close_events.csv from the
+container on the cloud VM to machine_learning/data/options_data.csv on the
+local machine.
+
+
+3. MACHINE LEARNING STEPS
+-------------------------
+Goal: for an option about to be sold, estimate
+    P(survive) = P(max_ask < stop_loss)
+i.e. the probability that the ask never crosses the stop loss before
+expiration (the stop is never hit). One model is selected and trained
+separately for calls and for puts.
+
+Run with docker/update_model.ps1 (fetch data -> select model -> install),
+or directly: python -m app.machine_learning.select_probability_model
+
+Step 1 - Pre-processing (pre_processing.py, select_probability_model.py)
+  - Adds max_delta = the largest of the four delta readings.
+  - Splits rows by right (C / P).
+  - Drops rows with missing features, and rows with max_ask <= 0 or
+    estimated_sell_price <= 0 (log-based transforms need positive values).
+  - Label: survived = 1 if max_ask < stop_loss, else 0
+    (survival_scoring.compute_survival_label).
+
+Step 2 - Candidate model families (eight in total)
+  a) Regression + residual distribution (six combinations):
+     A linear regression predicts max_ask under one of three target
+     transforms (probability_transforms.py):
+        raw        max_ask
+        log        log(max_ask)
+        log_ratio  log(max_ask / estimated_sell_price)
+     The prediction becomes a probability through a residual distribution
+     fitted to the training residuals: "normal" or "empirical"
+     (Laplace-smoothed). P(survive) = P(prediction + residual < stop).
+  b) Logistic regression (logistic_survival.py):
+     Predicts P(survive) directly. The stop distance enters as the feature
+     log_k = log(stop / sell_price), always included. To teach the model
+     how survival changes with the stop, every trade is replicated on a
+     fixed grid of 15 k values (1.25 to 8.0, log spaced), each replicate
+     labelled max_ask < k * sell_price and weighted 1/15. Fitted in two
+     stages: log_k alone without penalty to fix its slope, then the other
+     (standardised) features with L2 regularisation and log_k's
+     contribution held fixed as an offset. A fit whose log_k coefficient is
+     not positive (a further stop must not lower survival) is rejected.
+  c) XGBoost classifier (xgboost_survival.py):
+     Same k-grid replication and log_k feature as logistic; a monotone
+     constraint on log_k enforces "further stop => not less likely to
+     survive". The L2 strength (reg_lambda) is searched alongside features.
+
+Step 3 - Feature selection and scoring (best_subset.py)
+  - Candidate features: estimated_sell_price, the four deltas, max_delta,
+    gamma, vega, theta, minutes_to_expiration, atm_iv, contract_iv,
+    distance_to_strike_pct.
+  - Best-subset search: subsets are tried in increasing size; the search
+    stops when 4 consecutive sizes bring no improvement, or when the time
+    budget (SEARCH_TIME_BUDGET_SEC) runs out.
+  - Every candidate is scored by 5-fold GroupKFold cross-validation
+    grouped by expiration date, so all rows of one trading day are always
+    on the same side of the split (no leakage between same-day rows).
+    Logistic/XGBoost fit on the grid replicates but are always scored on
+    one row per trade at its real stop.
+  - Score (default): weighted log loss of the out-of-fold P(survive), each
+    row weighted by stop_loss - estimated_sell_price, so trades with more
+    money at risk count more. Alternatives: plain log loss, or "rss".
+
+Step 4 - Choosing the winner (select_probability_model.py)
+  - All candidates of all families are pooled and the lowest score wins.
+  - A standard error is computed from the winner's per-fold scores, and
+    the report states how many other candidates are within one standard
+    error (many = the winner is not clearly better than the rest).
+
+Step 5 - Final fit and deployment
+  - The winning (family, feature subset, distribution / regularisation) is
+    refitted on all rows of that right.
+  - Calls and puts models are saved together as
+    machine_learning/model/best_probability_model.pkl.
+  - docker/install_probability_classifier.ps1 copies the file into the
+    container. Predictor (app/predictor.py) reloads it automatically when
+    the file changes, and from then on every probability / expected profit
+    computed by the app uses the new model.
+
+
+4. CHECKING THE MODEL IN PRODUCTION
+-----------------------------------
+While scanning for candidates, StrikeFinder logs the best expected-profit
+option to cache/predictions_<expiry>.csv (time, strike, right, sell price,
+stop loss, predicted probability, expected profit). After that expiration's
+session closes, PredictionsEvaluator fetches each option's minute bars
+from its record time to expiration, checks whether the stop was hit, and
+computes the realized profit. It writes (tab-separated, in cache/):
+  - prediction_averages.csv: average expected vs. realized profit per day.
+  - probability_buckets.csv: per probability bucket (0.65-0.70, ...,
+    0.95-1.00) how many records fell in it and the fraction that did not
+    hit the stop - i.e. whether a predicted 0.90 really survives ~90% of
+    the time.
+  - aggregated_probability_buckets.csv: the same rates pooled over all
+    days so far, one row per day.
+  - early_closing_* versions of the bucket files, restricted to records
+    made during the early-closing window (16:00-16:15 New York time).

@@ -7,15 +7,17 @@ import math
 import os
 from datetime import datetime, timezone
 
-from utilities.utils import new_york_timezone, REGULAR_HOURS_END_TIME, is_early_closing_time, is_early_trade
+from utilities.utils import new_york_timezone, REGULAR_HOURS_END_TIME, is_early_closing_time, is_early_trade, \
+    is_first_five_minutes_of_closing_time
 from .market_data_fetcher import MarketDataFetcher
 
 logger = logging.getLogger(__name__)
 
-PREDICTIONS_CSV_PATTERN = "cache/predictions_*.csv"
-PREDICTION_AVERAGES_CSV_PATH = "cache/prediction_averages.csv"
-PROBABILITY_BUCKETS_CSV_PATH = "cache/probability_buckets.csv"
-EARLY_TRADE_PROBABILITY_BUCKETS_CSV_PATH = "cache/early_trade_probability_buckets.csv"
+PREDICTIONS_CSV_PATTERN = "cache/prediction_evaluation/predictions_*.csv"
+PREDICTION_AVERAGES_CSV_PATH = "cache/prediction_evaluation/prediction_averages.csv"
+PROBABILITY_BUCKETS_CSV_PATH = "cache/prediction_evaluation/probability_buckets.csv"
+EARLY_TRADE_PROBABILITY_BUCKETS_CSV_PATH = "cache/prediction_evaluation/early_trade_probability_buckets.csv"
+VERY_EARLY_TRADE_PROBABILITY_BUCKETS_CSV_PATH = "cache/prediction_evaluation/very_early_trade_probability_buckets.csv"
 PROCESS_LOOP_INTERVAL_SECONDS = 300
 BUCKET_LOWER_BOUNDS = [0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]
 
@@ -109,6 +111,8 @@ class PredictionsEvaluator:
         bucket_hit_counts = [0] * len(BUCKET_LOWER_BOUNDS)
         early_closing_bucket_record_counts = [0] * len(BUCKET_LOWER_BOUNDS)
         early_closing_bucket_hit_counts = [0] * len(BUCKET_LOWER_BOUNDS)
+        very_early_closing_bucket_record_counts = [0] * len(BUCKET_LOWER_BOUNDS)
+        very_early_closing_bucket_hit_counts = [0] * len(BUCKET_LOWER_BOUNDS)
         for key, records in grouped.items():
             strike = float(records[0]['strike'])
             right = records[0]['right']
@@ -145,7 +149,7 @@ class PredictionsEvaluator:
                 hit_stop_loss = max_high >= stop_loss
                 realized_profit = estimated_sell_price - stop_loss if hit_stop_loss else estimated_sell_price
                 if realized_profit < 0:
-                    logger.info(f"Negative realized profit for {right} {strike}: {realized_profit}, max high: {max_high:.2f}, stop loss: {stop_loss}")
+                    logger.info(f"Negative realized profit for {right} {strike}: {realized_profit:.2f}, max high: {max_high:.2f}, stop loss: {stop_loss}")
 
                 record['max_high'] = max_high
                 record['hit_stop_loss'] = hit_stop_loss
@@ -165,6 +169,10 @@ class PredictionsEvaluator:
                         early_closing_bucket_record_counts[bucket_index] += 1
                         if hit_stop_loss:
                             early_closing_bucket_hit_counts[bucket_index] += 1
+                    if is_first_five_minutes_of_closing_time(record_start_time):
+                        very_early_closing_bucket_record_counts[bucket_index] += 1
+                        if hit_stop_loss:
+                            very_early_closing_bucket_hit_counts[bucket_index] += 1
 
         if not realized_profits:
             logger.error(f"Could not find any realized profits for {expiration_date_str}")
@@ -177,6 +185,8 @@ class PredictionsEvaluator:
         self._log_buckets(PROBABILITY_BUCKETS_CSV_PATH, expiration_date_str, bucket_record_counts, bucket_hit_counts)
         self._log_buckets(EARLY_TRADE_PROBABILITY_BUCKETS_CSV_PATH, expiration_date_str,
                           early_closing_bucket_record_counts, early_closing_bucket_hit_counts)
+        self._log_buckets(VERY_EARLY_TRADE_PROBABILITY_BUCKETS_CSV_PATH, expiration_date_str,
+                          very_early_closing_bucket_record_counts, very_early_closing_bucket_hit_counts)
 
         logger.info(f"PredictionsEvaluator: Processed {csv_path} into {len(grouped)} strike/right group(s); "
                     f"average expected profit over {len(expected_profits)} record(s) = {average_expected_profit:.4f}; "
@@ -226,7 +236,7 @@ class PredictionsEvaluator:
         """Appends one row to aggregated_<log_file>: each bucket's not-hit-stop-loss
         probability pooled over every expiration logged in log_file so far (blank if
         the bucket has no records yet)."""
-        logger.info(f"Writing aggregated buckets to {log_f:qile}...")
+        logger.info(f"Writing aggregated buckets to {log_file}...")
         total_record_counts = [0] * len(BUCKET_LOWER_BOUNDS)
         total_not_hit_counts = [0] * len(BUCKET_LOWER_BOUNDS)
         with open(log_file, 'r', newline='') as f:

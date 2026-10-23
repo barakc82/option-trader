@@ -5,7 +5,7 @@ import time
 import csv
 import json
 from types import SimpleNamespace
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from utilities.utils import get_option_name, new_york_timezone, OPTION_TRADER_CONFIG_PATH
 from utilities.ib_utils import (extract_ask, get_delta, get_delta_for_sell, get_individual_deltas, get_model_gamma,
                                  get_model_vega, get_model_theta, get_minutes_to_expiration, get_distance_to_strike_pct,
@@ -15,6 +15,7 @@ from .market_data_fetcher import MarketDataFetcher
 from .max_loss_calculator import MaxLossCalculator
 from .predictor import Predictor
 from .price_estimator import PriceEstimator
+from .target_delta_calculator import TargetDeltaCalculator
 
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ OPTIONS_BLOCK_SIZE = 100
 OPTIONS_BLOCK_LOWER_PART_SIZE = OPTIONS_BLOCK_SIZE // 2
 OPTIONS_BLOCK_HIGHER_PART_SIZE = OPTIONS_BLOCK_SIZE - OPTIONS_BLOCK_LOWER_PART_SIZE
 FETCHED_BLOCK_MAX_AGE_SECONDS = 5 * 60
+ISRAEL_TIMEZONE = timezone(timedelta(hours=3))
 DEFAULT_MAX_DELTA = 0.1
 RIGHT_CONFIG_PREFIXES = {'C': 'call', 'P': 'put'}
 
@@ -141,10 +143,12 @@ class StrikeFinder:
 
         return best_candidate
 
-    def _find_max_expected_profit_option(self, options, target_delta, right, max_delta=None):
-        """Scans options for the one with the highest expected profit. When max_delta is
+    def _find_max_expected_profit_option(self, options, right, max_delta=None):
+        """Scans options for the one wit    h the highest expected profit. When max_delta is
         given, options whose highest available delta exceeds it (or that have no delta at
         all) are skipped. Returns a SimpleNamespace describing the best option, or None."""
+        if not max_delta:
+            max_delta = self.max_delta[right]
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss(right)
         atm_iv = self.market_data_fetcher.get_cached_spx_implied_volatility(right)
 
@@ -172,11 +176,11 @@ class StrikeFinder:
 
             delta_values = [d for d in (bid_delta, ask_delta, last_delta, model_delta) if d is not None]
             option_max_delta = max(delta_values) if delta_values else None
-            if max_delta is not None and (option_max_delta is None or option_max_delta > max_delta):
+            if option_max_delta is None or option_max_delta > max_delta:
                 continue
 
             out_of_the_money_probability = self.predictor.predict_out_of_the_money_probability(
-                option, right, target_delta, estimated_sell_price, stop_loss_per_option,
+                option, right, estimated_sell_price, stop_loss_per_option,
                 bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
                 minutes_to_expiration, atm_iv, contract_iv, distance_to_strike_pct,
             )
@@ -197,6 +201,15 @@ class StrikeFinder:
                     minutes_to_expiration=minutes_to_expiration,
                 )
 
+        if best is None:
+            logger.info(f"No {right} option with an expected profit was found among {len(options)} option(s) "
+                        f"with max delta at most {max_delta}")
+        else:
+            max_delta_str = f"{best.max_delta:.3f}" if best.max_delta is not None else "n/a"
+            logger.info(f"Max expected-profit {right} option among {len(options)} option(s): {get_option_name(best.option)}, "
+                        f"expected profit: {best.expected_profit:.3f}, probability: {best.probability:.3f}, "
+                        f"estimated sell price: {best.estimated_sell_price:.2f}, max delta: {max_delta_str} "
+                        f"(limit {max_delta})")
         return best
 
     def _log_best_expected_profit_option(self, target_delta, right):
@@ -204,7 +217,8 @@ class StrikeFinder:
         if self._is_recently_updated(self.edge_fetched_block_last_update_time.get(right)):
             options += self.edge_fetched_block[right]
 
-        best = self._find_max_expected_profit_option(options, target_delta, right)
+        max_delta = target_delta * 9
+        best = self._find_max_expected_profit_option(options, right, max_delta=max_delta)
         if best is None:
             return
 
@@ -270,25 +284,20 @@ class StrikeFinder:
         self._set_middle_fetched_block(right, options_block)
         return options_block, strike_to_option, strikes, lower_idx, higher_idx
 
-    async def get_max_expected_profit_call_option(self, call_options, target_delta):
-        return await self._get_max_expected_profit_option(call_options, target_delta, 'C')
-
-    async def _get_max_expected_profit_option(self, options, target_delta, right):
-        """The option in the middle block with the highest expected profit whose delta is
-        at most the configured {call,put}_max_delta, or None if none qualifies."""
+    async def get_max_expected_profit_option(self, options, right):
+        """Fetches fresh snapshots for the middle block of options and returns the one with
+        the highest expected profit whose delta is at most the configured {call,put}_max_delta,
+        or None if none qualifies."""
         assert options
         self.load_config()
-
-        options_block, _, _, _, _ = await self._fetch_middle_block(options, right)
-        best = self._find_max_expected_profit_option(options_block, target_delta, right, self.max_delta[right])
-        if best is None:
-            logger.warning(f"No {right} option with delta at most {self.max_delta[right]} has an expected profit")
-            return None
-
-        logger.info(f"Selected max expected-profit option: {get_option_name(best.option)}, "
-                    f"expected profit: {best.expected_profit:.3f}, probability: {best.probability:.3f}, "
-                    f"max delta: {best.max_delta:.3f} (limit {self.max_delta[right]}), target delta: {target_delta:.3f}")
-        return best.option
+        middle_options_block, strike_to_option, strikes, lower_idx, higher_idx = await self._fetch_middle_block(options, right)
+        lowest_delta, highest_delta, _ = self._scan_block_extremes(middle_options_block)
+        edge_options_block = await self._fetch_edge_block_if_needed(
+            middle_options_block, lowest_delta, highest_delta, strike_to_option, strikes, lower_idx, higher_idx,
+            self.max_delta[right], right)
+        options_block = middle_options_block + edge_options_block
+        best = self._find_max_expected_profit_option(options_block, right)
+        return best.option if best else None
 
     async def _get_low_delta_option(self, options, target_delta, right):
         assert options
@@ -556,16 +565,17 @@ class StrikeFinder:
 
     def _log_best_opportunity(self, strike, right, expiry, estimated_sell_price, stop_loss, probability, expected_profit,
                               minutes_to_expiration):
-        csv_path = f"cache/predictions_{expiry}.csv"
+        csv_path = f"cache/prediction_evaluation/predictions_{expiry}.csv"
+        now = datetime.now(new_york_timezone)
         write_header = not os.path.exists(csv_path)
         with open(csv_path, 'a', newline='') as f:
             writer = csv.writer(f, delimiter='\t')
             if write_header:
                 writer.writerow([
-                    'datetime', 'strike', 'right', 'estimated_sell_price',
+                    'datetime', 'israel_time', 'strike', 'right', 'estimated_sell_price',
                     'stop_loss', 'probability', 'expected_profit', 'minutes_to_expiration'
                 ])
             writer.writerow([
-                datetime.now(new_york_timezone).isoformat(), strike, right, estimated_sell_price,
+                now.isoformat(), now.astimezone(ISRAEL_TIMEZONE).strftime('%d/%m/%Y %H:%M'), strike, right, estimated_sell_price,
                 stop_loss, round(probability, 3), round(expected_profit, 2), minutes_to_expiration,
             ])

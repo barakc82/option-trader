@@ -219,7 +219,7 @@ def _bs_price(S, K, T, r, sigma, right):
         return K * math.exp(-r * T) * _norm_cdf(-d2) - S * _norm_cdf(-d1)
 
 
-def calculate_distance_to_stop(option, ticker, stop_loss, spot_price, r):
+def calculate_stop_loss_hit_spot_price(option, ticker, stop_loss, spot_price, r):
     """Return SPX points between spot_price and the level where the option hits stop_loss."""
     greeks = ticker.modelGreeks or ticker.lastGreeks
     if not greeks or greeks.impliedVol is None or math.isnan(greeks.impliedVol) or greeks.impliedVol <= 0:
@@ -264,7 +264,12 @@ def calculate_distance_to_stop(option, ticker, stop_loss, spot_price, r):
                 S_high = S_mid
 
     S_star = (S_low + S_high) / 2
-    return spot_price - S_star if right == 'P' else S_star - spot_price
+    return S_star
+
+
+def calculate_distance_to_stop(option, ticker, stop_loss, spot_price, r):
+    S_star = calculate_stop_loss_hit_spot_price(option, ticker, stop_loss, spot_price, r)
+    return spot_price - S_star if option.right == 'P' else S_star - spot_price
 
 
 def calculate_distance_to_strike_pct(option, spot_price):
@@ -276,13 +281,14 @@ def calculate_distance_to_strike_pct(option, spot_price):
     return distance / spot_price * 100
 
 
-def calculate_distance_to_stop_pct(option, spot_price, stop_loss):
+def calculate_distance_to_stop_pct(option, spot_price, stop_loss, r):
     """Same as calculate_distance_to_strike_pct, but measured against stop_loss instead of
     the option's strike. Positive means spot_price is still on the safe side of stop_loss."""
     if spot_price == 0:
         return math.nan
-    distance = spot_price - stop_loss if option.right == 'P' else stop_loss - spot_price
-    return distance / spot_price * 100
+    stop_loss_hit_spot_price = calculate_stop_loss_hit_spot_price(option, option.ticker, stop_loss, spot_price, r)
+    distance_to_stop_fraction = 1 - stop_loss_hit_spot_price/spot_price if option.right == 'P' else stop_loss_hit_spot_price/spot_price - 1
+    return distance_to_stop_fraction * 100
 
 
 def get_minutes_to_expiration(option):
@@ -299,5 +305,6 @@ def get_distance_to_strike_pct(option, market_data_fetcher):
 
 def get_distance_to_stop_pct(option, market_data_fetcher, stop_loss):
     indices_difference = market_data_fetcher.calculate_spx_es_difference()
+    r = market_data_fetcher.get_cached_risk_free_rate()
     spot_price = market_data_fetcher.get_spx_price() if is_regular_hours() else market_data_fetcher.get_es_price() + indices_difference
-    return calculate_distance_to_stop_pct(option, spot_price, stop_loss)
+    return calculate_distance_to_stop_pct(option, spot_price, stop_loss, r)

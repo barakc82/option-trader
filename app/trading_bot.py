@@ -163,8 +163,8 @@ class TradingBot:
     async def sell(self, contract, quantity, order_metadata):
         ticker = contract.ticker
         assert ticker
-        limit = self.calculate_limit(ticker.bid, ticker.ask)
 
+        limit = self.calculate_limit(ticker.bid, ticker.ask)
         order = LimitOrder('SELL', quantity, limit, account=MY_ACCOUNT)
         order.usePriceMgmtAlgo = False
         order.outsideRth = True
@@ -205,6 +205,8 @@ class TradingBot:
             logger.info(f"Sell of {get_option_name(contract)} limit ({limit}) < min price ({minimal_sell_price})")
             result.no_option_above_minimal_sell_price = True
             return result
+
+        logger.info(f"Sell of {get_option_name(contract)} at limit of ({limit}) passed the minimal sell price of ({minimal_sell_price})")
             
         result = await self.test_order(contract, quantity, limit)
         if not result.success:

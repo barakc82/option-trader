@@ -13,7 +13,7 @@ MODEL_PATH =  "machine_learning/model/probability_classifier.pkl"
 TARGET_COLUMN = "max_ask"
 GROUP_COLUMN = "expiration"
 CANDIDATE_FEATURE_COLUMNS = [
-    "estimated_sell_price", "target_delta", "bid_delta", "ask_delta", "last_delta", "model_delta",
+    "estimated_sell_price", "bid_delta", "ask_delta", "last_delta", "model_delta",
     "max_delta", "gamma", "vega", "theta", "minutes_to_expiration", "atm_iv", "contract_iv", "distance_to_strike_pct",
 ]
 CV_FOLDS = 5

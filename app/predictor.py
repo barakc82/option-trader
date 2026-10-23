@@ -60,7 +60,7 @@ class Predictor:
         except Exception as e:
             logger.warning(f"Could not load probability classifier: {e}")
 
-    def predict_out_of_the_money_probability(self, option, right, target_delta, estimated_sell_price, stop_loss_per_option,
+    def predict_out_of_the_money_probability(self, option, right, estimated_sell_price, stop_loss_per_option,
                                              bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
                                              minutes_to_expiration, atm_iv, contract_iv, distance_to_strike_pct):
         self._load_probability_classifier()
@@ -72,12 +72,8 @@ class Predictor:
         delta_values = [d for d in (bid_delta, ask_delta, last_delta, model_delta) if d is not None]
         max_delta = max(delta_values) if delta_values else None
 
-        if max_delta and max_delta > target_delta * 9:
-            return None
-
         feature_values = {
             "estimated_sell_price": estimated_sell_price,
-            "target_delta": target_delta,
             "bid_delta": bid_delta,
             "ask_delta": ask_delta,
             "last_delta": last_delta,

@@ -31,6 +31,7 @@ class ConnectionManager:
             self.ib.disconnectedEvent += self.on_disconnected
             self.ib.errorEvent += self.on_error
             self.ib.orderStatusEvent += self.on_order_status
+            self.ib.execDetailsEvent += self.on_execution_details
 
             self._initialized = True
 
@@ -61,9 +62,16 @@ class ConnectionManager:
         await asyncio.sleep(0)  # Let cancellations propagate
 
     def on_order_status(self, trade):
-        if trade.orderStatus.status == 'Filled' and trade.contract.secType == 'OPT':
-            from .positions_manager import PositionsManager
-            PositionsManager().on_fill(trade)
+        if trade.contract.secType == 'OPT' and trade.orderStatus.status == 'Filled':
+            if trade.orderStatus.status == 'Filled':
+                from .positions_manager import PositionsManager
+                PositionsManager().on_filled(trade)
+
+    def on_execution_details(selfself, trade, fill):
+        if trade.contract.secType == 'OPT' and trade.orderStatus.status == 'Fill':
+            if trade.orderStatus.status == 'Fill':
+                from .positions_manager import PositionsManager
+                PositionsManager().on_fill(trade=trade, fill=fill)
 
     async def connect(self, client_id=1):
         """Handle the initial connection and keep-alive loop."""

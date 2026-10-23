@@ -5,10 +5,10 @@ from datetime import datetime, date, timedelta
 from utilities.utils import *
 from utilities.ib_utils import *
 from .account_data import AccountData
+from .machine_learning_exposure_manager import MachineLearningExposureManager
 from .market_data_fetcher import MarketDataFetcher
 from .max_loss_calculator import MaxLossCalculator
 from .net_worth_calculator import NetWorthCalculator
-from .option_cache import OptionCache
 from .option_data_fetcher import OptionDataFetcher
 from .predictor import Predictor
 from .price_estimator import PriceEstimator
@@ -169,7 +169,7 @@ class OpportunityExplorer:
         target_delta_calculator = TargetDeltaCalculator()
         target_delta = await target_delta_calculator.calculate_target_delta('C')
 
-        call_option = await self.find_call_candidate(call_options, target_delta)
+        call_option, is_ml_derived, slots_limit = await self.find_call_candidate(call_options, target_delta)
         if not call_option:
             return SellOptionResult()
 
@@ -204,12 +204,13 @@ class OpportunityExplorer:
         contract_iv = get_model_iv(call_option.ticker)
 
         out_of_the_money_probability = self.predictor.predict_out_of_the_money_probability(
-            call_option, 'C', target_delta, estimated_sell_price, stop_loss_per_option,
+            call_option, 'C', estimated_sell_price, stop_loss_per_option,
             bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
             minutes_to_expiration, atm_iv, contract_iv, distance_to_strike_pct,
         )
         expected_profit = calculate_expected_profit(estimated_sell_price, stop_loss_per_option,
                                                     out_of_the_money_probability)
+        quantity = min(slots_limit, max_options_for_market_rise, 2)
 
         position_initial_state = PositionInitialState(
             is_executed=1,
@@ -229,17 +230,20 @@ class OpportunityExplorer:
             distance_to_stop_pct=distance_to_stop_pct,
             out_of_the_money_probability=out_of_the_money_probability,
             expected_profit=expected_profit,
+            is_ml_derived=is_ml_derived,
         )
 
-        sell_option_result = await self.try_to_sell(call_option, 2, position_initial_state)
+        logger.info(f"Testing sell of {quantity} options of {get_option_name(call_option)}")
+        sell_option_result = await self.try_to_sell(call_option, quantity, position_initial_state)
         if sell_option_result.success:
             return sell_option_result
 
-        logger.warning(f"Failed to sell 2 options of {get_option_name(call_option)}")
-        logger.info(f"Testing sell 1 option of {get_option_name(call_option)}")
-        sell_option_result = await self.try_to_sell(call_option, 1, position_initial_state)
-        if not sell_option_result.success:
-            logger.warning(f"Failed to sell 1 options of {get_option_name(call_option)}")
+        logger.warning(f"Failed to sell {quantity} options of {get_option_name(call_option)}")
+        if quantity == 2:
+            logger.info(f"Testing sell 1 option of {get_option_name(call_option)}")
+            sell_option_result = await self.try_to_sell(call_option, 1, position_initial_state)
+            if not sell_option_result.success:
+                logger.warning(f"Failed to sell 1 options of {get_option_name(call_option)}")
 
         await self.handle_call_sell_failure(call_option, sell_option_result, call_options, open_trades)
         self.no_call_options_above_minimal_sell_price = sell_option_result.no_option_above_minimal_sell_price
@@ -279,11 +283,22 @@ class OpportunityExplorer:
         self.try_to_publish_available_cheap_option('C')
 
     async def find_call_candidate(self, call_options, target_delta):
+        """Returns (call_option, is_ml_derived): is_ml_derived is True when the option came
+        from the max expected-profit path, which is taken while a call ML slot is free."""
+        from .positions_manager import PositionsManager  # local import: positions_manager imports this module
+
         strike_finder = StrikeFinder()
+        available_ml_slots_count = PositionsManager().get_available_ml_slots_count('C')
+        if available_ml_slots_count > 0:
+            call_option = await strike_finder.get_max_expected_profit_option(call_options, 'C')
+            if call_option:
+                return call_option, True, available_ml_slots_count
+            logger.warning("No max expected-profit call option found, falling back to the low-delta call option")
+
         call_option = await strike_finder.get_low_delta_call_option(call_options, target_delta)
         if not call_option:
             logger.error("Call option candidate for selling could not be found")
-        return call_option
+        return call_option, False, np.inf
 
     async def calculate_max_allowed_call_options(self, call_option):
         logger.info(f"Testing sell capacity for {get_option_name(call_option)}")
@@ -369,7 +384,7 @@ class OpportunityExplorer:
         target_delta_calculator = TargetDeltaCalculator()
         target_delta = await target_delta_calculator.calculate_target_delta('P')
 
-        put_option = await self.find_put_candidate(put_options, target_delta)
+        put_option, is_ml_derived, slots_limit = await self.find_put_candidate(put_options, target_delta)
         if not put_option:
             return SellOptionResult()
 
@@ -403,12 +418,13 @@ class OpportunityExplorer:
         contract_iv = get_model_iv(put_option.ticker)
 
         out_of_the_money_probability = self.predictor.predict_out_of_the_money_probability(
-            put_option, 'P', target_delta, estimated_sell_price, stop_loss_per_option,
+            put_option, 'P', estimated_sell_price, stop_loss_per_option,
             bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
             minutes_to_expiration, atm_iv, contract_iv, distance_to_strike_pct,
         )
         expected_profit = calculate_expected_profit(estimated_sell_price, stop_loss_per_option,
                                                     out_of_the_money_probability)
+        quantity = min(slots_limit, max_options_for_market_drop, 2)
 
         position_initial_state = PositionInitialState(
             is_executed=1,
@@ -428,9 +444,9 @@ class OpportunityExplorer:
             distance_to_stop_pct=distance_to_stop_pct,
             out_of_the_money_probability=out_of_the_money_probability,
             expected_profit=expected_profit,
+            is_ml_derived=is_ml_derived,
         )
 
-        quantity = min(max_options_for_market_drop, 2)
         sell_option_result = await self.try_to_sell(put_option, quantity, position_initial_state)
         if sell_option_result.success:
             return sell_option_result
@@ -450,12 +466,23 @@ class OpportunityExplorer:
         return sell_option_result
 
     async def find_put_candidate(self, put_options, target_delta):
+        """Returns (put_option, is_ml_derived): is_ml_derived is True when the option came
+        from the max expected-profit path, which is taken while a put ML slot is free."""
+        from .positions_manager import PositionsManager  # local import: positions_manager imports this module
+
         strike_finder = StrikeFinder()
+        available_ml_slots_count = PositionsManager().get_available_ml_slots_count('P')
+        if available_ml_slots_count > 0:
+            put_option = await strike_finder.get_max_expected_profit_option(put_options, 'P')
+            if put_option:
+                return put_option, True, available_ml_slots_count
+            logger.warning("No max expected-profit put option found, falling back to the low-delta put option")
+
         logger.info("Searching for a suitable low-delta put option")
         put_option = await strike_finder.get_low_delta_put_option(put_options, target_delta)
         if not put_option:
             logger.error("Put option candidate for selling could not be found")
-        return put_option
+        return put_option, False, np.inf
 
     async def calculate_max_allowed_put_options(self, put_option):
         logger.info(f"Testing sell capacity for {get_option_name(put_option)}")
