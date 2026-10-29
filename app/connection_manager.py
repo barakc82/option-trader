@@ -63,15 +63,13 @@ class ConnectionManager:
 
     def on_order_status(self, trade):
         if trade.contract.secType == 'OPT' and trade.orderStatus.status == 'Filled':
-            if trade.orderStatus.status == 'Filled':
-                from .positions_manager import PositionsManager
-                PositionsManager().on_filled(trade)
+            from .positions_manager import PositionsManager
+            PositionsManager().on_filled(trade)
 
     def on_execution_details(selfself, trade, fill):
-        if trade.contract.secType == 'OPT' and trade.orderStatus.status == 'Fill':
-            if trade.orderStatus.status == 'Fill':
-                from .positions_manager import PositionsManager
-                PositionsManager().on_fill(trade=trade, fill=fill)
+        if trade.contract.secType == 'OPT':
+            from .positions_manager import PositionsManager
+            PositionsManager().on_fill(trade=trade, fill=fill)
 
     async def connect(self, client_id=1):
         """Handle the initial connection and keep-alive loop."""

@@ -15,6 +15,7 @@ import logging
 
 # Market hours configuration using New York time
 new_york_timezone = pytz.timezone('America/New_York')
+ISRAEL_TIMEZONE = ZoneInfo("Asia/Jerusalem")
 
 # Utility to get NYSE calendar
 @cache
@@ -165,7 +166,7 @@ def is_early_closing_time(moment):
     return REGULAR_HOURS_END_TIME < nyc_time < EARLY_CLOSING_END_TIME
 
 def is_first_five_minutes_of_closing_time(nyc_time):
-    return REGULAR_HOURS_END_TIME < nyc_time < FIVE_MINUTES_AFTER_REGULAR_HOURS_END_TIME
+    return REGULAR_HOURS_END_TIME < nyc_time.time() < FIVE_MINUTES_AFTER_REGULAR_HOURS_END_TIME
 
 def is_early_trade(moment):
     nyc_time = moment.astimezone(new_york_timezone).time()

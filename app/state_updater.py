@@ -8,6 +8,7 @@ import sys
 import aiohttp
 import asyncio
 import pytz
+from dataclasses import asdict
 from datetime import datetime
 from statistics import mean
 
@@ -268,6 +269,18 @@ class StateUpdater:
                     'is_ml_derived': td_entry.is_ml_derived if td_entry else False,
                 })
         state['position_initial_states'] = sorted(position_initial_states, key=lambda x: (x['right'], x['date'], x['strike']))
+        # Only the data of positions that are still held; entries of closed/expired positions are dropped.
+        contract_id_to_position_data = PositionsManager().contract_id_to_position_data
+        state['position_data'] = [asdict(contract_id_to_position_data[position.contract.conId])
+                                  for position in positions
+                                  if position.contract.conId in contract_id_to_position_data]
+        # Only the metadata of orders that are still open; entries of finished orders are dropped.
+        req_id_to_order_metadata = self.trading_bot.req_id_to_order_metadata
+        state['order_metadata'] = {
+            str(trade.order.orderId): asdict(req_id_to_order_metadata[trade.order.orderId])
+            for trade in open_trades
+            if req_id_to_order_metadata.get(trade.order.orderId) is not None
+        }
 
         # 3b. Gather randomly collected samples from OptionSampler
         random_states = []

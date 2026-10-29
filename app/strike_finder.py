@@ -5,8 +5,9 @@ import time
 import csv
 import json
 from types import SimpleNamespace
-from datetime import datetime, timedelta, timezone
-from utilities.utils import get_option_name, new_york_timezone, OPTION_TRADER_CONFIG_PATH
+from datetime import datetime
+from utilities.utils import get_option_name, new_york_timezone, OPTION_TRADER_CONFIG_PATH, ISRAEL_TIMEZONE, \
+    is_switched_to_overnight_trading
 from utilities.ib_utils import (extract_ask, get_delta, get_delta_for_sell, get_individual_deltas, get_model_gamma,
                                  get_model_vega, get_model_theta, get_minutes_to_expiration, get_distance_to_strike_pct,
                                  get_model_iv, calculate_expected_profit)
@@ -24,7 +25,6 @@ OPTIONS_BLOCK_SIZE = 100
 OPTIONS_BLOCK_LOWER_PART_SIZE = OPTIONS_BLOCK_SIZE // 2
 OPTIONS_BLOCK_HIGHER_PART_SIZE = OPTIONS_BLOCK_SIZE - OPTIONS_BLOCK_LOWER_PART_SIZE
 FETCHED_BLOCK_MAX_AGE_SECONDS = 5 * 60
-ISRAEL_TIMEZONE = timezone(timedelta(hours=3))
 DEFAULT_MAX_DELTA = 0.1
 RIGHT_CONFIG_PREFIXES = {'C': 'call', 'P': 'put'}
 
@@ -189,7 +189,7 @@ class StrikeFinder:
 
             expected_profit = calculate_expected_profit(estimated_sell_price, stop_loss_per_option, out_of_the_money_probability)
 
-            if best is None or expected_profit > best.expected_profit:
+            if best is None or expected_profit > best.expected_profit and expected_profit > 0:
                 best = SimpleNamespace(
                     option=option,
                     expected_profit=expected_profit,
@@ -327,7 +327,8 @@ class StrikeFinder:
             logger.error(f"No {right} option candidate found")
             return None
 
-        self._log_best_expected_profit_option(target_delta, right)
+        if not is_switched_to_overnight_trading():
+            self._log_best_expected_profit_option(target_delta, right)
 
         return self._finalize_candidate(current_candidate, options_block, target_delta, right)
 

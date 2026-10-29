@@ -27,6 +27,7 @@ export interface Position {
     theta: string;
     minutes_to_expiration: number | string;
     distance_to_strike_pct: string;
+    distance_to_stop_pct: string;
     atm_iv: string;
     contract_iv: string;
     out_of_the_money_probability: string;

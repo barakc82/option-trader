@@ -5,7 +5,6 @@ from datetime import datetime, date, timedelta
 from utilities.utils import *
 from utilities.ib_utils import *
 from .account_data import AccountData
-from .machine_learning_exposure_manager import MachineLearningExposureManager
 from .market_data_fetcher import MarketDataFetcher
 from .max_loss_calculator import MaxLossCalculator
 from .net_worth_calculator import NetWorthCalculator
@@ -216,7 +215,7 @@ class OpportunityExplorer:
             is_executed=1,
             strike=call_option.strike, right=call_option.right, expiry=call_option.lastTradeDateOrContractMonth,
             estimated_sell_price=estimated_sell_price,
-            target_delta=target_delta,
+            target_delta=0 if is_ml_derived else target_delta,
             contract_id=call_option.conId,
             stop_loss=stop_loss,
             bid_delta=bid_delta, ask_delta=ask_delta, last_delta=last_delta, model_delta=model_delta,
@@ -290,6 +289,7 @@ class OpportunityExplorer:
         strike_finder = StrikeFinder()
         available_ml_slots_count = PositionsManager().get_available_ml_slots_count('C')
         if available_ml_slots_count > 0:
+            logger.info(f"Found available ML slots for {available_ml_slots_count} call options")
             call_option = await strike_finder.get_max_expected_profit_option(call_options, 'C')
             if call_option:
                 return call_option, True, available_ml_slots_count
@@ -347,7 +347,7 @@ class OpportunityExplorer:
     async def try_to_sell(self, option, quantity, position_initial_state: PositionInitialState):
         target_delta = position_initial_state.target_delta
         delta = get_delta_for_sell(option.ticker)
-        if delta > target_delta:
+        if delta > target_delta and not position_initial_state.is_ml_derived:
             logger.warning(f"Failed to sell {get_option_name(option)} since the delta has risen to {delta:.3f}, "
                            f"beyond the target delta of {target_delta:.3f}")
             result = SellOptionResult()
@@ -360,7 +360,7 @@ class OpportunityExplorer:
         duration_of_sell_operation = end_time - start_time
 
         delta = get_delta_for_sell(option.ticker)
-        if result.success and delta > target_delta:
+        if result.success and delta > target_delta and not position_initial_state.is_ml_derived:
             logger.warning(f"After selling {get_option_name(option)},the delta has risen to {delta:.2f}, "
                            f"beyond the target delta of {target_delta:.2f}. "
                            f"The sell took {duration_of_sell_operation:.2f} seconds")
@@ -430,7 +430,7 @@ class OpportunityExplorer:
             is_executed=1,
             strike=put_option.strike, right=put_option.right, expiry=put_option.lastTradeDateOrContractMonth,
             estimated_sell_price=estimated_sell_price,
-            target_delta=target_delta,
+            target_delta=0 if is_ml_derived else target_delta,
             contract_id=put_option.conId,
             stop_loss=stop_loss,
             bid_delta=bid_delta, ask_delta=ask_delta, last_delta=last_delta, model_delta=model_delta,
@@ -473,6 +473,7 @@ class OpportunityExplorer:
         strike_finder = StrikeFinder()
         available_ml_slots_count = PositionsManager().get_available_ml_slots_count('P')
         if available_ml_slots_count > 0:
+            logger.info(f"Found available ML slots for {available_ml_slots_count} put options")
             put_option = await strike_finder.get_max_expected_profit_option(put_options, 'P')
             if put_option:
                 return put_option, True, available_ml_slots_count

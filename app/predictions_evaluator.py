@@ -8,7 +8,7 @@ import os
 from datetime import datetime, timezone
 
 from utilities.utils import new_york_timezone, REGULAR_HOURS_END_TIME, is_early_closing_time, is_early_trade, \
-    is_first_five_minutes_of_closing_time
+    is_first_five_minutes_of_closing_time, ISRAEL_TIMEZONE
 from .market_data_fetcher import MarketDataFetcher
 
 logger = logging.getLogger(__name__)
@@ -139,17 +139,26 @@ class PredictionsEvaluator:
                 record_start_time = self._parse_record_time(record['datetime'])
                 # bar.date is tz-aware in TWS's timezone (US/Central) while record_start_time
                 # is NY-localized; comparing aware datetimes accounts for the offset.
-                relevant_highs = [bar.high for bar in bars if bar.date >= record_start_time]
-                if not relevant_highs:
-                    relevant_highs = [bars[-1].high]
-                max_high = max(relevant_highs)
+                highest_bar = max(
+                    (bar for bar in bars if bar.date >= record_start_time),
+                    key=lambda bar: bar.high,
+                    default=None,
+                )
+                if not highest_bar:
+                    highest_bar = bars[-1]
+                max_high = highest_bar.high
 
                 estimated_sell_price = float(record['estimated_sell_price'])
                 stop_loss = float(record['stop_loss'])
                 hit_stop_loss = max_high >= stop_loss
                 realized_profit = estimated_sell_price - stop_loss if hit_stop_loss else estimated_sell_price
                 if realized_profit < 0:
-                    logger.info(f"Negative realized profit for {right} {strike}: {realized_profit:.2f}, max high: {max_high:.2f}, stop loss: {stop_loss}")
+                    israel_time = record['israel_time']
+                    hit_time = highest_bar.date
+                    hit_israel_time = hit_time.astimezone(ISRAEL_TIMEZONE).strftime('%d/%m/%Y %H:%M')
+                    logger.info(f"Negative realized profit for {right} {strike}: {realized_profit:.2f}, "
+                                f"max high: {max_high:.2f}, stop loss: {stop_loss}, "
+                                f"record start time (Israel): {israel_time}, hit time (Israel): {hit_israel_time}")
 
                 record['max_high'] = max_high
                 record['hit_stop_loss'] = hit_stop_loss

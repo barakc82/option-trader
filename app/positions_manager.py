@@ -4,7 +4,7 @@ import json
 import os
 from datetime import datetime
 from types import SimpleNamespace
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
 from utilities.utils import is_trade_cancelled, write_heartbeat, get_option_name, is_final_hours, CACHED_JSON_PATH, \
     is_night_break, OPTION_TRADER_CONFIG_PATH
@@ -53,6 +53,8 @@ class PositionsManager:
             self._dumped_during_night_break = False
             self.ml_slot_count = {'C': DEFAULT_ML_SLOT_COUNT, 'P': DEFAULT_ML_SLOT_COUNT}
             self._load_cached_position_initial_states()
+            self._load_cached_position_data()
+            self._load_cached_order_metadata()
             logger.info("PositionsManager singleton initialized.")
             self._initialized = True
 
@@ -81,12 +83,14 @@ class PositionsManager:
         positions = self.trading_bot.get_short_options()
         ml_derived_positions = sum(self.contract_id_to_position_data[position.contract.conId].ml_derived_count
                                    for position in positions
-                                   if position.contract.conId in self.contract_id_to_position_data)
+                                   if position.contract.right == right
+                                   and position.contract.conId in self.contract_id_to_position_data)
 
         trades = self.trading_bot.get_open_trades()
         req_id_to_order_metadata = self.trading_bot.req_id_to_order_metadata
         ml_derived_trades = sum(trade.remaining() for trade in trades
-                                if trade.order.orderId in req_id_to_order_metadata
+                                if trade.contract.right == right
+                                and trade.order.orderId in req_id_to_order_metadata
                                 and req_id_to_order_metadata[trade.order.orderId] is not None
                                 and req_id_to_order_metadata[trade.order.orderId].is_ml_derived)
         ml_derived_taken_slots = ml_derived_positions + ml_derived_trades
@@ -178,6 +182,47 @@ class PositionsManager:
             logger.info(f"Loaded {len(self.position_initial_state_map)} position initial state entries from cache")
         except Exception as e:
             logger.warning(f"Could not load cached position initial states: {e}")
+
+    def _load_cached_position_data(self):
+        """Rebuilds contract_id_to_position_data from the 'position_data' list that
+        StateUpdater.update_state dumps into CACHED_JSON_PATH."""
+        try:
+            with open(CACHED_JSON_PATH, 'r') as f:
+                state = json.load(f)
+            for entry in state.get('position_data', []):
+                contract_id = entry.get('contract_id')
+                if not contract_id:
+                    continue
+                contract_id = int(contract_id)
+                self.contract_id_to_position_data[contract_id] = PositionData(
+                    contract_id=contract_id,
+                    ml_derived_count=entry.get('ml_derived_count') or 0,
+                )
+            logger.info(f"Loaded {len(self.contract_id_to_position_data)} position data entries from cache")
+        except Exception as e:
+            logger.warning(f"Could not load cached position data: {e}")
+
+    def _load_cached_order_metadata(self):
+        """Rebuilds trading_bot.req_id_to_order_metadata from the 'order_metadata' mapping
+        (order ID -> PositionInitialState fields) that StateUpdater.update_state dumps into
+        CACHED_JSON_PATH. Keys not among PositionInitialState's fields are ignored."""
+        try:
+            with open(CACHED_JSON_PATH, 'r') as f:
+                state = json.load(f)
+            field_names = {field.name for field in fields(PositionInitialState)}
+            loaded = 0
+            for order_id, metadata in state.get('order_metadata', {}).items():
+                try:
+                    position_initial_state = PositionInitialState(
+                        **{key: value for key, value in metadata.items() if key in field_names})
+                except TypeError as e:
+                    logger.warning(f"Skipping cached order metadata of order ID {order_id}: {e}")
+                    continue
+                self.trading_bot.req_id_to_order_metadata[int(order_id)] = position_initial_state
+                loaded += 1
+            logger.info(f"Loaded {loaded} order metadata entries from cache")
+        except Exception as e:
+            logger.warning(f"Could not load cached order metadata: {e}")
 
     def find_low_limit_buy_trade(self, option, open_buy_trades) -> Trade | None:
         for open_buy_trade in open_buy_trades:
