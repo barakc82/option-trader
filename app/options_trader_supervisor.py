@@ -3,7 +3,6 @@ import os
 import json
 import logging
 import traceback
-import requests
 import asyncio
 from zoneinfo import ZoneInfo
 from datetime import datetime
@@ -15,6 +14,7 @@ from .state_updater import update_supervisor_state_async, post_current_state
 from .supervisor_utils import *
 from .supervisor_health import *
 from .supervisor_control import *
+from .supervisor_http import start_supervisor_http_server
 
 # Configure the root logger to catch logs from all modules
 logger = logging.getLogger()
@@ -47,7 +47,6 @@ CANNOT_RESTART_OPTION_TRADER_STATE = 3
 CANNOT_RESTART_TWS_STATE = 4
 
 state = MONITOR_STATE
-RESET_READY_TO_AUTHENTICATE_STATUS_URL = "https://auth-ready-server.onrender.com/set-status-ok"
 
 last_update_time = 0
 last_sunday_expiration_check_date = None
@@ -145,12 +144,6 @@ def restart_platform():
     
     if is_process_active():
         send_telegram_message('Platform and Option Trader are back')
-        while True:
-            try:
-                response = requests.get(RESET_READY_TO_AUTHENTICATE_STATUS_URL, timeout=10)
-                if response.status_code == requests.codes.ok: break
-            except Exception: pass
-            time.sleep(5)
         state = MONITOR_STATE
     else:
         state = CANNOT_RESTART_OPTION_TRADER_STATE
@@ -221,6 +214,7 @@ if __name__ == "__main__":
     _lock = acquire_single_instance_lock(lock_path='cache/supervisor_script.lock', process_name='Supervisor')
     try:
         logger.info("Supervisor started")
+        start_supervisor_http_server()
         monitor()
     except Exception:
         logger.error(f"Critical error:\n{traceback.format_exc()}")

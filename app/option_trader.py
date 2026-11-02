@@ -218,4 +218,6 @@ class OptionTrader:
     async def verify_no_open_trades(self):
         open_trades = self.trading_bot.get_open_trades()
         for open_trade in open_trades:
+            if open_trade.orderStatus.status == 'PendingCancel':
+                continue
             self.trading_bot.cancel_trade(open_trade)

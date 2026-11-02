@@ -3,15 +3,33 @@ import os
 import time
 import json
 import subprocess
-import requests
 import psutil
 import asyncio
 from .supervisor_utils import OPTION_TRADER_DIR, send_telegram_message
-from utilities.utils import is_in_docker, SUCCESS, ERROR, FAILED
+from .supervisor_http import is_ready_to_authenticate, clear_ready_to_authenticate
+from utilities.utils import is_in_docker, SUCCESS, ERROR, FAILED, OPTION_TRADER_CONFIG_PATH
 
 logger = logging.getLogger(__name__)
 
-READY_TO_AUTHENTICATE_STATUS_URL = "https://auth-ready-server.onrender.com/status"
+# Shown instead of a link when ready_to_authenticate_url isn't configured: the endpoint can
+# still be reached from inside the container.
+READY_TO_AUTHENTICATE_FALLBACK = ("(ready_to_authenticate_url is not set in the config) run inside the container: "
+                                  "curl http://127.0.0.1:8081/set-ready-to-authenticate")
+
+
+def get_ready_to_authenticate_url():
+    """The link sent in Telegram: ready_to_authenticate_url from OPTION_TRADER_CONFIG_PATH,
+    e.g. the VM's http://<address>:8080/set-ready-to-authenticate, served by the supervisor's
+    own HTTP server."""
+    try:
+        with open(OPTION_TRADER_CONFIG_PATH, 'r') as f:
+            url = json.load(f).get("ready_to_authenticate_url")
+        if url:
+            return url
+        logger.error(f"ready_to_authenticate_url is not set in {OPTION_TRADER_CONFIG_PATH}")
+    except Exception as e:
+        logger.error(f"Could not read ready_to_authenticate_url from {OPTION_TRADER_CONFIG_PATH}: {e}")
+    return READY_TO_AUTHENTICATE_FALLBACK
 
 def start_option_trader():
     logger.info(f"Restarting process using async version...")
@@ -134,10 +152,12 @@ def kill_tws():
 
 def wait_for_user_to_be_ready_to_login(post_current_state_callback):
     logger.info(f"Waiting for user to be ready to authenticate...")
+    # Only a request made from now on counts, not one left over from an earlier wait.
+    clear_ready_to_authenticate()
     waiting_start_time = time.time()
     message_sent_in_telegram_too = False
     message = 'Platform stopped, click the following link when you are ready to authenticate:\n'
-    message += 'https://auth-ready-server.onrender.com/set-ready-to-authenticate'
+    message += get_ready_to_authenticate_url()
     send_telegram_message(message)
     
     while True:
@@ -147,16 +167,11 @@ def wait_for_user_to_be_ready_to_login(post_current_state_callback):
             logger.info("Waiting for user to be ready to authenticate")
         
         asyncio.run(post_current_state_callback({'status': 'Waiting for user to be ready to authenticate'}))
-        
-        try:
-            response = requests.get(READY_TO_AUTHENTICATE_STATUS_URL, timeout=10)
-            if response.status_code == 200:
-                json_response = response.json()
-                if json_response.get("is_ready_to_authenticate"):
-                    logger.info(f"User is ready to authenticate")
-                    break
-        except Exception as e:
-            logger.error(f"Error checking user auth readiness: {e}")
+
+        if is_ready_to_authenticate():
+            logger.info(f"User is ready to authenticate (set via the supervisor's HTTP endpoint)")
+            clear_ready_to_authenticate()
+            break
 
         if time.time() - waiting_start_time > 600 and not message_sent_in_telegram_too:
             send_telegram_message(message)

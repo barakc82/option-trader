@@ -30,7 +30,6 @@ from .option_sampler import OptionSampler
 TEMP_PATH = 'shared/state_temp.json'
 SUPERVISOR_TEMP_PATH = 'shared/supervisor_state_temp.json'
 API_URL = "https://option-trader.onrender.com/api"
-UPDATE_STATE_URL = API_URL + "/update-state"
 UPDATE_SUPERVISOR_STATE_URL = API_URL + "/update-supervisor-state"
 
 BACKUP_DIR = 'cache/backup'
@@ -313,7 +312,10 @@ class StateUpdater:
 
         # 4. Process open trades
         state_trades = []
+        is_open = is_market_open()
         for t in open_trades:
+            if t.orderStatus.status == 'PendingCancel' and not is_open:
+                continue
             option = t.contract
             delta = self.market_data_fetcher.get_delta(option) or contract_id_to_delta.get(option.conId, '')
             limit = t.order.lmtPrice if t.order.orderType == 'LMT' else (t.order.auxPrice if t.order.orderType == 'STP LMT' else '')
@@ -331,7 +333,6 @@ class StateUpdater:
         daily_profit = 0
         # has_fill_not_from_today = False
         has_expired_fill = False
-        today_date = datetime.now(new_york_timezone).date()
         for f in fills:
             if f.contract.secType != 'OPT': continue
             comment = 'Liquidation' if f.execution.liquidation == 1 else req_id_to_comment.get(f.execution.orderId, '')
@@ -379,11 +380,6 @@ class StateUpdater:
 
         # 6. Finalize
         self.store_state_locally(state)
-        try:
-            await self._post_data(UPDATE_STATE_URL, state)
-        except Exception as e:
-            logger.error(f"Failed to post state to Render: {e}")
-            
         return
 
     async def extract_date_string(self, option) -> str:
@@ -395,10 +391,6 @@ async def post_current_state(state):
     """Standalone async helper for simple state reporting."""
     updater = StateUpdater()
     updater.store_state_locally(state)
-    try:
-        await updater._post_data(UPDATE_STATE_URL, state)
-    except Exception as e:
-        logger.error(f"Failed to post current state to Render: {e}")
 
 async def update_supervisor_state_async(supervisor_state):
     """Standalone async function for the supervisor."""

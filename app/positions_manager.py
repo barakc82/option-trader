@@ -94,6 +94,7 @@ class PositionsManager:
                                 and req_id_to_order_metadata[trade.order.orderId] is not None
                                 and req_id_to_order_metadata[trade.order.orderId].is_ml_derived)
         ml_derived_taken_slots = ml_derived_positions + ml_derived_trades
+        logger.info(f"Found {ml_derived_positions} ml derived positions and {ml_derived_trades} trades ")
         return max(self.ml_slot_count[right] - ml_derived_taken_slots, 0)
 
 

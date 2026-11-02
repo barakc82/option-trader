@@ -113,10 +113,11 @@ class PredictionsEvaluator:
         early_closing_bucket_hit_counts = [0] * len(BUCKET_LOWER_BOUNDS)
         very_early_closing_bucket_record_counts = [0] * len(BUCKET_LOWER_BOUNDS)
         very_early_closing_bucket_hit_counts = [0] * len(BUCKET_LOWER_BOUNDS)
-        for key, records in grouped.items():
+        for option_index, (key, records) in enumerate(grouped.items(), start=1):
             strike = float(records[0]['strike'])
             right = records[0]['right']
-            logger.info(f"Processing the predictions for {right} {strike}")
+            logger.info(f"Processing the predictions for {right} {strike} "
+                        f"({option_index}/{len(grouped)}, {option_index / len(grouped):.0%})")
             oldest_minutes_to_expiration = int(records[-1]['minutes_to_expiration'])
 
             bars = await self.market_data_fetcher.get_minute_bars(
@@ -258,15 +259,28 @@ class PredictionsEvaluator:
                 # The probability was rounded to 3 decimals, so rounding back recovers the exact count.
                 total_not_hit_counts[bucket_index] += round(float(row['not_hit_stop_loss_probability']) * record_count)
 
+        upper_bounds = BUCKET_LOWER_BOUNDS[1:] + [1.0]
+        not_hit_probabilities = [
+            round(not_hit_count / record_count, 3) if record_count else ''
+            for record_count, not_hit_count in zip(total_record_counts, total_not_hit_counts)
+        ]
+        # How far each bucket's observed not-hit probability falls outside the bucket's own
+        # [lower, upper] range (0 when inside it), summed over the non-empty buckets.
+        distance = 0.0
+        for lower, upper, probability in zip(BUCKET_LOWER_BOUNDS, upper_bounds, not_hit_probabilities):
+            if probability == '':
+                continue
+            if probability < lower:
+                distance += lower - probability
+            elif probability > upper:
+                distance += probability - upper
+
         aggregated_log_file = os.path.join(os.path.dirname(log_file), f"aggregated_{os.path.basename(log_file)}")
         write_header = not os.path.exists(aggregated_log_file)
         with open(aggregated_log_file, 'a', newline='') as f:
             writer = csv.writer(f, delimiter='\t')
             if write_header:
-                upper_bounds = BUCKET_LOWER_BOUNDS[1:] + [1.0]
                 writer.writerow(['results_date'] + [f"{round(lower * 100)}-{round(upper * 100)}%"
-                                                    for lower, upper in zip(BUCKET_LOWER_BOUNDS, upper_bounds)])
-            writer.writerow([expiration_date_str] + [
-                round(not_hit_count / record_count, 3) if record_count else ''
-                for record_count, not_hit_count in zip(total_record_counts, total_not_hit_counts)
-            ])
+                                                    for lower, upper in zip(BUCKET_LOWER_BOUNDS, upper_bounds)]
+                                + ['distance'])
+            writer.writerow([expiration_date_str] + not_hit_probabilities + [round(distance, 3)])

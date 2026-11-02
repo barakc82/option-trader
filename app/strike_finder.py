@@ -7,7 +7,7 @@ import json
 from types import SimpleNamespace
 from datetime import datetime
 from utilities.utils import get_option_name, new_york_timezone, OPTION_TRADER_CONFIG_PATH, ISRAEL_TIMEZONE, \
-    is_switched_to_overnight_trading
+    is_switched_to_overnight_trading, is_after_hours, is_five_minutes_before_closing_time
 from utilities.ib_utils import (extract_ask, get_delta, get_delta_for_sell, get_individual_deltas, get_model_gamma,
                                  get_model_vega, get_model_theta, get_minutes_to_expiration, get_distance_to_strike_pct,
                                  get_model_iv, calculate_expected_profit)
@@ -327,7 +327,7 @@ class StrikeFinder:
             logger.error(f"No {right} option candidate found")
             return None
 
-        if not is_switched_to_overnight_trading():
+        if not is_five_minutes_before_closing_time():
             self._log_best_expected_profit_option(target_delta, right)
 
         return self._finalize_candidate(current_candidate, options_block, target_delta, right)

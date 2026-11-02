@@ -28,3 +28,4 @@ raw_data/
 processed_data/
 shared/
 utilities/languages/*.csv
+config/my_account.txt

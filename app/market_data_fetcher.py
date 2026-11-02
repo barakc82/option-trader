@@ -57,6 +57,7 @@ class MarketDataFetcher:
 
     def register_ticker(self, ticker):
         if not ticker:
+            logger.warning("No ticker provided for registration")
             return
         con_id = ticker.contract.conId
         if con_id not in self.registered_contracts:
@@ -64,6 +65,9 @@ class MarketDataFetcher:
             self.registered_contracts[con_id] = ticker
             logger.info(f"Registered update handler for {ticker.contract.symbol} {get_option_name(ticker.contract)}")
             self.last_tick_times[con_id] = time.time()
+        else:
+            logger.warning(f"Could not register an update handler for {ticker.contract.symbol} "
+                           f"{get_option_name(ticker.contract)} because the contract ID is already registered")
 
     def get_spx_price(self):
         return self.index_manager.get_spx_price()

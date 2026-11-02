@@ -38,7 +38,20 @@ EARLY_CLOSING_END_TIME = dt_time(16, 15)  # 23:15
 AFTER_HOURS_END_TIME = dt_time(17, 0)  # 00:00
 JUST_AFTER_TRADE_END_TIME = dt_time(17, 5)
 
-MY_ACCOUNT = 'U15897350'
+MY_ACCOUNT_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config', 'my_account.txt')
+
+
+def _read_my_account():
+    """The IB account ID, kept out of the codebase in config/my_account.txt (gitignored)."""
+    try:
+        with open(MY_ACCOUNT_PATH, 'r') as f:
+            return f.read().strip()
+    except OSError as e:
+        logging.getLogger(__name__).error(f"Could not read the IB account ID from {MY_ACCOUNT_PATH}: {e}")
+        return ''
+
+
+MY_ACCOUNT = _read_my_account()
 SHARED_JSON_PATH = 'shared/state.json'
 CACHED_JSON_PATH = 'cache/state.json'
 SUPERVISOR_JSON_PATH = 'shared/supervisor_state.json'
@@ -164,6 +177,9 @@ def is_early_closing_time(moment):
         raise ValueError(f"is_early_closing_time needs a tz-aware datetime, got naive {moment}")
     nyc_time = moment.astimezone(new_york_timezone).time()
     return REGULAR_HOURS_END_TIME < nyc_time < EARLY_CLOSING_END_TIME
+
+def is_five_minutes_before_closing_time(nyc_time):
+    return NEW_OPTION_EXPLORATION_START_TIME < nyc_time.time() < REGULAR_HOURS_END_TIME
 
 def is_first_five_minutes_of_closing_time(nyc_time):
     return REGULAR_HOURS_END_TIME < nyc_time.time() < FIVE_MINUTES_AFTER_REGULAR_HOURS_END_TIME
