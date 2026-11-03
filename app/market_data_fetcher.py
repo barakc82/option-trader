@@ -344,9 +344,8 @@ class MarketDataFetcher:
             )
 
             if not chunk_bars:
-                logger.error(f"No bars were found for {get_option_name(option)} while fetching minute bars")
-                await asyncio.sleep(20)
-                continue
+                logger.warning(f"No bars were found for {get_option_name(option)} while fetching minute bars, "
+                               f"request end: {request_end}, chunk size: {chunk_seconds}")
 
             bars = chunk_bars + bars
             remaining_seconds -= chunk_seconds
