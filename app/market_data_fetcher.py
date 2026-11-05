@@ -29,7 +29,6 @@ class MarketDataFetcher:
         if not self._initialized:
             self.ib = ConnectionManager().ib
             self.market_data_state = LIVE_DATA
-            self.registered_contracts = {}
             self.last_tick_times = {}
             self.options_dump_time = 0
             
@@ -60,14 +59,13 @@ class MarketDataFetcher:
             logger.warning("No ticker provided for registration")
             return
         con_id = ticker.contract.conId
-        if con_id not in self.registered_contracts:
-            ticker.updateEvent += self.on_ticker_update
-            self.registered_contracts[con_id] = ticker
-            logger.info(f"Registered update handler for {ticker.contract.symbol} {get_option_name(ticker.contract)}")
-            self.last_tick_times[con_id] = time.time()
-        else:
-            logger.warning(f"Could not register an update handler for {ticker.contract.symbol} "
-                           f"{get_option_name(ticker.contract)} because the contract ID is already registered")
+        # Disconnecting first (a no-op if not connected) keeps the handler connected only once,
+        # since a ticker may be registered more than once (e.g. request_subscriptions, then
+        # SubscriptionManager.maintain_tickers).
+        ticker.updateEvent -= self.on_ticker_update
+        ticker.updateEvent += self.on_ticker_update
+        logger.info(f"Registered update handler for {ticker.contract.symbol} {get_option_name(ticker.contract)}")
+        self.last_tick_times[con_id] = time.time()
 
     def get_spx_price(self):
         return self.index_manager.get_spx_price()
@@ -213,20 +211,17 @@ class MarketDataFetcher:
         await self.qualify(contracts)
         await self.ensure_market_data_type()
 
-        missing = [c for c in contracts if c.conId not in self.registered_contracts]
+        write_heartbeat()
+        ticker_snapshots = await self.ib.reqTickersAsync(*contracts)
+        write_heartbeat()
 
-        if missing:
-            write_heartbeat()
-            ticker_snapshots = await self.ib.reqTickersAsync(*missing)
-            write_heartbeat()
+        for ticker_snapshot in ticker_snapshots:
+            ticker_snapshot.contract.ticker = ticker_snapshot
 
-            for ticker_snapshot in ticker_snapshots:
-                ticker_snapshot.contract.ticker = ticker_snapshot
-
-            received_con_ids = {t.contract.conId for t in ticker_snapshots}
-            still_missing = [c for c in missing if c.conId not in received_con_ids]
-            if still_missing:
-                logger.info(f"The following contracts were requested but not fetched as snapshots: {[get_option_name(c) for c in still_missing]}")
+        received_con_ids = {t.contract.conId for t in ticker_snapshots}
+        still_missing = [c for c in contracts if c.conId not in received_con_ids]
+        if still_missing:
+            logger.info(f"The following contracts were requested but not fetched as snapshots: {[get_option_name(c) for c in still_missing]}")
 
     def cancel_market_data(self, contract):
         if not contract:
@@ -237,16 +232,11 @@ class MarketDataFetcher:
             logger.warning(f"Cannot cancel market data for {get_option_name(contract)} because no contract ID was provided")
             return
 
-        if contract.conId not in self.registered_contracts:
-            logger.warning(f"Cannot cancel market data for {get_option_name(contract)} because it is not part of the registered contracts")
-            return
-
         ticker = self.ib.ticker(contract)
         if ticker:
             ticker.updateEvent -= self.on_ticker_update
             self.ib.cancelMktData(contract)
 
-        self.registered_contracts.pop(contract.conId)
         logger.info(f"Unsubscribed from market data for {get_option_name(contract)}")
 
     def get_ticker(self, option):
