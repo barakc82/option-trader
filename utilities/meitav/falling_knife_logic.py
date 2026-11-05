@@ -27,33 +27,34 @@ class FallingKnifeCalculator:
 
     def calculate_at_price(self, leveraged_price):
         """Simulates portfolio state at a specific leveraged price point."""
-        new_leveraged_sum = leveraged_price * self.leveraged_quantity / 100
+        leveraged_sum_in_shekels = leveraged_price * self.leveraged_quantity / 100
         
         if self.should_decrease_base and leveraged_price != self.current_leveraged_price:
             # Use 1/3 power to simulate correlation (leveraged vs base volatility)
             real_decrease_ratio = math.pow(self.current_leveraged_price / leveraged_price, 1/3)
-            new_base_sum = sum(q * p / real_decrease_ratio for q, p in self.base_etfs_data) / 100
+            new_base_sum_in_shekels = sum(q * p / real_decrease_ratio for q, p in self.base_etfs_data) / 100
         else:
-            new_base_sum = sum(q * p for q, p in self.base_etfs_data) / 100
+            new_base_sum_in_shekels = sum(q * p for q, p in self.base_etfs_data) / 100
 
-        initial_total = new_leveraged_sum + new_base_sum + self.cash
+        initial_total = leveraged_sum_in_shekels + new_base_sum_in_shekels + self.cash
         total_fees = initial_total * FEE_RATE
         cash_for_investment = max(self.cash - total_fees, 0)
-        new_total = new_leveraged_sum + new_base_sum + cash_for_investment
+        total_in_shekels = leveraged_sum_in_shekels + new_base_sum_in_shekels + cash_for_investment
         
-        new_leveraged_share = new_leveraged_sum / new_total
-        base_share = new_base_sum / new_total
+        leveraged_share = leveraged_sum_in_shekels / total_in_shekels
+        base_share = new_base_sum_in_shekels / total_in_shekels
         
         status = (leveraged_price - BOTTOM) / (TOP - BOTTOM)
         required_leveraged_share = self.min_leveraged_share + (self.max_leveraged_share - self.min_leveraged_share) * (1 - status)
-        required_transfer = (required_leveraged_share - new_leveraged_share) * new_total
+        print(f"Required leveraged share: {required_leveraged_share:.3f}, Leveraged share: {leveraged_share:.3f}, total in shekels: {total_in_shekels:.0f}")
+        required_transfer = (required_leveraged_share - leveraged_share) * total_in_shekels
 
         return {
             "leveraged_price": leveraged_price,
-            "new_leveraged_sum": new_leveraged_sum,
-            "new_base_sum": new_base_sum,
-            "new_total": new_total,
-            "new_leveraged_share": new_leveraged_share,
+            "leveraged_sum_in_shekels": leveraged_sum_in_shekels,
+            "new_base_sum_in_shekels": new_base_sum_in_shekels,
+            "total_in_shekels": total_in_shekels,
+            "leveraged_share": leveraged_share,
             "base_share": base_share,
             "cash_for_investment": cash_for_investment,
             "status": status,
@@ -80,12 +81,13 @@ class FallingKnifeCalculator:
         current_result = self.calculate_at_price(self.current_leveraged_price)
 
         if current_result['required_transfer'] > 1000:
-            logger.info("The required transfer is more than 1000 NIS")
+            print(f"The required transfer is more than 1000 NIS: {current_result['required_transfer']}")
             qty, cash = self._portfolio_after_rebalancing()
             person_data = {'max_leveraged_share': self.max_leveraged_share, 'min_leveraged_share': self.min_leveraged_share}
             search_calc = FallingKnifeCalculator(qty, self.current_leveraged_price,
                                                  self.base_etfs_data, cash, person_data, self.should_decrease_base)
         else:
+            print("The required transfer is less than 1000 NIS")
             search_calc = self
 
         for price in range(self.current_leveraged_price - 1, 0, -1):
@@ -95,18 +97,20 @@ class FallingKnifeCalculator:
 
         return self.current_leveraged_price, current_result
 
-    def print_summary(self, target_price, result):
+    @staticmethod
+    def calculate_units(target_price):
+        """Number of units that 1000 NIS buys at target_price (in agorot), rounded up."""
+        return math.ceil(100000 / target_price) if target_price > 0 else 0
+
+    def print_summary(self, target_price, result, units):
         """Utility to print the simulation results in a standardized format."""
         print(f"Target price for transfer: {target_price}")
         print(f"At target price, Status:\t{result['status']:.4f}\n"
-              f"New leveraged sum:\t{result['new_leveraged_sum']:.2f}\n"
-              f"New base sum:\t{result['new_base_sum']:.2f}\n"
+              f"Leveraged sum in shekels:\t{result['leveraged_sum_in_shekels']:.2f}\n"
+              f"New base sum in shekels:\t{result['new_base_sum_in_shekels']:.2f}\n"
               f"Cash for investment:\t{result['cash_for_investment']:.2f}\n"
-              f"New total:\t{result['new_total']:.2f}\n"
+              f"Total in shekels:\t{result['total_in_shekels']:.2f}\n"
               f"Required leveraged share:\t{result['required_leveraged_share']:.2f}\n"
-              f"New leveraged share:\t{result['new_leveraged_share']:.2f}\n"
+              f"Leveraged share:\t{result['leveraged_share']:.2f}\n"
               f"Required transfer:\t{result['required_transfer']:.2f}")
-        
-        units = math.ceil(100000 / target_price) if target_price > 0 else 0
         print(f"Units to buy: {units}")
-        return units

@@ -1,0 +1,2 @@
+user = Hilush
+program_type = Gemel

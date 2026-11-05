@@ -1,4 +1,3 @@
-
 from utilities.meitav.get_status import extract_status
 from utilities.meitav.meitav_common import *
 from utilities.meitav.start import start
@@ -6,16 +5,18 @@ from utilities.spreadsheet_operations import update_status_in_spreadsheet
 
 # & C:\\"Program Files"\\Google\\Chrome\\Application\\chrome.exe --remote-debugging-port=9222 --user-data-dir=C:\\ChromeDebug --no-first-run
 
-if __name__ == "__main__":
-    name = Barak
-    program_type = Hishtalmut
 
-    driver = start(name, program_type)
+def main(user, program_type):
+    driver = start(user, program_type)
 
     try:
         status = extract_status(driver)
-        assert status['user'] == name
+        assert status['user'] == user
         assert status['program_type'] == program_type
-        update_status_in_spreadsheet(name, program_type, status)
+        update_status_in_spreadsheet(user, program_type, status)
     finally:
         driver.quit()
+
+
+if __name__ == "__main__":
+    main(Barak, Hishtalmut)

@@ -152,6 +152,14 @@ def login(driver, name, account_type):
                 if success_result:
                     print("✅ 'Close' button clicked.")
                     break
+            if "קחו אותי" in button_text:
+                close_button = driver.find_element(
+                    By.XPATH, "//i[contains(@class, 'close-btn')]"
+                )
+                success_result = try_to_click(driver, close_button)
+                if success_result:
+                    print("✅ 'Close' button clicked for the new website pop-up.")
+                    break
             time.sleep(0.5)
 
 

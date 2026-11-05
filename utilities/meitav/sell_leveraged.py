@@ -13,27 +13,29 @@ from utilities.meitav.meitav_common import *
 from utilities.meitav.start import start
 from utilities.spreadsheet_operations import update_next_sell_in_spreadsheet, extract_next_sell_price
 
-user = Barak
-program_type = Hishtalmut
+def main(user, program_type):
+    today = datetime.now()
+    start_date = None
+    end_date = target_date = today + relativedelta(months=3, days=-1)
 
-today = datetime.now()
-start_date = None
-end_date = target_date = today + relativedelta(months=3, days=-1)
+    driver = start(user, program_type)
+    try:
+        status = extract_status(driver)
+        user = status['user']
+        program_type = status['program_type']
 
-driver = start(user, program_type)
-try:
-    status = extract_status(driver)
-    user = status['user']
-    program_type = status['program_type']
+        price = extract_next_sell_price(user)
+        print(f"The sell price is {price}")
 
-    price = extract_next_sell_price(user)
-    print(f"The sell price is {price}")
+        sum = 10000
+        units = math.floor(sum * 100 / price)
+        update_next_sell_in_spreadsheet(user, program_type, price, f"{target_date:%d/%m/%Y}")
 
-    sum = 10000
-    units = math.floor(sum * 100 / price)
-    update_next_sell_in_spreadsheet(user, program_type, price, f"{target_date:%d/%m/%Y}")
+        fill_in_operation(driver, operation_type='sell', security_id=1144708, units=units, price=price,
+                          target_date=target_date)
+    finally:
+        driver.quit()
 
-    fill_in_operation(driver, operation_type='sell', security_id=1144708, units=units, price=price,
-                      target_date=target_date)
-finally:
-    driver.quit()
+
+if __name__ == "__main__":
+    main(Barak, Hishtalmut)

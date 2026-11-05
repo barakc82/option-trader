@@ -55,7 +55,8 @@ def calculate_next_buy(person, program_type):
     )
 
     target_price, result = calculator.find_next_transfer_price()
-    units = calculator.print_summary(target_price, result)
+    units = calculator.calculate_units(target_price)
+    calculator.print_summary(target_price, result, units)
 
     return target_price, units
 
