@@ -21,6 +21,9 @@ from utilities.ib_utils import *
 
 logger = logging.getLogger(__name__)
 
+# Minimum seconds between two "Watching the current price of" log lines for the same option.
+WATCHING_LOG_INTERVAL_SECONDS = 0.4
+
 
 class OptionSafeguard:
     _instance = None
@@ -208,7 +211,7 @@ class OptionSafeguard:
 
         if stop_loss * 0.5 <= current_price < stop_loss:
             now = time.time()
-            if now - self.last_watching_log_times.get(option.conId, 0) > 0.1:
+            if now - self.last_watching_log_times.get(option.conId, 0) > WATCHING_LOG_INTERVAL_SECONDS:
                 spot_price = self.index_price_manager.get_spot_price()
                 risk_free_rate = self.market_data_fetcher.get_cached_risk_free_rate()
                 distance_to_stop = calculate_distance_to_stop(option, option.ticker, stop_loss, spot_price, risk_free_rate)
