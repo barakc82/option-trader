@@ -119,7 +119,7 @@ class SubscriptionManager:
                 if active_contract is required_contract:
                     is_contract_subscribed = True
             if not is_contract_subscribed:
-                logger.info(f"Option {get_option_name(required_contract)} is missing a ticker")
+                logger.info(f"Option SPX {get_option_name(required_contract)} is missing a ticker")
                 contracts_missing_tickers.append(required_contract)
 
         if contracts_missing_tickers:
@@ -289,6 +289,7 @@ class SubscriptionManager:
             )
             details = await self.ib.reqContractDetailsAsync(future_option)
             if not details:
+                logger.error(f"ES contract for {strike} could not be found")
                 return None
 
             return next(

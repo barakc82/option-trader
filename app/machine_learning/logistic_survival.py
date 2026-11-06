@@ -48,7 +48,8 @@ from sklearn.preprocessing import StandardScaler
 
 from .best_subset import MAX_STALE_SIZES, SEARCH_TIME_BUDGET_SEC, CandidateResult, ScoreMethod
 from .regress_max_ask import CV_FOLDS, CV_RANDOM_STATE, GROUP_COLUMN
-from .survival_scoring import CREDIT_COLUMN, STOP_COLUMN, TARGET_COLUMN, clip_probabilities, compute_survival_label
+from .survival_scoring import (CREDIT_COLUMN, STOP_COLUMN, TARGET_COLUMN, clip_probabilities,
+                               compute_survival_label, trade_weight)
 
 logger = logging.getLogger(__name__)
 
@@ -115,14 +116,6 @@ def extrapolation_fraction(ctx: pd.DataFrame, k_grid: np.ndarray) -> float:
     lo, hi = np.log(k_grid.min()), np.log(k_grid.max())
     outside = (log_k_actual < lo) | (log_k_actual > hi)
     return float(np.mean(outside))
-
-
-def trade_weight(ctx: pd.DataFrame) -> np.ndarray:
-    """Same per-trade weight convention as best_subset.py's
-    search_best_subset_with_distribution (stop_loss - estimated_sell_price)
-    -- kept identical so logistic's trade-level scoring is directly
-    comparable to the other methods' under the same weighted_logloss."""
-    return (ctx[STOP_COLUMN] - ctx[CREDIT_COLUMN]).to_numpy()
 
 
 def _feature_columns(feature_names: list[str]) -> list[str]:

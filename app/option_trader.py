@@ -14,6 +14,7 @@ from .connection_manager import ConnectionManager
 from .market_data_fetcher import MarketDataFetcher
 from .target_delta_calculator import TargetDeltaCalculator
 from .state_updater import StateUpdater, post_current_state
+from .strike_finder import StrikeFinder
 
 
 logger = logging.getLogger(__name__)
@@ -116,6 +117,10 @@ class OptionTrader:
         }
         logger.info(f"Target deltas: C={target_deltas['C']:.3f}, P={target_deltas['P']:.3f}")
 
+        strike_finder = StrikeFinder()
+        strike_finder.load_config()
+        max_deltas = strike_finder.max_delta
+
         for open_sell_trade in open_sell_trades:
             logger.info(f"Working on open sell trade of option {get_option_name(open_sell_trade.contract)}")
             time_passed_since_submission = get_time_passed_since_submission(open_sell_trade)
@@ -135,8 +140,20 @@ class OptionTrader:
                 logger.error(f"Could not get the delta for sell for {get_option_name(option)}")
                 continue
 
+            # ML-derived sells are chosen by expected profit under {call,put}_max_delta rather
+            # than the target delta, so they're held to the max delta and the others to the
+            # target delta. An order without metadata is treated as not ML-derived.
+            position_initial_state = self.trading_bot.req_id_to_order_metadata.get(open_sell_trade.order.orderId)
+            is_ml_derived = position_initial_state is not None and position_initial_state.is_ml_derived
+            max_delta = max_deltas[option.right]
+            if is_ml_derived and delta > max_delta:
+                logger.info(
+                    f"Cancelling ML-derived sell of {get_option_name(open_sell_trade.contract)} since the delta ({delta:.3f}) is higher than the max delta ({max_delta:.3f})")
+                self.trading_bot.cancel_trade(open_sell_trade)
+                continue
+
             target_delta = target_deltas[option.right]
-            if delta > target_delta:
+            if not is_ml_derived and delta > target_delta:
                 logger.info(
                     f"Cancelling sell of {get_option_name(open_sell_trade.contract)} since the delta ({delta:.3f}) is higher than the target delta ({target_delta:.3f})")
 

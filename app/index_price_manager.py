@@ -86,10 +86,12 @@ class IndexPriceManager:
             contracts.sort(key=lambda c: c.lastTradeDateOrContractMonth)
             closest_es_future = contracts[0]
             await self.ib.qualifyContractsAsync(closest_es_future)
-            logger.info(f"Selected ES future: {closest_es_future.lastTradeDateOrContractMonth}, contract ID is {closest_es_future.conId}")
+            logger.info(f"Selected ES future: {closest_es_future.lastTradeDateOrContractMonth}, contract ID is {closest_es_future.conId}, trading class: {closest_es_future.tradingClass}")
             self.es = closest_es_future
             chains = await self.ib.reqSecDefOptParamsAsync(self.es.symbol, 'CME', 'FUT', self.es.conId)
-            chain = chains[0] if len(chains) == 1 else next(c for c in chains if c.tradingClass != 'ES')
+            """The reason we choose trading class 'ES' is because this chain's strikes match what appears in TWS. The
+            other chains contain more strikes whose options simply do not exist, for instance 6570"""
+            chain = chains[0] if len(chains) == 1 else next(c for c in chains if c.tradingClass == 'ES')
             self.es_strikes = sorted(chain.strikes)
 
         return self.es

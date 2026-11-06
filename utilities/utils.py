@@ -171,10 +171,6 @@ def is_after_hours():
 
 
 def is_early_closing_time(moment):
-    """Whether a tz-aware datetime falls in the early-closing window, judged by NY wall-clock
-    time whatever timezone it carries. Naive datetimes are rejected rather than guessed at."""
-    if moment.tzinfo is None:
-        raise ValueError(f"is_early_closing_time needs a tz-aware datetime, got naive {moment}")
     nyc_time = moment.astimezone(new_york_timezone).time()
     return REGULAR_HOURS_END_TIME < nyc_time < EARLY_CLOSING_END_TIME
 

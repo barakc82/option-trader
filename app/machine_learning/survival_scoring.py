@@ -24,15 +24,60 @@ logger = logging.getLogger(__name__)
 
 STOP_COLUMN = "stop_loss"
 CREDIT_COLUMN = "estimated_sell_price"
+MINUTES_TO_EXPIRATION_COLUMN = "minutes_to_expiration"
 
 # ctx (the non-feature columns the scoring machinery needs alongside X)
 # always carries at least these -- max_ask/credit/stop for label and weight
-# computation, plus GROUP_COLUMN for the nested best-subset search's own
-# GroupKFold.
-CTX_COLUMNS = [TARGET_COLUMN, CREDIT_COLUMN, STOP_COLUMN, GROUP_COLUMN]
+# computation, minutes_to_expiration for the weight's time-range multiplier,
+# plus GROUP_COLUMN for the nested best-subset search's own GroupKFold.
+CTX_COLUMNS = [TARGET_COLUMN, CREDIT_COLUMN, STOP_COLUMN, MINUTES_TO_EXPIRATION_COLUMN, GROUP_COLUMN]
+
+# Extra weight for trades sampled within certain minutes-to-expiration ranges, applied on
+# top of the stop_loss - estimated_sell_price weight (see trade_weight). Each entry is
+# (min_minutes inclusive, max_minutes exclusive, multiplier); a trade outside every range
+# gets a multiplier of 1, and if ranges overlap the first matching one wins.
+# Left empty (all multipliers 1) until filled in, e.g.:
+#     (0, 60, 3.0),       # last hour before expiration counts 3x
+#     (60, 390, 1.5),     # rest of the expiration day counts 1.5x
+MINUTES_TO_EXPIRATION_WEIGHT_RANGES: list[tuple[float, float, float]] = [
+    # TODO: fill in (min_minutes, max_minutes, multiplier) ranges
+    (4400, 4315, 3),
+    (4315, 4305, 2),
+    (1441, 1435, 3),
+    (1435, 1425, 2),
+    (1185, 1170, 3),
+    (1170, 1050, 2)
+]
 
 EPS = 1e-6
 EMPIRICAL_SMOOTHING = "laplace"  # "laplace" | "none"
+
+
+# ---------------------------------------------------------------------------
+# Weight
+# ---------------------------------------------------------------------------
+
+def minutes_to_expiration_multiplier(minutes_to_expiration: np.ndarray,
+                                     ranges=MINUTES_TO_EXPIRATION_WEIGHT_RANGES) -> np.ndarray:
+    """Per-row multiplier from MINUTES_TO_EXPIRATION_WEIGHT_RANGES (1 outside every range)."""
+    minutes = np.asarray(minutes_to_expiration, dtype=float)
+    multiplier = np.ones(len(minutes))
+    matched = np.zeros(len(minutes), dtype=bool)
+    for min_minutes, max_minutes, range_multiplier in ranges:
+        in_range = ~matched & (minutes >= min_minutes) & (minutes < max_minutes)
+        multiplier[in_range] = range_multiplier
+        matched |= in_range
+    return multiplier
+
+
+def trade_weight(ctx: pd.DataFrame) -> np.ndarray:
+    """The single per-trade weight every weighted_logloss score uses -- the
+    regression+distribution search, logistic and xgboost alike, so their pooled
+    scores stay directly comparable: the dollar room between the stop and the credit
+    received (stop_loss - estimated_sell_price), times the trade's
+    minutes-to-expiration range multiplier."""
+    room = (ctx[STOP_COLUMN] - ctx[CREDIT_COLUMN]).to_numpy()
+    return room * minutes_to_expiration_multiplier(ctx[MINUTES_TO_EXPIRATION_COLUMN].to_numpy())
 
 
 # ---------------------------------------------------------------------------

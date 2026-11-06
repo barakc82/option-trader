@@ -7,6 +7,16 @@ from selenium.webdriver.common.by import By
 from utilities.meitav.meitav_common import *
 
 
+def insert_text(driver, input_element, text):
+    """Types text into input_element without simulating key presses. send_keys maps each
+    character to a key of the currently active keyboard layout, so with a Hebrew layout the
+    '.' comes out as a different key and the field drops it; Chrome's Input.insertText
+    inserts the characters as-is (firing the same input events as typing) regardless of
+    the layout."""
+    input_element.click()
+    driver.execute_cdp_cmd("Input.insertText", {"text": text})
+
+
 def fill_in_operation_by_total_value(driver, operation_type, security_id, total_value):
     element = driver.find_element(By.XPATH, f"//*[text()='{security_id}']")
     element.click()
@@ -26,7 +36,7 @@ def fill_in_operation_by_total_value(driver, operation_type, security_id, total_
     inputs = driver.find_elements(By.CSS_SELECTOR, ".send-order-control-item-body input")
     units_input = inputs[3]
     units_input.clear()
-    units_input.send_keys(str(total_value))
+    insert_text(driver, units_input, str(total_value))
 
 
 def fill_in_operation(driver, operation_type, security_id, units, price, target_date):

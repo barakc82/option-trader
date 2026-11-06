@@ -47,7 +47,7 @@ from sklearn.model_selection import GroupKFold, cross_val_predict
 from .regress_max_ask import CV_FOLDS, CV_RANDOM_STATE
 from .survival_scoring import (
     CREDIT_COLUMN, EPS, GROUP_COLUMN, RESIDUAL_DISTRIBUTIONS, STOP_COLUMN, TARGET_COLUMN,
-    clip_probabilities, compute_survival_label, logloss,
+    clip_probabilities, compute_survival_label, logloss, trade_weight,
 )
 
 
@@ -184,7 +184,7 @@ def search_best_subset_with_distribution(X: pd.DataFrame, ctx: pd.DataFrame, tra
     y_transformed = transform["forward"](y_raw, extra_arr)
     stop_scale = transform["forward"](ctx[STOP_COLUMN].to_numpy(), extra_arr)
     y_survived = compute_survival_label(ctx)
-    weight = (ctx[STOP_COLUMN] - ctx[CREDIT_COLUMN]).to_numpy()
+    weight = trade_weight(ctx)
 
     n_splits = max(2, min(cv, groups.nunique()))
     gkf = GroupKFold(n_splits=n_splits, shuffle=True, random_state=CV_RANDOM_STATE)
