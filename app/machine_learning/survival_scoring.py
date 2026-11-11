@@ -12,11 +12,13 @@ fairly since that's what least-squares was fitted to.
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
 from scipy.stats import norm
+from sklearn.linear_model import LinearRegression
 
 from .regress_max_ask import GROUP_COLUMN, TARGET_COLUMN
 
@@ -91,6 +93,32 @@ def compute_survival_label(ctx: pd.DataFrame, max_ask_col: str = TARGET_COLUMN, 
     exactly this output, regardless of target transform or residual
     distribution."""
     return (ctx[max_ask_col].to_numpy() < ctx[stop_col].to_numpy()).astype(float)
+
+
+# ---------------------------------------------------------------------------
+# Feature-count cap
+# ---------------------------------------------------------------------------
+
+# A feature subset may have at most one feature per this many trading days with a
+# stop-loss hit (an "events per variable" rule of thumb, counting days rather than
+# trades since hits on the same day are strongly correlated): with few such days,
+# large subsets just overfit them.
+STOP_LOSS_HIT_DAYS_PER_FEATURE = 10
+
+
+def max_feature_count(ctx: pd.DataFrame, n_candidate_features: int) -> int:
+    """Largest feature-subset size the best-subset searches may try:
+    ceil(trading days with a stop-loss hit / STOP_LOSS_HIT_DAYS_PER_FEATURE). A hit is a
+    trade whose max_ask reached the stop (the complement of compute_survival_label), and
+    a trading day is a distinct GROUP_COLUMN value -- the same grouping the CV folds use.
+    At least 1, so a search always has something to evaluate, and at most
+    n_candidate_features."""
+    is_hit = compute_survival_label(ctx) == 0
+    hit_days = ctx.loc[is_hit, GROUP_COLUMN].nunique()
+    cap = min(max(1, math.ceil(hit_days / STOP_LOSS_HIT_DAYS_PER_FEATURE)), n_candidate_features)
+    print(f"    Feature count capped at {cap} ({hit_days} trading day(s) with a stop-loss hit / "
+          f"{STOP_LOSS_HIT_DAYS_PER_FEATURE}, {n_candidate_features} candidate feature(s))")
+    return cap
 
 
 # ---------------------------------------------------------------------------
@@ -214,6 +242,35 @@ RESIDUAL_DISTRIBUTIONS = {"normal": NormalResidualDistribution, "empirical": Emp
 # ---------------------------------------------------------------------------
 # Shipped-artifact wrapper for a (transform, residual-distribution) winner
 # ---------------------------------------------------------------------------
+
+class InterceptOnlyRegression:
+    """The zero-feature baseline for the linear families: predicts the mean of the
+    training target for every row. sklearn's LinearRegression refuses zero columns,
+    so this stands in for it with the same fit/predict/score/coef_/intercept_ surface,
+    and is picklable for the shipped artifact."""
+
+    def fit(self, X, y, sample_weight=None):
+        y = np.asarray(y, dtype=float)
+        self.intercept_ = float(np.average(y, weights=sample_weight))
+        self.coef_ = np.zeros(0)
+        return self
+
+    def predict(self, X):
+        return np.full(len(X), self.intercept_)
+
+    def score(self, X, y):
+        """R^2, which is 0 on the training data by construction."""
+        y = np.asarray(y, dtype=float)
+        total = float(np.sum((y - y.mean()) ** 2))
+        residual = float(np.sum((y - self.predict(X)) ** 2))
+        return 1.0 - residual / total if total > 0 else 0.0
+
+
+def make_linear_regression(n_features: int):
+    """LinearRegression for a non-empty feature subset, InterceptOnlyRegression for the
+    zero-feature baseline."""
+    return LinearRegression() if n_features else InterceptOnlyRegression()
+
 
 class TransformedResidualClassifier:
     """Ships a (target transform, feature subset, residual distribution)

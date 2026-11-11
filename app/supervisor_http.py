@@ -14,10 +14,68 @@ logger = logging.getLogger(__name__)
 
 SUPERVISOR_HTTP_HOST = "127.0.0.1"
 SUPERVISOR_HTTP_PORT = 8081
-SET_READY_TO_AUTHENTICATE_PATH = "/set-ready-to-authenticate"
+SET_READY_TO_AUTHENTICATE_PATH = "/api/set-ready-to-authenticate"
 
 _ready_to_authenticate = threading.Event()
 
+html = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Authentication Request</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                         sans-serif;
+            background: #f4f6f8;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .card {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            text-align: center;
+            max-width: 400px;
+            margin: 20px;
+        }
+
+        .checkmark {
+            font-size: 48px;
+            color: #16a34a;
+        }
+
+        h2 {
+            color: #1f2937;
+            margin-bottom: 12px;
+        }
+
+        p {
+            color: #64748b;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="checkmark">&#10003;</div>
+        <h2>Request received!</h2>
+        <p>
+            You are ready to authenticate. 
+            An Interactive Brokers authentication notification should appear on your phone shortly.
+        </p>
+        <p>You can safely close this page.</p>
+    </div>
+</body>
+</html>
+"""
 
 def is_ready_to_authenticate():
     return _ready_to_authenticate.is_set()
@@ -32,14 +90,14 @@ class _SupervisorRequestHandler(BaseHTTPRequestHandler):
         if urlsplit(self.path).path.rstrip('/') == SET_READY_TO_AUTHENTICATE_PATH:
             _ready_to_authenticate.set()
             logger.info("Received set-ready-to-authenticate request")
-            self._respond(200, "Marked as ready to authenticate.")
+            self._respond(200, html)
         else:
             self._respond(404, "Not found")
 
     def _respond(self, status, text):
         body = text.encode("utf-8")
         self.send_response(status)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()

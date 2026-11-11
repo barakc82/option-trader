@@ -7,19 +7,40 @@ import math
 import os
 from datetime import datetime, timezone
 
+import numpy as np
+
 from utilities.utils import new_york_timezone, REGULAR_HOURS_END_TIME, is_early_closing_time, is_early_trade, \
-    is_first_five_minutes_of_closing_time, ISRAEL_TIMEZONE
+    is_first_five_minutes_of_closing_time, ISRAEL_TIMEZONE, PREDICTION_EVALUATION_DIR
+from .machine_learning.survival_scoring import minutes_to_expiration_multiplier
 from .market_data_fetcher import MarketDataFetcher
 
 logger = logging.getLogger(__name__)
 
-PREDICTIONS_CSV_PATTERN = "cache/prediction_evaluation/predictions_*.csv"
-PREDICTION_AVERAGES_CSV_PATH = "cache/prediction_evaluation/prediction_averages.csv"
-PROBABILITY_BUCKETS_CSV_PATH = "cache/prediction_evaluation/probability_buckets.csv"
-EARLY_TRADE_PROBABILITY_BUCKETS_CSV_PATH = "cache/prediction_evaluation/early_trade_probability_buckets.csv"
-VERY_EARLY_TRADE_PROBABILITY_BUCKETS_CSV_PATH = "cache/prediction_evaluation/very_early_trade_probability_buckets.csv"
+PREDICTIONS_CSV_PATTERN = f"{PREDICTION_EVALUATION_DIR}/predictions_*.csv"
+PREDICTION_AVERAGES_CSV_PATH = f"{PREDICTION_EVALUATION_DIR}/prediction_averages.csv"
+PERCENTAGE_BUCKETS_DIR = f"{PREDICTION_EVALUATION_DIR}/percentage_buckets"
+PROBABILITY_BUCKETS_CSV_PATH = f"{PERCENTAGE_BUCKETS_DIR}/all/probability_buckets.csv"
+EARLY_TRADE_PROBABILITY_BUCKETS_CSV_PATH = f"{PERCENTAGE_BUCKETS_DIR}/early_trade/probability_buckets.csv"
+VERY_EARLY_TRADE_PROBABILITY_BUCKETS_CSV_PATH = f"{PERCENTAGE_BUCKETS_DIR}/very_early_trade/probability_buckets.csv"
+QUANTILES_DIR = f"{PREDICTION_EVALUATION_DIR}/quantiles"
+HISTOGRAM_CSV_PATH = f"{QUANTILES_DIR}/all/histogram.csv"
+QUANTILES_CSV_PATH = f"{QUANTILES_DIR}/all/quantiles.csv"
+EARLY_TRADE_HISTOGRAM_CSV_PATH = f"{QUANTILES_DIR}/early_trade/histogram.csv"
+EARLY_TRADE_QUANTILES_CSV_PATH = f"{QUANTILES_DIR}/early_trade/quantiles.csv"
+VERY_EARLY_TRADE_HISTOGRAM_CSV_PATH = f"{QUANTILES_DIR}/very_early_trade/histogram.csv"
+VERY_EARLY_TRADE_QUANTILES_CSV_PATH = f"{QUANTILES_DIR}/very_early_trade/quantiles.csv"
+# Fixed-resolution probability histograms kept in the *HISTOGRAM_CSV_PATH files: one bin per
+# 0.01 percentage point from 0.00% to 100.00% (HISTOGRAM_BINS bins, bin i = probability i / 10000).
+HISTOGRAM_RESOLUTION = 10000
+HISTOGRAM_BINS = HISTOGRAM_RESOLUTION + 1
+HISTOGRAM_COLUMNS = ['probability_pct', 'prediction_count', 'survival_count', 'stop_loss_hit_count', 'weight_sum']
+# After each histogram update, the matching *QUANTILES_CSV_PATH file gets one row per
+# equal-count quantile of all predictions so far in that histogram.
+NUMBER_OF_QUANTILES = 3
+QUANTILES_COLUMNS = ['results_date', 'bucket', 'min_probability', 'max_probability', 'mean_predicted',
+                     'survival_rate', 'hits', 'samples']
 PROCESS_LOOP_INTERVAL_SECONDS = 300
-BUCKET_LOWER_BOUNDS = [0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]
+BUCKET_LOWER_BOUNDS = [0.6, 0.7, 0.8, 0.9]
 
 class PredictionsEvaluator:
     """Groups each day's sampled sell-opportunity predictions by (strike, right) once that
@@ -109,6 +130,9 @@ class PredictionsEvaluator:
         realized_profits = []
         bucket_record_counts = [0] * len(BUCKET_LOWER_BOUNDS)
         bucket_hit_counts = [0] * len(BUCKET_LOWER_BOUNDS)
+        histogram = self._empty_histogram()
+        early_trade_histogram = self._empty_histogram()
+        very_early_trade_histogram = self._empty_histogram()
         early_closing_bucket_record_counts = [0] * len(BUCKET_LOWER_BOUNDS)
         early_closing_bucket_hit_counts = [0] * len(BUCKET_LOWER_BOUNDS)
         very_early_closing_bucket_record_counts = [0] * len(BUCKET_LOWER_BOUNDS)
@@ -169,17 +193,28 @@ class PredictionsEvaluator:
                 realized_profits.append(realized_profit)
 
                 probability = float(record['probability'])
+                # Same window is_early_closing_hours() checks, applied to when the record was sampled.
+                is_early_trade_record = is_early_closing_time(record_start_time) or is_early_trade(record_start_time)
+                is_very_early_trade_record = is_first_five_minutes_of_closing_time(record_start_time)
+
+                histogram_args = (probability, hit_stop_loss, estimated_sell_price, stop_loss,
+                                  int(record['minutes_to_expiration']))
+                self._add_to_histogram(histogram, *histogram_args)
+                if is_early_trade_record:
+                    self._add_to_histogram(early_trade_histogram, *histogram_args)
+                if is_very_early_trade_record:
+                    self._add_to_histogram(very_early_trade_histogram, *histogram_args)
+
                 bucket_index = bisect.bisect_right(BUCKET_LOWER_BOUNDS, probability) - 1
                 if bucket_index >= 0:
                     bucket_record_counts[bucket_index] += 1
                     if hit_stop_loss:
                         bucket_hit_counts[bucket_index] += 1
-                    # Same window is_early_closing_hours() checks, applied to when the record was sampled.
-                    if is_early_closing_time(record_start_time) or is_early_trade(record_start_time):
+                    if is_early_trade_record:
                         early_closing_bucket_record_counts[bucket_index] += 1
                         if hit_stop_loss:
                             early_closing_bucket_hit_counts[bucket_index] += 1
-                    if is_first_five_minutes_of_closing_time(record_start_time):
+                    if is_very_early_trade_record:
                         very_early_closing_bucket_record_counts[bucket_index] += 1
                         if hit_stop_loss:
                             very_early_closing_bucket_hit_counts[bucket_index] += 1
@@ -197,6 +232,11 @@ class PredictionsEvaluator:
                           early_closing_bucket_record_counts, early_closing_bucket_hit_counts)
         self._log_buckets(VERY_EARLY_TRADE_PROBABILITY_BUCKETS_CSV_PATH, expiration_date_str,
                           very_early_closing_bucket_record_counts, very_early_closing_bucket_hit_counts)
+        self._update_probability_histogram(HISTOGRAM_CSV_PATH, QUANTILES_CSV_PATH, histogram, expiration_date_str)
+        self._update_probability_histogram(EARLY_TRADE_HISTOGRAM_CSV_PATH, EARLY_TRADE_QUANTILES_CSV_PATH,
+                                           early_trade_histogram, expiration_date_str)
+        self._update_probability_histogram(VERY_EARLY_TRADE_HISTOGRAM_CSV_PATH, VERY_EARLY_TRADE_QUANTILES_CSV_PATH,
+                                           very_early_trade_histogram, expiration_date_str)
 
         logger.info(f"PredictionsEvaluator: Processed {csv_path} into {len(grouped)} strike/right group(s); "
                     f"average expected profit over {len(expected_profits)} record(s) = {average_expected_profit:.4f}; "
@@ -212,6 +252,103 @@ class PredictionsEvaluator:
         if record_time.tzinfo is None:
             record_time = record_time.replace(tzinfo=timezone.utc)
         return record_time.astimezone(new_york_timezone)
+
+    @staticmethod
+    def _empty_histogram():
+        return {
+            'prediction_count': np.zeros(HISTOGRAM_BINS, dtype=np.int64),
+            'survival_count': np.zeros(HISTOGRAM_BINS, dtype=np.int64),
+            'stop_loss_hit_count': np.zeros(HISTOGRAM_BINS, dtype=np.int64),
+            'weight_sum': np.zeros(HISTOGRAM_BINS, dtype=float),
+        }
+
+    @staticmethod
+    def _add_to_histogram(histogram, probability, hit_stop_loss, estimated_sell_price, stop_loss,
+                          minutes_to_expiration):
+        """Adds one evaluated record to its 0.01-percentage-point bin. The sample weight is
+        the one model selection scores with (survival_scoring.trade_weight): the room between
+        the stop and the credit, times the minutes-to-expiration range multiplier."""
+        if math.isnan(probability):
+            return
+        bin_index = min(max(round(probability * HISTOGRAM_RESOLUTION), 0), HISTOGRAM_RESOLUTION)
+        histogram['prediction_count'][bin_index] += 1
+        if hit_stop_loss:
+            histogram['stop_loss_hit_count'][bin_index] += 1
+        else:
+            histogram['survival_count'][bin_index] += 1
+        weight = (stop_loss - estimated_sell_price) * minutes_to_expiration_multiplier([minutes_to_expiration])[0]
+        histogram['weight_sum'][bin_index] += weight
+
+    @staticmethod
+    def _update_probability_histogram(histogram_file, quantiles_file, histogram, expiration_date_str):
+        """Adds this file's histogram to the running one in histogram_file (all
+        HISTOGRAM_BINS rows, written to a temporary file first and then swapped in, so a
+        crash mid-write can't leave a partial histogram), then logs the running histogram's
+        quantiles to quantiles_file."""
+        totals = PredictionsEvaluator._empty_histogram()
+        if os.path.exists(histogram_file):
+            with open(histogram_file, 'r', newline='') as f:
+                for bin_index, row in enumerate(csv.DictReader(f, delimiter='\t')):
+                    for column in ('prediction_count', 'survival_count', 'stop_loss_hit_count'):
+                        totals[column][bin_index] = int(row[column])
+                    totals['weight_sum'][bin_index] = float(row['weight_sum'])
+        for column in totals:
+            totals[column] += histogram[column]
+
+        os.makedirs(os.path.dirname(histogram_file), exist_ok=True)
+        temporary_path = f"{histogram_file}.tmp"
+        with open(temporary_path, 'w', newline='') as f:
+            writer = csv.writer(f, delimiter='\t')
+            writer.writerow(HISTOGRAM_COLUMNS)
+            for bin_index in range(HISTOGRAM_BINS):
+                writer.writerow([f"{bin_index * 100 / HISTOGRAM_RESOLUTION:.2f}",
+                                 totals['prediction_count'][bin_index], totals['survival_count'][bin_index],
+                                 totals['stop_loss_hit_count'][bin_index], round(totals['weight_sum'][bin_index], 4)])
+        os.replace(temporary_path, histogram_file)
+        logger.info(f"Updated the probability histogram in {histogram_file}: "
+                    f"{int(histogram['prediction_count'].sum())} new prediction(s), "
+                    f"{int(totals['prediction_count'].sum())} in total")
+
+        PredictionsEvaluator._log_quantiles(quantiles_file, totals, expiration_date_str)
+
+    @staticmethod
+    def _log_quantiles(quantiles_file, totals, expiration_date_str):
+        """Splits all predictions in the running histogram, ordered by predicted
+        probability, into NUMBER_OF_QUANTILES groups of (as near as possible) equal size and
+        appends one row per group to quantiles_file: its probability range, mean
+        predicted probability, observed survival rate, stop-loss hits and sample count.
+        Bins are never split, so a group holds every prediction of each bin it covers; a bin
+        goes to the group in which its first prediction falls."""
+        counts = totals['prediction_count']
+        total_count = int(counts.sum())
+        if not total_count:
+            return
+
+        probabilities = np.arange(HISTOGRAM_BINS) / HISTOGRAM_RESOLUTION
+        predictions_before_bin = np.cumsum(counts) - counts
+        group_of_bin = np.minimum(predictions_before_bin * NUMBER_OF_QUANTILES // total_count, NUMBER_OF_QUANTILES - 1)
+
+        os.makedirs(os.path.dirname(quantiles_file), exist_ok=True)
+        write_header = not os.path.exists(quantiles_file)
+        with open(quantiles_file, 'a', newline='') as f:
+            writer = csv.writer(f, delimiter='\t')
+            if write_header:
+                writer.writerow(QUANTILES_COLUMNS)
+            for group in range(NUMBER_OF_QUANTILES):
+                in_group = (group_of_bin == group) & (counts > 0)
+                samples = int(counts[in_group].sum())
+                if not samples:
+                    # Too few distinct bins to fill every group (e.g. very few predictions so far).
+                    writer.writerow([expiration_date_str, group + 1, '', '', '', '', 0, 0])
+                    continue
+                group_probabilities = probabilities[in_group]
+                mean_predicted = float((group_probabilities * counts[in_group]).sum() / samples)
+                survival_rate = float(totals['survival_count'][in_group].sum() / samples)
+                hits = int(totals['stop_loss_hit_count'][in_group].sum())
+                writer.writerow([expiration_date_str, group + 1, f"{group_probabilities.min():.4f}",
+                                 f"{group_probabilities.max():.4f}", f"{mean_predicted:.4f}",
+                                 f"{survival_rate:.4f}", hits, samples])
+        logger.info(f"Logged {NUMBER_OF_QUANTILES} quantile(s) of {total_count} prediction(s) to {quantiles_file}")
 
     @staticmethod
     def _log_averages(expiration_date_str, average_expected_profit, average_realized_profit, profit_deviation):
@@ -249,15 +386,24 @@ class PredictionsEvaluator:
         logger.info(f"Writing aggregated buckets to {log_file}...")
         total_record_counts = [0] * len(BUCKET_LOWER_BOUNDS)
         total_not_hit_counts = [0] * len(BUCKET_LOWER_BOUNDS)
+        skipped_old_layout_rows = 0
         with open(log_file, 'r', newline='') as f:
             for row in csv.DictReader(f, delimiter='\t'):
                 record_count = int(row['record_count'])
                 if not record_count:
                     continue
-                bucket_index = BUCKET_LOWER_BOUNDS.index(float(row['bucket_lower_bound']))
+                lower_bound = float(row['bucket_lower_bound'])
+                if lower_bound not in BUCKET_LOWER_BOUNDS:
+                    # Written with an earlier bucket layout; it can't be pooled into the current buckets.
+                    skipped_old_layout_rows += 1
+                    continue
+                bucket_index = BUCKET_LOWER_BOUNDS.index(lower_bound)
                 total_record_counts[bucket_index] += record_count
                 # The probability was rounded to 3 decimals, so rounding back recovers the exact count.
                 total_not_hit_counts[bucket_index] += round(float(row['not_hit_stop_loss_probability']) * record_count)
+        if skipped_old_layout_rows:
+            logger.warning(f"Skipped {skipped_old_layout_rows} row(s) of {log_file} whose bucket lower bound isn't one "
+                           f"of {BUCKET_LOWER_BOUNDS} (written with an earlier bucket layout)")
 
         upper_bounds = BUCKET_LOWER_BOUNDS[1:] + [1.0]
         not_hit_probabilities = [

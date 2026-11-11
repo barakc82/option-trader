@@ -1,10 +1,5 @@
-import math
 import asyncio
 import csv
-from datetime import datetime
-from typing import Any
-
-from ib_insync import Option, Trade, FuturesOption
 
 from utilities.utils import *
 from .index_price_manager import IndexPriceManager
@@ -205,7 +200,8 @@ class OptionSafeguard:
         high_limit_buy_trade = find_high_limit_buy_trade(option, open_trades)
 
         es_options = self.subscription_manager.spx_to_es_map.get(option.conId)
-        if self.fairness_checker.is_unfair_ask_value(option, es_options):
+        unfairness_result = self.fairness_checker.is_unfair_ask_value(option, es_options)
+        if unfairness_result == UNFAIRNESS_DETECTED:
             self.handle_unfair_ask_value(high_limit_buy_trade, option, es_options, stop_loss)
             return
 

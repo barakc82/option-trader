@@ -2,6 +2,7 @@ import time
 import os
 import json
 import logging
+import sys
 import traceback
 import asyncio
 from zoneinfo import ZoneInfo
@@ -87,7 +88,7 @@ def monitor_option_trader():
             state = CANNOT_RESTART_OPTION_TRADER_STATE
             return
         
-        send_telegram_message('Option Trader stopped, but TWS remains active - Option Trader successfully restarted')
+        send_admin_telegram_message('Option Trader stopped, but TWS remains active - Option Trader successfully restarted')
     else:
         logger.info(f"Option Trader is alive.")
         global last_update_time
@@ -122,7 +123,7 @@ def check_for_manual_restart_request():
                 config['should_restart_option_trader'] = 0
                 with open(config_path, 'w') as f:
                     json.dump(config, f, indent=4)
-                send_telegram_message("Option Trader successfully restarted via manual request.")
+                send_admin_telegram_message("Option Trader successfully restarted via manual request.")
             else:
                 state = CANNOT_RESTART_OPTION_TRADER_STATE
     except Exception as e:
@@ -143,7 +144,7 @@ def restart_platform():
     time.sleep(20)
     
     if is_process_active():
-        send_telegram_message('Platform and Option Trader are back')
+        send_admin_telegram_message('Platform and Option Trader are back')
         state = MONITOR_STATE
     else:
         state = CANNOT_RESTART_OPTION_TRADER_STATE
@@ -204,7 +205,7 @@ def monitor(interval=5):
             elif state == RESTART_PLATFORM_STATE:
                 restart_platform()
             elif state == CANNOT_RESTART_OPTION_TRADER_STATE:
-                send_telegram_message('Option Trader cannot restart')
+                send_admin_telegram_message('Option Trader cannot restart')
                 state = MONITOR_STATE
         except Exception:
             logger.error(f"Error in monitor loop:\n{traceback.format_exc()}")
@@ -212,6 +213,12 @@ def monitor(interval=5):
 
 if __name__ == "__main__":
     _lock = acquire_single_instance_lock(lock_path='cache/supervisor_script.lock', process_name='Supervisor')
+    # 0 is a placeholder, not a real chat: without a chat ID the supervisor couldn't send any
+    # alert, including the ready-to-authenticate link, so refuse to run rather than fail silently.
+    if get_user_telegram_chat_id() == 0:
+        logger.error(f"telegram_chat_id is set to 0 in {SUPERVISOR_CONFIG_PATH}; set it to your Telegram "
+                     f"chat ID before starting the supervisor. Exiting.")
+        sys.exit(1)
     try:
         logger.info("Supervisor started")
         start_supervisor_http_server()

@@ -7,7 +7,7 @@ import json
 from types import SimpleNamespace
 from datetime import datetime
 from utilities.utils import get_option_name, new_york_timezone, OPTION_TRADER_CONFIG_PATH, ISRAEL_TIMEZONE, \
-    is_switched_to_overnight_trading, is_after_hours, is_five_minutes_before_closing_time
+    PREDICTION_EVALUATION_DIR, is_switched_to_overnight_trading, is_after_hours, is_five_minutes_before_closing_time
 from utilities.ib_utils import (extract_ask, get_delta, get_delta_for_sell, get_individual_deltas, get_model_gamma,
                                  get_model_vega, get_model_theta, get_minutes_to_expiration, get_distance_to_strike_pct,
                                  get_model_iv, calculate_expected_profit)
@@ -566,7 +566,8 @@ class StrikeFinder:
 
     def _log_best_opportunity(self, strike, right, expiry, estimated_sell_price, stop_loss, probability, expected_profit,
                               minutes_to_expiration):
-        csv_path = f"cache/prediction_evaluation/predictions_{expiry}.csv"
+        os.makedirs(PREDICTION_EVALUATION_DIR, exist_ok=True)
+        csv_path = f"{PREDICTION_EVALUATION_DIR}/predictions_{expiry}.csv"
         now = datetime.now(new_york_timezone)
         write_header = not os.path.exists(csv_path)
         with open(csv_path, 'a', newline='') as f:

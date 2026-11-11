@@ -1,3 +1,4 @@
 {
-    "should_restart_option_trader": 0
+    "should_restart_option_trader": 0,
+    "telegram_chat_id": 0
 }

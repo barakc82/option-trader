@@ -10,6 +10,7 @@
     "number_of_samples_per_day": 20,
     "target_delta_top_multiplier": 3,
     "run_after_hours_only": true,
+    "domain": "<to be configured>.dpdns.org",
     "put_max_delta": 0.02,
     "call_max_delta": 0.02,
     "put_ml_slot_count": 0,

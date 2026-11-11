@@ -121,7 +121,7 @@ def is_process_active():
     last_pid = 0
     now_israel = datetime.datetime.now(ZoneInfo("Asia/Jerusalem"))
     is_reboot_window = datetime.time(7, 10) <= now_israel.time() <= datetime.time(7, 20)
-    number_of_attempts = 60 if is_reboot_window else 6
+    number_of_attempts = 60 if is_reboot_window else 24
     for attempt_index in range(number_of_attempts):
         try:
             pid_found = False

@@ -1,2 +1,2 @@
 user = Barak
-program_type = Gemel
+program_type = Hishtalmut

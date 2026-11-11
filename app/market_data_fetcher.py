@@ -7,7 +7,7 @@ import exchange_calendars as ecals
 import yfinance as yf
 from ib_insync import Index, Future, Option
 from utilities.utils import *
-from utilities.ib_utils import get_delta, extract_ask, PositionInitialState
+from utilities.ib_utils import get_delta, extract_ask, PositionInitialState, UNFAIRNESS_NOT_DETECTED
 
 from .connection_manager import ConnectionManager
 from .market_data_utils import LIVE_DATA, FROZEN_DATA, SPXESPair, get_gamma
@@ -151,7 +151,8 @@ class MarketDataFetcher:
         es_options = SubscriptionManager().spx_to_es_map.get(contract.conId)
         for entry in PositionsManager().position_initial_state_map.get(contract.conId, []):
             if entry.max_ask is None or current_ask > entry.max_ask:
-                if not fairness_checker.is_unfair_ask_value(contract, es_options):
+                unfairness_result = fairness_checker.is_unfair_ask_value(contract, es_options)
+                if unfairness_result == UNFAIRNESS_NOT_DETECTED:
                     logger.info(f"Updating new max ask for {get_option_name(contract)}: {current_ask}")
                     entry.max_ask = current_ask
 

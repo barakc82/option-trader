@@ -308,3 +308,7 @@ def get_distance_to_stop_pct(option, market_data_fetcher, stop_loss):
     r = market_data_fetcher.get_cached_risk_free_rate()
     spot_price = market_data_fetcher.get_spx_price() if is_regular_hours() else market_data_fetcher.get_es_price() + indices_difference
     return calculate_distance_to_stop_pct(option, spot_price, stop_loss, r)
+
+
+UNFAIRNESS_NOT_DETECTED = 0
+UNFAIRNESS_DETECTED = 1

@@ -27,7 +27,11 @@ def update_status_in_spreadsheet(name, program_type, status):
     price_updates = []
     etf_index_to_price_row_index = {
         1144708: 59,
-        5112628: 60
+        5112628: 60,
+        5109889: 67,
+        5114657: 68,
+        5122510: 69,
+        5113345: 70,
     }
 
     current_etf_id_order = [etf_id for etf_id in ETF_ID_ORDER if etf_id in status['holdings']]

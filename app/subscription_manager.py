@@ -302,3 +302,9 @@ class SubscriptionManager:
             fetch_es_contract(lower_strike),
             fetch_es_contract(upper_strike)
         )
+
+    def fetch_all_registered_spx_tickers(self):
+        all_active_tickers = self.ib.wrapper.ticker2ReqId['mktData'].keys()
+        active_spx_tickers = [ticker for ticker in all_active_tickers if
+                             ticker.contract.symbol == 'SPX' and ticker.contract.secType == 'OPT']
+        return active_spx_tickers

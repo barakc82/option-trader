@@ -103,7 +103,7 @@ class IndexPriceManager:
         return self.get_es_price() + indices_difference
 
     def calculate_spx_es_difference(self):
-        if not self.spx_es_history:
+        if not self.spx_es_history or len(self.spx_es_history) < 15:
             if os.path.exists(CACHED_JSON_PATH):
                 try:
                     with open(CACHED_JSON_PATH, "r") as f:

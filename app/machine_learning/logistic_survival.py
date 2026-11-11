@@ -49,7 +49,7 @@ from sklearn.preprocessing import StandardScaler
 from .best_subset import MAX_STALE_SIZES, SEARCH_TIME_BUDGET_SEC, CandidateResult, ScoreMethod
 from .regress_max_ask import CV_FOLDS, CV_RANDOM_STATE, GROUP_COLUMN
 from .survival_scoring import (CREDIT_COLUMN, STOP_COLUMN, TARGET_COLUMN, clip_probabilities,
-                               compute_survival_label, trade_weight)
+                               compute_survival_label, max_feature_count, trade_weight)
 
 logger = logging.getLogger(__name__)
 
@@ -406,14 +406,19 @@ def search_logistic_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names
     best_C = None
     stale_sizes = 0
     stop_search = False
-    for size in range(1, len(searchable_features) + 1):
+    # log_k is always added on top of the subset (see columns_for_subset), so the cap
+    # limits the searched features, not log_k. Size 0 is the log_k-only baseline.
+    for size in range(0, max_feature_count(ctx, len(searchable_features)) + 1):
         print(f"    Working on size {size}")
         improved_this_size = False
         for subset in itertools.combinations(searchable_features, size):
             subset = list(subset)
             columns = columns_for_subset(subset)
 
-            for candidate_C in C_grid:
+            # C only penalises the features on top of log_k (log_k's slope is fitted
+            # unpenalised), so the log_k-only baseline would give the same candidate for
+            # every C: evaluate it once.
+            for candidate_C in (C_grid if subset else C_grid[:1]):
                 oof_p = np.full(len(X), np.nan)
                 fold_scores = []
                 fold_max_abs_coef = []
@@ -481,32 +486,15 @@ def search_logistic_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names
 # how the global cross-method winner is picked; see select_probability_model.py)
 # ---------------------------------------------------------------------------
 
-def select_logistic_recommended(candidates: list[CandidateResult], feature_order: list[str]) -> CandidateResult:
-    """Among logistic's own candidates: lowest score first; then the
-    "one-standard-error rule" (any candidate within one SE of the raw best
-    is considered statistically indistinguishable from it); among those,
-    fewest features; final tie-break by a fixed sorted order (each
-    candidate's subset compared as a tuple of indices into feature_order)
-    for full reproducibility. This selection is purely for this method's
-    own reported "recommended subset" -- the actual cross-method winner
-    picked by select_probability_model.py still uses a plain minimum over
-    the full pooled candidate list, unchanged, per the requirement that the
-    existing scorer/selection machinery not change."""
-    from .best_subset import standard_error_from_fold_scores  # local import: avoids a module-level cycle risk
+def select_logistic_recommended(candidates: list[CandidateResult]) -> CandidateResult:
+    """This method's own reported "recommended subset", chosen among its own
+    candidates by the same rule select_probability_model.py uses for the
+    cross-method winner: fewest features within one standard error of the best
+    score, ties broken by the better score (best_subset.select_one_se_fewest_features)."""
+    from .best_subset import select_one_se_fewest_features  # local import: avoids a module-level cycle risk
 
-    best = min(candidates, key=lambda c: c.score)
-    se = standard_error_from_fold_scores(best.fold_scores)
-    if not np.isfinite(se):
-        within_se = [best]
-    else:
-        within_se = [c for c in candidates if c.score <= best.score + se]
-
-    min_size = min(len(c.subset) for c in within_se)
-    smallest = [c for c in within_se if len(c.subset) == min_size]
-
-    order_index = {name: i for i, name in enumerate(feature_order)}
-    smallest.sort(key=lambda c: tuple(order_index[f] for f in c.subset))
-    return smallest[0]
+    chosen, _, _ = select_one_se_fewest_features(candidates)
+    return chosen
 
 
 # ---------------------------------------------------------------------------

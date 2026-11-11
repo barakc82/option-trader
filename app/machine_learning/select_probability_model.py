@@ -56,7 +56,7 @@ from . import logistic_survival, pre_processing, survival_scoring, xgboost_survi
 from .best_subset import (
     SCORE_METHODS, DEFAULT_SCORE_METHOD_NAME, SEARCH_TIME_BUDGET_SEC, ScoreMethod,
     best_subset_for_target, count_within_one_se, search_best_subset_with_distribution,
-    standard_error_from_fold_scores,
+    select_one_se_fewest_features, standard_error_from_fold_scores,
 )
 from .probability_transforms import TRANSFORMS, TransformedLinearModel
 from .regress_max_ask import (
@@ -105,6 +105,10 @@ def _select_best_model_rss(df: pd.DataFrame, right: str, score_method: ScoreMeth
             keep = ~bad
             X, y_raw, groups = X[keep], y_raw[keep], groups[keep]
 
+    # Stop-loss hits among the rows actually fitted; rows without a stop can't be counted.
+    hit_rows = subset.loc[X.index].dropna(subset=[stop_col])
+    max_features = survival_scoring.max_feature_count(hit_rows, len(CANDIDATE_FEATURE_COLUMNS))
+
     candidates = {}
     for method_name, transform in TRANSFORMS.items():
         print(f"  Method = {method_name}")
@@ -113,6 +117,7 @@ def _select_best_model_rss(df: pd.DataFrame, right: str, score_method: ScoreMeth
         y_transformed = pd.Series(transform["forward"](y_raw.to_numpy(), extra_arr), index=y_raw.index)
         best_subset, within_method_score, oof_pred_transformed = best_subset_for_target(
             X, y_transformed, groups, CANDIDATE_FEATURE_COLUMNS, score_fn=score_method.compute,
+            max_features=max_features,
         )
         oof_pred_raw = transform["inverse"](oof_pred_transformed, extra_arr)
         dollar_space_score = score_method.compute(y_raw.to_numpy(), oof_pred_raw)
@@ -213,7 +218,7 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
         X, ctx, CANDIDATE_FEATURE_COLUMNS, score_method,
     )
     all_candidates.extend(logistic_results)
-    logistic_recommended = logistic_survival.select_logistic_recommended(logistic_results, CANDIDATE_FEATURE_COLUMNS)
+    logistic_recommended = logistic_survival.select_logistic_recommended(logistic_results)
     per_transform_best["logistic"] = logistic_recommended
     print(f"    Best for logistic (1-SE + fewest-features rule): subset={logistic_recommended.subset}, "
           f"score={logistic_recommended.score:.4f}, log_k_coef={logistic_recommended.log_k_coef:.4f}, "
@@ -237,7 +242,7 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
         lrn_extra_col = lrn_transform["extra_column"]
         lrn_extra_arr = ctx[lrn_extra_col].to_numpy() if lrn_extra_col is not None else None
         lrn_y = pd.Series(lrn_transform["forward"](ctx[TARGET_COLUMN].to_numpy(), lrn_extra_arr), index=X.index)
-        lrn_model = LinearRegression().fit(X[best_lrn.subset], lrn_y)
+        lrn_model = survival_scoring.make_linear_regression(len(best_lrn.subset)).fit(X[best_lrn.subset], lrn_y)
         lrn_residuals = lrn_y.to_numpy() - lrn_model.predict(X[best_lrn.subset])
         lrn_std = float(np.std(lrn_residuals, ddof=1)) if len(lrn_residuals) > 1 else float("nan")
         inv_log_k_coef = 1.0 / logistic_recommended.log_k_coef
@@ -255,19 +260,21 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
         X, ctx, CANDIDATE_FEATURE_COLUMNS, score_method,
     )
     all_candidates.extend(xgboost_results)
-    xgboost_recommended = xgboost_survival.select_xgboost_recommended(xgboost_results, CANDIDATE_FEATURE_COLUMNS)
+    xgboost_recommended = xgboost_survival.select_xgboost_recommended(xgboost_results)
     per_transform_best["xgboost"] = xgboost_recommended
     print(f"    Best for xgboost (1-SE + fewest-features rule): subset={xgboost_recommended.subset}, "
           f"score={xgboost_recommended.score:.4f}, reg_lambda={xgboost_recommended.reg_lambda}")
 
-    best = min(all_candidates, key=lambda c: c.score)
-    se = standard_error_from_fold_scores(best.fold_scores)
-    n_within = count_within_one_se(all_candidates, best.score, se)
-    print(f"  Winner: transform={best.transform_name}, subset={best.subset}, distribution={best.distribution}, "
-          f"score={best.score:.4f}")
-    print(f"  Standard error (from winner's per-fold scores): {se:.4f}")
+    # Fewest features within one standard error of the best score; ties by best score.
+    best, best_scoring, se = select_one_se_fewest_features(all_candidates)
+    n_within = count_within_one_se(all_candidates, best_scoring.score, se)
+    print(f"  Best score: transform={best_scoring.transform_name}, subset={best_scoring.subset}, "
+          f"distribution={best_scoring.distribution}, score={best_scoring.score:.4f}")
+    print(f"  Standard error (from the best-scoring candidate's per-fold scores): {se:.4f}")
     print(f"  {n_within}/{len(all_candidates)} (transform, feature subset[, residual distribution]) "
-          f"combinations fall within 1 SE of the winner")
+          f"combinations fall within 1 SE of the best score")
+    print(f"  Winner (fewest features within 1 SE, then best score): transform={best.transform_name}, "
+          f"subset={best.subset}, distribution={best.distribution}, score={best.score:.4f}")
 
     # Refit the winner on all available rows for the shipped artifact.
     if best.transform_name == "logistic":
@@ -299,7 +306,7 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
         extra_arr = X[extra_col].to_numpy() if extra_col is not None else None
         y_raw = ctx[TARGET_COLUMN].to_numpy()
         y_transformed = pd.Series(transform["forward"](y_raw, extra_arr), index=X.index)
-        linear_model = LinearRegression()
+        linear_model = survival_scoring.make_linear_regression(len(best.subset))
         linear_model.fit(X[best.subset], y_transformed)
         mu_hat_full = linear_model.predict(X[best.subset])
         residuals_full = y_transformed.to_numpy() - mu_hat_full

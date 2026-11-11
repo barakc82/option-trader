@@ -5,30 +5,32 @@ import json
 import subprocess
 import psutil
 import asyncio
-from .supervisor_utils import OPTION_TRADER_DIR, send_telegram_message
-from .supervisor_http import is_ready_to_authenticate, clear_ready_to_authenticate
+from .supervisor_utils import OPTION_TRADER_DIR, send_user_telegram_message
+from .supervisor_http import (is_ready_to_authenticate, clear_ready_to_authenticate, SET_READY_TO_AUTHENTICATE_PATH,
+                              SUPERVISOR_HTTP_HOST, SUPERVISOR_HTTP_PORT)
 from utilities.utils import is_in_docker, SUCCESS, ERROR, FAILED, OPTION_TRADER_CONFIG_PATH
 
 logger = logging.getLogger(__name__)
 
-# Shown instead of a link when ready_to_authenticate_url isn't configured: the endpoint can
-# still be reached from inside the container.
-READY_TO_AUTHENTICATE_FALLBACK = ("(ready_to_authenticate_url is not set in the config) run inside the container: "
-                                  "curl http://127.0.0.1:8081/set-ready-to-authenticate")
+# Shown instead of a link when domain isn't configured: the endpoint can still be reached from
+# inside the container, straight on the supervisor's HTTP server.
+READY_TO_AUTHENTICATE_FALLBACK = (f"(domain is not set in the config) run inside the container: "
+                                  f"curl http://{SUPERVISOR_HTTP_HOST}:{SUPERVISOR_HTTP_PORT}"
+                                  f"{SET_READY_TO_AUTHENTICATE_PATH}")
 
 
 def get_ready_to_authenticate_url():
-    """The link sent in Telegram: ready_to_authenticate_url from OPTION_TRADER_CONFIG_PATH,
-    e.g. the VM's http://<address>:8080/set-ready-to-authenticate, served by the supervisor's
-    own HTTP server."""
+    """The link sent in Telegram: http://<domain><SET_READY_TO_AUTHENTICATE_PATH>, with domain
+    from OPTION_TRADER_CONFIG_PATH (the address nginx serves on, including the port if it
+    isn't 80, e.g. "1.2.3.4:8080"), which nginx forwards to the supervisor's own HTTP server."""
     try:
         with open(OPTION_TRADER_CONFIG_PATH, 'r') as f:
-            url = json.load(f).get("ready_to_authenticate_url")
-        if url:
-            return url
-        logger.error(f"ready_to_authenticate_url is not set in {OPTION_TRADER_CONFIG_PATH}")
+            domain = json.load(f).get("domain")
+        if domain:
+            return f"http://{domain.rstrip('/')}{SET_READY_TO_AUTHENTICATE_PATH}"
+        logger.error(f"domain is not set in {OPTION_TRADER_CONFIG_PATH}")
     except Exception as e:
-        logger.error(f"Could not read ready_to_authenticate_url from {OPTION_TRADER_CONFIG_PATH}: {e}")
+        logger.error(f"Could not read domain from {OPTION_TRADER_CONFIG_PATH}: {e}")
     return READY_TO_AUTHENTICATE_FALLBACK
 
 def start_option_trader():
@@ -158,7 +160,7 @@ def wait_for_user_to_be_ready_to_login(post_current_state_callback):
     message_sent_in_telegram_too = False
     message = 'Platform stopped, click the following link when you are ready to authenticate:\n'
     message += get_ready_to_authenticate_url()
-    send_telegram_message(message)
+    send_user_telegram_message(message)
     
     while True:
         time.sleep(0.5)
@@ -174,7 +176,7 @@ def wait_for_user_to_be_ready_to_login(post_current_state_callback):
             break
 
         if time.time() - waiting_start_time > 600 and not message_sent_in_telegram_too:
-            send_telegram_message(message)
+            send_user_telegram_message(message)
             message_sent_in_telegram_too = True
     logger.info(f"Leaving wait_for_user_to_be_ready_to_login")
 

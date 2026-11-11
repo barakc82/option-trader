@@ -47,7 +47,7 @@ from sklearn.model_selection import GroupKFold, cross_val_predict
 from .regress_max_ask import CV_FOLDS, CV_RANDOM_STATE
 from .survival_scoring import (
     CREDIT_COLUMN, EPS, GROUP_COLUMN, RESIDUAL_DISTRIBUTIONS, STOP_COLUMN, TARGET_COLUMN,
-    clip_probabilities, compute_survival_label, logloss, trade_weight,
+    clip_probabilities, compute_survival_label, logloss, make_linear_regression, max_feature_count, trade_weight,
 )
 
 
@@ -64,7 +64,8 @@ SCORE_FN = rss_score
 
 
 def best_subset_for_target(X: pd.DataFrame, y: pd.Series, groups: pd.Series, feature_names: list[str],
-                            score_fn=SCORE_FN, cv: int = CV_FOLDS) -> tuple[list[str], float, np.ndarray]:
+                            score_fn=SCORE_FN, cv: int = CV_FOLDS,
+                            max_features: int | None = None) -> tuple[list[str], float, np.ndarray]:
     """Exhaustive best-subset selection via GroupKFold CV, scored by
     score_fn on y's own scale. Mirrors regress_max_ask.py's
     select_best_subset exactly, generalized to take y and score_fn as
@@ -85,7 +86,8 @@ def best_subset_for_target(X: pd.DataFrame, y: pd.Series, groups: pd.Series, fea
 
     best_subset, best_score, best_oof_pred = [], np.inf, None
     y_arr = y.to_numpy()
-    for size in range(1, len(feature_names) + 1):
+    max_size = len(feature_names) if max_features is None else min(max_features, len(feature_names))
+    for size in range(1, max_size + 1):
         print(f"    Working on size {size}")
         for subset in itertools.combinations(feature_names, size):
             subset = list(subset)
@@ -197,7 +199,9 @@ def search_best_subset_with_distribution(X: pd.DataFrame, ctx: pd.DataFrame, tra
     best_dist_kind = None
     best_subset = None
     stale_sizes = 0
-    for size in range(1, len(feature_names) + 1):
+    # Size 0 is the zero-feature baseline (intercept-only regression); the cap limits the
+    # features added on top of it.
+    for size in range(0, max_feature_count(ctx, len(feature_names)) + 1):
         print(f"    Working on size {size}")
         improved_this_size = False
         for subset in itertools.combinations(feature_names, size):
@@ -207,7 +211,7 @@ def search_best_subset_with_distribution(X: pd.DataFrame, ctx: pd.DataFrame, tra
             oof_mu = np.full(len(X), np.nan)
             fold_train_residuals = []
             for train_idx, test_idx in fold_splits:
-                lr = LinearRegression()
+                lr = make_linear_regression(len(subset))
                 lr.fit(X_subset[train_idx], y_transformed[train_idx])
                 mu_train = lr.predict(X_subset[train_idx])
                 oof_mu[test_idx] = lr.predict(X_subset[test_idx])
@@ -271,6 +275,19 @@ def standard_error_from_fold_scores(fold_scores: list[float]) -> float:
     if len(arr) < 2:
         return float("nan")
     return float(np.std(arr, ddof=1) / np.sqrt(len(arr)))
+
+
+def select_one_se_fewest_features(candidates: list[CandidateResult]) -> tuple[CandidateResult, CandidateResult, float]:
+    """The selection rule: among the candidates within one standard error of the best
+    score (score <= best.score + SE, the SE taken from the best candidate's per-fold
+    scores), choose the one with the fewest features; if several have that many, the
+    one with the best score. Returns (chosen, best, se). If the SE isn't a usable
+    number (fewer than 2 folds), the best-scoring candidate is chosen."""
+    best = min(candidates, key=lambda c: c.score)
+    se = standard_error_from_fold_scores(best.fold_scores)
+    within_se = [c for c in candidates if c.score <= best.score + se] if np.isfinite(se) else [best]
+    chosen = min(within_se, key=lambda c: (len(c.subset), c.score))
+    return chosen, best, se
 
 
 def count_within_one_se(candidates: list[CandidateResult], best_score: float, se: float) -> int:

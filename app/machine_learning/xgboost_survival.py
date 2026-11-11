@@ -42,7 +42,7 @@ from .logistic_survival import (
     replicate_for_training, select_logistic_recommended, trade_weight,
 )
 from .regress_max_ask import CV_FOLDS, CV_RANDOM_STATE, GROUP_COLUMN
-from .survival_scoring import clip_probabilities, compute_survival_label
+from .survival_scoring import clip_probabilities, compute_survival_label, max_feature_count
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +176,8 @@ def search_xgboost_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names:
     best_reg_lambda = None
     stale_sizes = 0
     stop_search = False
-    for size in range(1, len(feature_names) + 1):
+    # Size 0 is the log_k-only baseline; the cap limits the features added on top of log_k.
+    for size in range(0, max_feature_count(ctx, len(feature_names)) + 1):
         print(f"    Working on size {size}")
         improved_this_size = False
         for subset in itertools.combinations(feature_names, size):
