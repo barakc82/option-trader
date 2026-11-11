@@ -170,6 +170,7 @@ class CandidateResult:
     max_abs_coef: float | None = None
     reg_lambda: float | None = None  # xgboost only -- which L2 leaf-weight penalty this candidate was fit with
     logistic_c: float | None = None  # logistic only -- which inverse-regularization strength this candidate was fit with
+    n_neighbors: int | None = None  # knn only -- how many neighbours this candidate's share was taken over
 
 
 def search_best_subset_with_distribution(X: pd.DataFrame, ctx: pd.DataFrame, transform: dict, transform_name: str,

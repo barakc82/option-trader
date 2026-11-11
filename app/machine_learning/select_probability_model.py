@@ -52,7 +52,7 @@ from pathlib import Path
 import numpy as np
 from sklearn.linear_model import LinearRegression
 
-from . import logistic_survival, pre_processing, survival_scoring, xgboost_survival
+from . import knn_survival, logistic_survival, pre_processing, survival_scoring, xgboost_survival
 from .best_subset import (
     SCORE_METHODS, DEFAULT_SCORE_METHOD_NAME, SEARCH_TIME_BUDGET_SEC, ScoreMethod,
     best_subset_for_target, count_within_one_se, search_best_subset_with_distribution,
@@ -265,6 +265,16 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
     print(f"    Best for xgboost (1-SE + fewest-features rule): subset={xgboost_recommended.subset}, "
           f"score={xgboost_recommended.score:.4f}, reg_lambda={xgboost_recommended.reg_lambda}")
 
+    # kNN: a ninth method, P(survive) = share of the nearest past trades whose
+    # max_ask/credit stayed below the candidate's stop/credit (see knn_survival.py).
+    print(f"  Transform = knn")
+    knn_results = knn_survival.search_knn_candidates(X, ctx, CANDIDATE_FEATURE_COLUMNS, score_method)
+    all_candidates.extend(knn_results)
+    knn_recommended = knn_survival.select_knn_recommended(knn_results)
+    per_transform_best["knn"] = knn_recommended
+    print(f"    Best for knn (1-SE + fewest-features rule): subset={knn_recommended.subset}, "
+          f"score={knn_recommended.score:.4f}, n_neighbors={knn_recommended.n_neighbors}")
+
     # Fewest features within one standard error of the best score; ties by best score.
     best, best_scoring, se = select_one_se_fewest_features(all_candidates)
     n_within = count_within_one_se(all_candidates, best_scoring.score, se)
@@ -300,6 +310,10 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
               f"max_depth={xgboost_survival.XGBOOST_PARAMS['max_depth']}, reg_lambda={best.reg_lambda}")
 
         classifier = xgboost_survival.XgboostSurvivalClassifier(model, best.subset, columns)
+    elif best.transform_name == "knn":
+        model = knn_survival.KnnModel(X[best.subset].to_numpy(dtype=float), knn_survival.max_ask_ratio(ctx))
+        print(f"  Final knn fit: {len(X)} past trades, n_neighbors={best.n_neighbors}")
+        classifier = knn_survival.KnnSurvivalClassifier(model, best.subset, best.n_neighbors)
     else:
         transform = TRANSFORMS[best.transform_name]
         extra_col = transform["extra_column"]
@@ -371,6 +385,9 @@ def print_selection_report(right: str, report: dict) -> None:
         elif transform_name == "xgboost":
             print(f"      xgboost: subset={candidate.subset}, score={candidate.score:.4f}, "
                   f"reg_lambda={candidate.reg_lambda}")
+        elif transform_name == "knn":
+            print(f"      knn: subset={candidate.subset}, score={candidate.score:.4f}, "
+                  f"n_neighbors={candidate.n_neighbors}")
         else:
             print(f"      {transform_name}: distribution={candidate.distribution}, subset={candidate.subset}, "
                   f"score={candidate.score:.4f}")
