@@ -29,6 +29,7 @@ PREMARKET_START_TIME = dt_time(20, 15)  # 20:15 (usually for overnight/early sta
 END_OF_EARLY_TRADE_TIME = dt_time(22, 15)  # 05:15
 PREMARKET_END_TIME = dt_time(9, 25)  # 16:25
 REGULAR_HOURS_START_TIME = dt_time(9, 30)  # 16:30
+PRE_REGULAR_HOURS_START_TIME = dt_time(9, 0)  # 16:00, 30 minutes before REGULAR_HOURS_START_TIME
 LATE_REGULAR_HOURS_START_TIME = dt_time(14, 30)  # 21:30
 REDUCE_SAFE_CUSHION_TIME = dt_time(15, 40)  # 22:40
 NEW_OPTION_EXPLORATION_START_TIME = dt_time(15, 55)  # 22:55
@@ -144,6 +145,12 @@ def is_night_break():
 def is_regular_hours():
     now_in_nyc = datetime.now(new_york_timezone).time()
     return is_market_open() and REGULAR_HOURS_START_TIME < now_in_nyc < REGULAR_HOURS_END_TIME
+
+
+def is_regular_hours_or_just_before():
+    """Regular hours, starting 30 minutes early (from PRE_REGULAR_HOURS_START_TIME)."""
+    now_in_nyc = datetime.now(new_york_timezone).time()
+    return is_market_open() and PRE_REGULAR_HOURS_START_TIME < now_in_nyc < REGULAR_HOURS_END_TIME
 
 
 def is_switched_to_overnight_trading():

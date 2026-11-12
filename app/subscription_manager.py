@@ -14,7 +14,8 @@ from .connection_manager import ConnectionManager
 from .index_price_manager import IndexPriceManager
 from .trading_bot import TradingBot
 from .market_data_fetcher import MarketDataFetcher
-from utilities.utils import get_option_name, SAFEGUARD_MAX_CADENCE, STALE_TICK_THRESHOLD_SECONDS, is_market_open
+from utilities.utils import get_option_name, SAFEGUARD_MAX_CADENCE, STALE_TICK_THRESHOLD_SECONDS, is_market_open, \
+    is_regular_hours_or_just_before
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +107,10 @@ class SubscriptionManager:
         active_indices = [ticker.contract for ticker in active_tickers if ticker.contract.secType in ['IND', 'STK', 'FUT']]
         self.es_future = await self.market_data_fetcher.fetch_es_future()
 
-        for required_index in [self.market_data_fetcher.spx, self.es_future]:
+        required_indices = [self.es_future]
+        if is_regular_hours_or_just_before():
+            required_indices.append(self.market_data_fetcher.spx)
+        for required_index in required_indices:
             if required_index and required_index not in active_indices:
                 logger.info(f"Going to subscribe to Index {required_index.symbol}")
                 contracts_missing_tickers.append(required_index)

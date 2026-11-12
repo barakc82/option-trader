@@ -81,6 +81,26 @@ class PositionsManager:
         states already held, never below 0."""
         self.load_config()
         positions = self.trading_bot.get_short_options()
+        ml_derived_positions = [position for position in positions
+                               if position.contract.right == right
+                               and position.contract.conId in self.contract_id_to_position_data]
+
+        number_of_ml_derived_positions = 0
+        for ml_derived_position in ml_derived_positions:
+            option = ml_derived_position.contract
+            contract_id = ml_derived_position.contract.conId
+            ml_derived_count = self.contract_id_to_position_data[contract_id].ml_derived_count
+            if not hasattr(option, "ticker") or option.ticker is None:
+                number_of_ml_derived_positions += ml_derived_count
+                continue
+
+            bid = option.ticker.bid
+            ask = option.ticker.ask
+            if self.can_buy_options() and bid <= 0.05 and ask <= 0.2:
+                continue
+
+            number_of_ml_derived_positions += ml_derived_count
+
         ml_derived_positions = sum(self.contract_id_to_position_data[position.contract.conId].ml_derived_count
                                    for position in positions
                                    if position.contract.right == right
@@ -94,7 +114,7 @@ class PositionsManager:
                                 and req_id_to_order_metadata[trade.order.orderId] is not None
                                 and req_id_to_order_metadata[trade.order.orderId].is_ml_derived)
         ml_derived_taken_slots = ml_derived_positions + ml_derived_trades
-        logger.info(f"Found {ml_derived_positions} ml derived positions and {ml_derived_trades} trades ")
+        logger.info(f"Found {ml_derived_positions} ml derived positions and {ml_derived_trades} trades (right: {right})")
         return max(self.ml_slot_count[right] - ml_derived_taken_slots, 0)
 
 
@@ -106,7 +126,7 @@ class PositionsManager:
             with open(CACHED_JSON_PATH, 'r') as f:
                 state = json.load(f)
             for pos in state.get('position_initial_states', []):
-                logger.info(f"barak: Loading position initial state: {pos}")
+                logger.info(f"Loading position initial state: {pos}")
                 date = pos.get('date')
                 strike = pos.get('strike')
                 right = pos.get('right')
@@ -367,5 +387,4 @@ class PositionsManager:
     def add_position_entry(self, position_initial_state: PositionInitialState, trade):
         c = trade.contract
         key = c.conId
-        logger.info(f"barak: storing in position_initial_state_map a position_initial_state object for {get_option_name(c)} with estimated sell price of {position_initial_state.estimated_sell_price}")
         self.position_initial_state_map.setdefault(key, []).append(position_initial_state)
