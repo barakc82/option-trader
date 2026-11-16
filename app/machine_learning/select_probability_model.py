@@ -403,6 +403,74 @@ def print_selection_report(right: str, report: dict) -> None:
               f"residual std [log_ratio_normal] = {cmp['log_ratio_normal_residual_std']:.4f}")
 
 
+def load_stored_classifiers() -> dict:
+    """The {right: classifier} currently saved at MODEL_PATH, or {} if there is none
+    (or it can't be unpickled, e.g. after an incompatible code change)."""
+    try:
+        with open(MODEL_PATH, "rb") as f:
+            return pickle.load(f)
+    except FileNotFoundError:
+        logger.info(f"  No stored model at {MODEL_PATH}")
+    except Exception as e:
+        logger.warning(f"  Could not load the stored model at {MODEL_PATH}: {e}")
+    return {}
+
+
+def _transform_name(transform: dict) -> str:
+    """TRANSFORMS key of a transform dict; after unpickling, its forward function is the
+    same module-level function object, so identity matching works."""
+    return next((name for name, candidate in TRANSFORMS.items() if candidate["forward"] is transform["forward"]),
+                "unknown transform")
+
+
+def describe_classifier(classifier) -> dict:
+    """The method, residual distribution, feature subset and hyperparameter of a shipped
+    classifier -- what is compared against the stored model."""
+    if isinstance(classifier, logistic_survival.LogisticSurvivalClassifier):
+        return {"method": "logistic", "distribution": None, "subset": list(classifier.subset), "hyperparameter": None}
+    if isinstance(classifier, xgboost_survival.XgboostSurvivalClassifier):
+        return {"method": "xgboost", "distribution": None, "subset": list(classifier.subset),
+                "hyperparameter": f"reg_lambda={classifier.model.get_params().get('reg_lambda')}"}
+    if isinstance(classifier, knn_survival.KnnSurvivalClassifier):
+        return {"method": "knn", "distribution": None, "subset": list(classifier.subset),
+                "hyperparameter": f"n_neighbors={classifier.n_neighbors}"}
+    if isinstance(classifier, survival_scoring.TransformedResidualClassifier):
+        return {"method": _transform_name(classifier.transform),
+                "distribution": classifier.residual_distribution.name,
+                "subset": list(classifier.best_subset), "hyperparameter": None}
+    return {"method": type(classifier).__name__, "distribution": None,
+            "subset": list(classifier.get_feature_subset()), "hyperparameter": None}
+
+
+def _format_description(description: dict) -> str:
+    text = description["method"]
+    if description["distribution"]:
+        text += f" ({description['distribution']} residuals)"
+    text += f", features={description['subset']}"
+    if description["hyperparameter"]:
+        text += f", {description['hyperparameter']}"
+    return text
+
+
+def compare_with_stored(new_classifier, stored_classifier) -> str:
+    """One line saying whether the new winner differs from the stored one: first the
+    method (and residual distribution), then the features and hyperparameter."""
+    new = describe_classifier(new_classifier)
+    if stored_classifier is None:
+        return f"New model: {_format_description(new)} (no stored model to compare with)"
+    stored = describe_classifier(stored_classifier)
+    if (new["method"], new["distribution"]) != (stored["method"], stored["distribution"]):
+        return f"Method CHANGED: {_format_description(stored)} -> {_format_description(new)}"
+    changes = []
+    if sorted(new["subset"]) != sorted(stored["subset"]):
+        changes.append(f"features {stored['subset']} -> {new['subset']}")
+    if new["hyperparameter"] != stored["hyperparameter"]:
+        changes.append(f"{stored['hyperparameter']} -> {new['hyperparameter']}")
+    if changes:
+        return f"Method unchanged ({_format_description(new)}), but {', '.join(changes)}"
+    return f"Model unchanged: {_format_description(new)}"
+
+
 def configure_logging():
     """Sends every module's logger.info to both the console and LOG_PATH (overwritten
     each run). The root logger defaults to WARNING, so without this all logger.info
@@ -428,15 +496,20 @@ def main(argv=None):
     survival_scoring.STRATIFY_FOLDS = args.fold_strategy == "stratified"
 
     df = pre_processing.main()
+    stored_classifiers = load_stored_classifiers()
     classifiers = {}
     reports = {}
+    comparisons = {}
     for right in ["C", "P"]:
         logger.info(f"Right = {right}")
         classifiers[right], reports[right] = select_best_model_for_side(df, right, args.score_method)
+        comparisons[right] = compare_with_stored(classifiers[right], stored_classifiers.get(right))
+        logger.info(f"  Compared with the stored model: {comparisons[right]}")
 
     logger.info("\nModel selection summary:")
     for right, report in reports.items():
         print_selection_report(right, report)
+        logger.info(f"    Compared with the stored model: {comparisons[right]}")
 
     Path(MODEL_PATH).parent.mkdir(parents=True, exist_ok=True)
     with open(MODEL_PATH, "wb") as f:
