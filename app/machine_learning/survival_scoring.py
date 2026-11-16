@@ -19,8 +19,9 @@ import numpy as np
 import pandas as pd
 from scipy.stats import norm
 from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import GroupKFold, StratifiedGroupKFold
 
-from .regress_max_ask import GROUP_COLUMN, TARGET_COLUMN
+from .regress_max_ask import CV_RANDOM_STATE, GROUP_COLUMN, TARGET_COLUMN
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +32,11 @@ MINUTES_TO_EXPIRATION_COLUMN = "minutes_to_expiration"
 # ctx (the non-feature columns the scoring machinery needs alongside X)
 # always carries at least these -- max_ask/credit/stop for label and weight
 # computation, minutes_to_expiration for the weight's time-range multiplier,
-# plus GROUP_COLUMN for the nested best-subset search's own GroupKFold.
+# plus GROUP_COLUMN for the CV folds (make_fold_splits).
 CTX_COLUMNS = [TARGET_COLUMN, CREDIT_COLUMN, STOP_COLUMN, MINUTES_TO_EXPIRATION_COLUMN, GROUP_COLUMN]
 
-# Extra weight for trades sampled within certain minutes-to-expiration ranges, applied on
-# top of the stop_loss - estimated_sell_price weight (see trade_weight). Each entry is
+# Weight for trades sampled within certain minutes-to-expiration ranges -- the whole of
+# the per-trade weight (see trade_weight). Each entry is
 # (min_minutes inclusive, max_minutes exclusive, multiplier); a trade outside every range
 # gets a multiplier of 1, and if ranges overlap the first matching one wins.
 # Left empty (all multipliers 1) until filled in, e.g.:
@@ -75,24 +76,62 @@ def minutes_to_expiration_multiplier(minutes_to_expiration: np.ndarray,
 def trade_weight(ctx: pd.DataFrame) -> np.ndarray:
     """The single per-trade weight every weighted_logloss score uses -- the
     regression+distribution search, logistic and xgboost alike, so their pooled
-    scores stay directly comparable: the dollar room between the stop and the credit
-    received (stop_loss - estimated_sell_price), times the trade's
-    minutes-to-expiration range multiplier."""
-    room = (ctx[STOP_COLUMN] - ctx[CREDIT_COLUMN]).to_numpy()
-    return room * minutes_to_expiration_multiplier(ctx[MINUTES_TO_EXPIRATION_COLUMN].to_numpy())
+    scores stay directly comparable: the trade's minutes-to-expiration range
+    multiplier alone (1 outside every range)."""
+    return minutes_to_expiration_multiplier(ctx[MINUTES_TO_EXPIRATION_COLUMN].to_numpy())
 
 
 # ---------------------------------------------------------------------------
 # Label
 # ---------------------------------------------------------------------------
 
+def is_stop_loss_hit(max_ask, stop_loss):
+    """Whether the ask reached the stop: max_ask >= stop_loss (a tie counts as a hit).
+    The complement of compute_survival_label; works on Series and arrays alike."""
+    return max_ask >= stop_loss
+
+
 def compute_survival_label(ctx: pd.DataFrame, max_ask_col: str = TARGET_COLUMN, stop_col: str = STOP_COLUMN) -> np.ndarray:
     """The single, shared definition of the survival label. survived=1 means
-    the ask never crossed the stop for the life of the trade. Computed once
+    the ask stayed strictly below the stop for the life of the trade (a tie is a
+    hit, see is_stop_loss_hit). Computed once
     here and nowhere else -- every logloss-family score is computed against
     exactly this output, regardless of target transform or residual
     distribution."""
     return (ctx[max_ask_col].to_numpy() < ctx[stop_col].to_numpy()).astype(float)
+
+
+# ---------------------------------------------------------------------------
+# Cross-validation folds
+# ---------------------------------------------------------------------------
+
+# How the trading days are split into CV folds by make_fold_splits:
+#   True  -- StratifiedGroupKFold: each day still stays in one fold, but the days are
+#            assigned so every fold gets about the same share of stop-loss-hit rows.
+#            Removes the fold-score spread (and so the SE) that comes only from bad
+#            days happening to bunch into one fold.
+#   False -- GroupKFold: days are assigned to folds at random (the previous behaviour).
+# select_probability_model's --fold-strategy flag overrides it for a run.
+STRATIFY_FOLDS = True
+
+
+def make_fold_splits(ctx: pd.DataFrame, cv: int) -> list:
+    """The (train_idx, test_idx) CV splits every survival search uses, grouped by
+    GROUP_COLUMN (a trading day never straddles folds) and, when STRATIFY_FOLDS is set,
+    stratified on the stop-loss-hit label. n_splits is cv, capped at the number of
+    trading days and at least 2."""
+    groups = ctx[GROUP_COLUMN]
+    n_splits = max(2, min(cv, groups.nunique()))
+    is_hit = (compute_survival_label(ctx) == 0).astype(int)
+    if STRATIFY_FOLDS:
+        splitter = StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=CV_RANDOM_STATE)
+    else:
+        splitter = GroupKFold(n_splits=n_splits, shuffle=True, random_state=CV_RANDOM_STATE)
+    splits = list(splitter.split(np.zeros(len(ctx)), is_hit, groups=groups))
+    hits_per_fold = [int(is_hit[test_idx].sum()) for _, test_idx in splits]
+    logger.info(f"    {'Stratified' if STRATIFY_FOLDS else 'Unstratified'} folds: stop-loss-hit rows per fold "
+          f"{hits_per_fold}, rows per fold {[len(test_idx) for _, test_idx in splits]}")
+    return splits
 
 
 # ---------------------------------------------------------------------------
@@ -116,7 +155,7 @@ def max_feature_count(ctx: pd.DataFrame, n_candidate_features: int) -> int:
     is_hit = compute_survival_label(ctx) == 0
     hit_days = ctx.loc[is_hit, GROUP_COLUMN].nunique()
     cap = min(max(1, math.ceil(hit_days / STOP_LOSS_HIT_DAYS_PER_FEATURE)), n_candidate_features)
-    print(f"    Feature count capped at {cap} ({hit_days} trading day(s) with a stop-loss hit / "
+    logger.info(f"    Feature count capped at {cap} ({hit_days} trading day(s) with a stop-loss hit / "
           f"{STOP_LOSS_HIT_DAYS_PER_FEATURE}, {n_candidate_features} candidate feature(s))")
     return cap
 

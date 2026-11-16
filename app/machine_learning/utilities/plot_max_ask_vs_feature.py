@@ -9,16 +9,21 @@ regress_max_ask.py / select_probability_model.py:
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from matplotlib.ticker import ScalarFormatter
 import pandas as pd
 
+from app.machine_learning.survival_scoring import STOP_COLUMN, TARGET_COLUMN, is_stop_loss_hit
+
 CSV_PATH = "machine_learning/data/options_data.csv"
-X_COLUMN = "distance_to_strike_pct"
-Y_COLUMN = "max_ask"
+X_COLUMN = "log_k"
+Y_COLUMN = "stop_loss"
+LOG_SCALE_Y = False  # plot the y axis on a log scale (needs Y_COLUMN > 0)
 OUTPUT_PATH = f"machine_learning/data/{Y_COLUMN}_vs_{X_COLUMN}.png"
 
-# Single-series scatter -- reference palette's categorical slot 1 (blue) and
-# light chart chrome (see dataviz skill references/palette.md).
-MARK_COLOR = "#2a78d6"
+# Stop-loss hits (max_ask >= stop_loss) in red, misses in blue, on light chart
+# chrome (see dataviz skill references/palette.md).
+HIT_COLOR = "#d6342a"
+MISS_COLOR = "#2a78d6"
 CHART_SURFACE = "#fcfcfb"
 PRIMARY_INK = "#0b0b0b"
 MUTED_INK = "#898781"
@@ -28,19 +33,35 @@ BASELINE = "#c3c2b7"
 
 def main():
     df = pd.read_csv(CSV_PATH)
-    subset = df.dropna(subset=[X_COLUMN, Y_COLUMN])
+    # Hits are always judged on max_ask vs. the stop, whatever columns are plotted.
+    required_columns = list(dict.fromkeys([X_COLUMN, Y_COLUMN, TARGET_COLUMN, STOP_COLUMN]))
+    subset = df.dropna(subset=required_columns)
     dropped = len(df) - len(subset)
-    print(f"Plotting {len(subset)} row(s) ({dropped} dropped for missing {X_COLUMN}/{Y_COLUMN})")
+    print(f"Plotting {len(subset)} row(s) ({dropped} dropped for missing {'/'.join(required_columns)})")
 
     fig, ax = plt.subplots(figsize=(9, 6), facecolor=CHART_SURFACE)
     ax.set_facecolor(CHART_SURFACE)
 
-    ax.scatter(subset[X_COLUMN], subset[Y_COLUMN], s=28, c=MARK_COLOR,
-               alpha=0.55, linewidths=0.5, edgecolors=CHART_SURFACE)
+    is_hit = is_stop_loss_hit(subset[TARGET_COLUMN], subset[STOP_COLUMN])
+    misses, hits = subset[~is_hit], subset[is_hit]
+    print(f"Stop-loss hits: {len(hits)}, misses: {len(misses)}")
+    # Misses first so the rarer hits are drawn on top.
+    ax.scatter(misses[X_COLUMN], misses[Y_COLUMN], s=28, c=MISS_COLOR, alpha=0.55, linewidths=0.5,
+               edgecolors=CHART_SURFACE, label=f"Stop loss not hit ({len(misses)})")
+    ax.scatter(hits[X_COLUMN], hits[Y_COLUMN], s=28, c=HIT_COLOR, alpha=0.75, linewidths=0.5,
+               edgecolors=CHART_SURFACE, label=f"Stop loss hit ({len(hits)})")
+    legend = ax.legend(frameon=False, loc="upper right")
+    for text in legend.get_texts():
+        text.set_color(PRIMARY_INK)
 
     ax.set_title(f"{Y_COLUMN} vs. {X_COLUMN}", color=PRIMARY_INK, fontsize=14, pad=12)
     ax.set_xlabel(X_COLUMN, color=MUTED_INK)
-    ax.set_ylabel(Y_COLUMN, color=MUTED_INK)
+    if LOG_SCALE_Y:
+        ax.set_ylabel(f"{Y_COLUMN} (log scale)", color=MUTED_INK)
+        ax.set_yscale("log")
+        ax.yaxis.set_major_formatter(ScalarFormatter())
+    else:
+        ax.set_ylabel(Y_COLUMN, color=MUTED_INK)
 
     ax.grid(True, axis="y", color=GRIDLINE, linewidth=0.8)
     ax.set_axisbelow(True)

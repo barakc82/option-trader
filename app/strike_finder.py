@@ -183,6 +183,7 @@ class StrikeFinder:
                 option, right, estimated_sell_price, stop_loss_per_option,
                 bid_delta, ask_delta, last_delta, model_delta, gamma, vega, theta,
                 minutes_to_expiration, atm_iv, contract_iv, distance_to_strike_pct,
+                should_use_calibration=True
             )
             if out_of_the_money_probability is None:
                 continue
@@ -207,7 +208,7 @@ class StrikeFinder:
         else:
             max_delta_str = f"{best.max_delta:.3f}" if best.max_delta is not None else "n/a"
             logger.info(f"Max expected-profit {right} option among {len(options)} option(s): {get_option_name(best.option)}, "
-                        f"expected profit: {best.expected_profit:.3f}, probability: {best.probability:.3f}, "
+                        f"expected profit: {best.expected_profit:.3f}, calibrated probability: {best.probability:.3f}, "
                         f"estimated sell price: {best.estimated_sell_price:.2f}, max delta: {max_delta_str} "
                         f"(limit {max_delta})")
         return best

@@ -17,9 +17,9 @@ Three scoring methods are registered in SCORE_METHODS:
     survival_scoring.py). Comparable across transforms directly, with no
     rescoring step needed.
   - "weighted_logloss" (DEFAULT): same as "logloss", but each row's
-    contribution is weighted by stop_loss - estimated_sell_price (the
-    dollar room between the stop and the credit received) rather than
-    every row counting equally.
+    contribution is weighted by survival_scoring.trade_weight (the
+    minutes-to-expiration range multiplier) rather than every row
+    counting equally.
 
 search_best_subset_with_distribution implements the logloss-family search:
 for each candidate feature subset, ONE inner GroupKFold pass produces
@@ -37,6 +37,7 @@ for flagging when the apparent winner isn't distinguishable from its
 runners-up).
 """
 import itertools
+import logging
 from dataclasses import dataclass
 
 import numpy as np
@@ -47,8 +48,11 @@ from sklearn.model_selection import GroupKFold, cross_val_predict
 from .regress_max_ask import CV_FOLDS, CV_RANDOM_STATE
 from .survival_scoring import (
     CREDIT_COLUMN, EPS, GROUP_COLUMN, RESIDUAL_DISTRIBUTIONS, STOP_COLUMN, TARGET_COLUMN,
-    clip_probabilities, compute_survival_label, logloss, make_linear_regression, max_feature_count, trade_weight,
+    clip_probabilities, compute_survival_label, logloss, make_fold_splits, make_linear_regression, max_feature_count,
+    trade_weight,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -81,21 +85,21 @@ def best_subset_for_target(X: pd.DataFrame, y: pd.Series, groups: pd.Series, fea
     Returns (best_subset, best_score, oof_predictions_for_best_subset).
     """
     n_splits = max(2, min(cv, groups.nunique()))
-    print(f"  Number of trade days: {groups.nunique()}, number of samples: {X.shape[0]}")
+    logger.info(f"  Number of trade days: {groups.nunique()}, number of samples: {X.shape[0]}")
     group_kfold = GroupKFold(n_splits=n_splits, shuffle=True, random_state=CV_RANDOM_STATE)
 
     best_subset, best_score, best_oof_pred = [], np.inf, None
     y_arr = y.to_numpy()
     max_size = len(feature_names) if max_features is None else min(max_features, len(feature_names))
     for size in range(1, max_size + 1):
-        print(f"    Working on size {size}")
+        logger.info(f"    Working on size {size}")
         for subset in itertools.combinations(feature_names, size):
             subset = list(subset)
             y_pred = cross_val_predict(LinearRegression(), X[subset], y, cv=group_kfold, groups=groups)
             score = score_fn(y_arr, y_pred)
             if score < best_score:
                 best_subset, best_score, best_oof_pred = subset, score, y_pred
-                print(f"    Number of features: {len(subset)}, best score: {score:.4f}, features: {subset}")
+                logger.info(f"    Number of features: {len(subset)}, best score: {score:.4f}, features: {subset}")
 
     return best_subset, best_score, best_oof_pred
 
@@ -111,9 +115,9 @@ def logloss_score(p: np.ndarray, y: np.ndarray, weight: np.ndarray | None = None
 
 
 def weighted_logloss_score(p: np.ndarray, y: np.ndarray, weight: np.ndarray) -> float:
-    """Logloss with each row weighted by `weight` (stop_loss -
-    estimated_sell_price -- the dollar room between the stop and the credit
-    received) instead of counting every row equally."""
+    """Logloss with each row weighted by `weight` (survival_scoring.trade_weight
+    -- the minutes-to-expiration range multiplier) instead of counting every
+    row equally."""
     p = np.clip(p, EPS, 1 - EPS)
     per_row = -(y * np.log(p) + (1 - y) * np.log(1 - p))
     w = np.asarray(weight, dtype=float)
@@ -180,7 +184,6 @@ def search_best_subset_with_distribution(X: pd.DataFrame, ctx: pd.DataFrame, tra
     CandidateResult for this one transform; only meaningful for
     score_method.needs_distribution -- callers wanting the RSS path should
     use best_subset_for_target instead."""
-    groups = ctx[GROUP_COLUMN]
     y_raw = ctx[TARGET_COLUMN].to_numpy()
     extra_col = transform["extra_column"]
     extra_arr = ctx[extra_col].to_numpy() if extra_col is not None else None
@@ -189,9 +192,7 @@ def search_best_subset_with_distribution(X: pd.DataFrame, ctx: pd.DataFrame, tra
     y_survived = compute_survival_label(ctx)
     weight = trade_weight(ctx)
 
-    n_splits = max(2, min(cv, groups.nunique()))
-    gkf = GroupKFold(n_splits=n_splits, shuffle=True, random_state=CV_RANDOM_STATE)
-    fold_splits = list(gkf.split(np.zeros(len(X)), groups=groups))
+    fold_splits = make_fold_splits(ctx, cv)
 
     distribution_kinds = list(RESIDUAL_DISTRIBUTIONS) if score_method.needs_distribution else [None]
 
@@ -203,7 +204,7 @@ def search_best_subset_with_distribution(X: pd.DataFrame, ctx: pd.DataFrame, tra
     # Size 0 is the zero-feature baseline (intercept-only regression); the cap limits the
     # features added on top of it.
     for size in range(0, max_feature_count(ctx, len(feature_names)) + 1):
-        print(f"    Working on size {size}")
+        logger.info(f"    Working on size {size}")
         improved_this_size = False
         for subset in itertools.combinations(feature_names, size):
             subset = list(subset)
@@ -226,7 +227,7 @@ def search_best_subset_with_distribution(X: pd.DataFrame, ctx: pd.DataFrame, tra
                 if score < best_score:
                     best_score = score
                     improved_this_size = True
-                    print(f"    Size {size} improves best score to {score:.4f}, features: {subset}")
+                    logger.info(f"    Size {size} improves best score to {score:.4f}, features: {subset}")
                 continue
 
             for dist_kind in distribution_kinds:
@@ -254,12 +255,12 @@ def search_best_subset_with_distribution(X: pd.DataFrame, ctx: pd.DataFrame, tra
 
         if improved_this_size:
             stale_sizes = 0
-            print(f"    Size {size} improves best score to {best_score:.4f}, "
+            logger.info(f"    Size {size} improves best score to {best_score:.4f}, "
                   f"distribution: {best_dist_kind}, features: {best_subset}")
         else:
             stale_sizes += 1
             if stale_sizes >= MAX_STALE_SIZES:
-                print(f"    No improvement for {MAX_STALE_SIZES} consecutive sizes, stopping at size {size}")
+                logger.info(f"    No improvement for {MAX_STALE_SIZES} consecutive sizes, stopping at size {size}")
                 break
 
     return results

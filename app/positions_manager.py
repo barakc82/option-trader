@@ -101,11 +101,6 @@ class PositionsManager:
 
             number_of_ml_derived_positions += ml_derived_count
 
-        ml_derived_positions = sum(self.contract_id_to_position_data[position.contract.conId].ml_derived_count
-                                   for position in positions
-                                   if position.contract.right == right
-                                   and position.contract.conId in self.contract_id_to_position_data)
-
         trades = self.trading_bot.get_open_trades()
         req_id_to_order_metadata = self.trading_bot.req_id_to_order_metadata
         ml_derived_trades = sum(trade.remaining() for trade in trades
@@ -113,8 +108,8 @@ class PositionsManager:
                                 and trade.order.orderId in req_id_to_order_metadata
                                 and req_id_to_order_metadata[trade.order.orderId] is not None
                                 and req_id_to_order_metadata[trade.order.orderId].is_ml_derived)
-        ml_derived_taken_slots = ml_derived_positions + ml_derived_trades
-        logger.info(f"Found {ml_derived_positions} ml derived positions and {ml_derived_trades} trades (right: {right})")
+        ml_derived_taken_slots = number_of_ml_derived_positions + ml_derived_trades
+        logger.info(f"Found {number_of_ml_derived_positions} ml derived positions and {ml_derived_trades} trades (right: {right})")
         return max(self.ml_slot_count[right] - ml_derived_taken_slots, 0)
 
 
@@ -272,7 +267,7 @@ class PositionsManager:
             option = position.contract
 
             opportunity_explorer = OpportunityExplorer()
-            current_price_level = opportunity_explorer.last_call_option_price if option.right == 'C' else opportunity_explorer.last_put_option_price
+            current_price_level = opportunity_explorer.get_last_call_option_price() if option.right == 'C' else opportunity_explorer.get_last_put_option_price()
 
             if current_price_level < MINIMAL_SELL_PRICE_TO_CLOSE_POSITION:
                 continue
@@ -290,9 +285,13 @@ class PositionsManager:
             if not self.can_buy_options() or math.isnan(bid) or bid > 0.05 or math.isnan(ask) or ask > 0.2 or ask < 0:
                 continue
 
+            quantity = abs(position.position)
+            slots_limit = self.get_available_ml_slots_count(option.right)
+            if slots_limit > 0:
+                quantity = min(slots_limit, quantity)
             logger.info(
-                f"Submitting a buy trade for position of {get_option_name(position.contract)}, quantity: {position.position}, bid is {bid}, current price level is {current_price_level}")
-            close_position_trade = await self.trading_bot.close_short_option(option, abs(position.position), limit=0.05)
+                f"Submitting a buy trade for position of {get_option_name(position.contract)}, quantity: {quantity}, bid is {bid}, current price level is {current_price_level}")
+            close_position_trade = await self.trading_bot.close_short_option(option, quantity, limit=0.05)
             req_id_to_comment[close_position_trade.order.orderId] = "Position buyback"
 
     async def dump_positions_initial_states(self):

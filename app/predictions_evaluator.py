@@ -75,6 +75,7 @@ class PredictionsEvaluator:
 
     async def process_expired_prediction_files(self):
         now_nyc = datetime.now(new_york_timezone)
+        processed_any_file = False
         for csv_path in glob.glob(PREDICTIONS_CSV_PATTERN):
             expiration_date_str = self._extract_expiration_date(csv_path)
             if expiration_date_str is None:
@@ -92,8 +93,15 @@ class PredictionsEvaluator:
 
             averages_logged = await self._process_file(csv_path, expiration_date_str)
             if averages_logged:
+                processed_any_file = True
                 os.remove(csv_path)
                 logger.info(f"PredictionsEvaluator: Deleted {csv_path} after processing")
+
+        if processed_any_file:
+            # The aggregated bucket files just got new rows, so the predictor's calibration
+            # corrections are stale. Imported here: predictor imports this module.
+            from .predictor import Predictor
+            Predictor().load_calibration_corrections()
 
     @staticmethod
     def _extract_expiration_date(csv_path):
@@ -266,8 +274,8 @@ class PredictionsEvaluator:
     def _add_to_histogram(histogram, probability, hit_stop_loss, estimated_sell_price, stop_loss,
                           minutes_to_expiration):
         """Adds one evaluated record to its 0.01-percentage-point bin. The sample weight is
-        the one model selection scores with (survival_scoring.trade_weight): the room between
-        the stop and the credit, times the minutes-to-expiration range multiplier."""
+        the one model selection scores with (survival_scoring.trade_weight): the
+        minutes-to-expiration range multiplier."""
         if math.isnan(probability):
             return
         bin_index = min(max(round(probability * HISTOGRAM_RESOLUTION), 0), HISTOGRAM_RESOLUTION)
@@ -276,7 +284,7 @@ class PredictionsEvaluator:
             histogram['stop_loss_hit_count'][bin_index] += 1
         else:
             histogram['survival_count'][bin_index] += 1
-        weight = (stop_loss - estimated_sell_price) * minutes_to_expiration_multiplier([minutes_to_expiration])[0]
+        weight = minutes_to_expiration_multiplier([minutes_to_expiration])[0]
         histogram['weight_sum'][bin_index] += weight
 
     @staticmethod

@@ -29,14 +29,14 @@ import time
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import GroupKFold
 from sklearn.neighbors import NearestNeighbors
 
 from .best_subset import MAX_STALE_SIZES, SEARCH_TIME_BUDGET_SEC, CandidateResult, ScoreMethod
 from .logistic_survival import select_logistic_recommended
 from .regress_max_ask import CV_FOLDS, CV_RANDOM_STATE, GROUP_COLUMN, TARGET_COLUMN
 from .survival_scoring import (
-    CREDIT_COLUMN, STOP_COLUMN, clip_probabilities, compute_survival_label, max_feature_count, trade_weight,
+    CREDIT_COLUMN, STOP_COLUMN, clip_probabilities, compute_survival_label, make_fold_splits, max_feature_count,
+    trade_weight,
 )
 
 logger = logging.getLogger(__name__)
@@ -106,10 +106,7 @@ def search_knn_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names: lis
     GroupKFold split and score_method as the other methods. Returns every evaluated
     CandidateResult (transform_name="knn", distribution=None, n_neighbors set; None
     for the size-0 base-rate candidate)."""
-    groups = ctx[GROUP_COLUMN]
-    n_splits = max(2, min(cv, groups.nunique()))
-    gkf = GroupKFold(n_splits=n_splits, shuffle=True, random_state=CV_RANDOM_STATE)
-    fold_splits = list(gkf.split(np.zeros(len(X)), groups=groups))
+    fold_splits = make_fold_splits(ctx, cv)
 
     ratios = max_ask_ratio(ctx)
     k_all = stop_multiple(ctx[STOP_COLUMN], ctx[CREDIT_COLUMN])
@@ -124,7 +121,7 @@ def search_knn_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names: lis
     stale_sizes = 0
     stop_search = False
     for size in range(0, max_feature_count(ctx, len(feature_names)) + 1):
-        print(f"    Working on size {size}")
+        logger.info(f"    Working on size {size}")
         improved_this_size = False
         for subset in itertools.combinations(feature_names, size):
             subset = list(subset)
@@ -157,18 +154,18 @@ def search_knn_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names: lis
             if stop_search:
                 break
         if stop_search:
-            print(f"    Time budget of {time_budget_sec / 60:.1f} min reached after {len(results)} "
+            logger.info(f"    Time budget of {time_budget_sec / 60:.1f} min reached after {len(results)} "
                   f"candidate(s); stopping the search early and using the results collected so far.")
             break
 
         if improved_this_size:
             stale_sizes = 0
-            print(f"    Size {size} improves best score to {best_score:.4f}, features: {best_subset}, "
+            logger.info(f"    Size {size} improves best score to {best_score:.4f}, features: {best_subset}, "
                   f"n_neighbors: {best_n_neighbors}")
         else:
             stale_sizes += 1
             if stale_sizes >= MAX_STALE_SIZES:
-                print(f"    No improvement for {MAX_STALE_SIZES} consecutive sizes, stopping at size {size}")
+                logger.info(f"    No improvement for {MAX_STALE_SIZES} consecutive sizes, stopping at size {size}")
                 break
 
     return results

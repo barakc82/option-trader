@@ -52,15 +52,22 @@ class OpportunityExplorer:
             self.predictor = Predictor()
             self.net_worth_calculator = NetWorthCalculator()
             self.max_loss_calculator = MaxLossCalculator()
+            # Imported here, not at the top: pending_trades_manager imports this module.
+            from .pending_trades_manager import PendingTradesManager
+            self.pending_trades_manager = PendingTradesManager()
             self.last_submit_order_attempt_time = 0
             self.can_submit_orders = True
             self.last_put_option_price = 0
             self.last_call_option_price = 0
+            self.last_ml_derived_put_option_price = 0
+            self.last_ml_derived_call_option_price = 0
             self.call_margin_reduction = None
             self.put_margin_reduction = None
             self.last_call_margin_reduction_record_time = 0
             self.last_put_margin_reduction_record_time = 0
             self.last_margin_lock_resolution_attempt_time = 0
+            self.is_last_call_option_ml_derived = False
+            self.is_last_put_option_ml_derived = False
 
             # Dynamic config fields
             self.should_write_options_overnight = True
@@ -176,7 +183,7 @@ class OpportunityExplorer:
         if estimated_sell_price < 0:
             logger.error("Failed to estimate selling price")
             return SellOptionResult()
-        self._update_last_option_price(estimated_sell_price, 'C')
+        self._update_last_option_price(estimated_sell_price, 'C', is_ml_derived)
 
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss('C')
         if stop_loss_per_option < estimated_sell_price:
@@ -307,28 +314,36 @@ class OpportunityExplorer:
             logger.warning(f"Failed to sell {get_option_name(call_option)} due to projected exposure fee")
         return max_options
 
-    def _update_last_option_price(self, price, right):
+    def _update_last_option_price(self, price, right, is_ml_derived):
         if math.isnan(price):
             return
 
         if right == 'C':
-            if self.last_call_option_price != price:
+            self.is_last_call_option_ml_derived = is_ml_derived
+            if self.get_last_call_option_price() != price:
                 logger.info(
                     f"The current price level for call options changed from {self.last_call_option_price} to {price}")
                 if self.last_call_option_price < 0.15 < price:
                     logger.info(
                         f"However, this is a high jump, slowing the pace of increase so that the price level for call options is {price}")
                     price = 0.15
-                self.last_call_option_price = price
+                if is_ml_derived:
+                    self.last_ml_derived_call_option_price = price
+                else:
+                    self.last_call_option_price = price
         else:
-            if self.last_put_option_price != price:
+            self.is_last_put_option_ml_derived = is_ml_derived
+            if self.get_last_put_option_price() != price:
                 logger.info(
                     f"The current price level for put options changed from {self.last_put_option_price} to {price}")
                 if self.last_put_option_price < 0.15 < price:
                     logger.info(
                         f"However, this is a high jump, slowing the pace of increase so that the price level for put options is {price}")
                     price = 0.15
-                self.last_put_option_price = price
+                if is_ml_derived:
+                    self.last_ml_derived_put_option_price = price
+                else:
+                    self.last_put_option_price = price
 
     def try_to_publish_available_cheap_option(self, right):
         strike_finder = StrikeFinder()
@@ -370,6 +385,10 @@ class OpportunityExplorer:
             req_id_to_comment[result.trade.order.orderId] = comment
             logger.info(f"Submitted sell option of {get_option_name(option)}, order ID: {result.trade.order.orderId}, "
                         f"target delta: {target_delta:.3f}")
+            if option.right == 'P' and self.is_last_put_option_ml_derived:
+                self.pending_trades_manager.notify_ml_derived_option_sell_submitted(option)
+            if option.right == 'C' and self.is_last_call_option_ml_derived:
+                self.pending_trades_manager.notify_ml_derived_option_sell_submitted(option)
         return result
 
     async def try_to_sell_put_options(self, open_trades, options):
@@ -392,7 +411,7 @@ class OpportunityExplorer:
         if estimated_sell_price < 0:
             logger.error("Failed to estimate selling price")
             return SellOptionResult()
-        self._update_last_option_price(estimated_sell_price, 'P')
+        self._update_last_option_price(estimated_sell_price, 'P', is_ml_derived)
 
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss('P')
         if stop_loss_per_option < estimated_sell_price:
@@ -546,8 +565,8 @@ class OpportunityExplorer:
                 f"Will not try to reduce initial margin for call options since the price level of call options is {self.last_call_option_price} while the minimal sell price to close is {MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION}")
             return FAILED
 
-        strike_finder = StrikeFinder()
         positions = self.trading_bot.get_short_options()
+        strike_finder = StrikeFinder()
         min_strike = min(position.contract.strike for position in positions)
         available_cheap_call_option = await strike_finder.get_available_cheap_call_option(call_options, min_strike)
         initial_margin_change = await self.trading_bot.get_initial_margin_change(available_cheap_call_option, 1)
@@ -697,3 +716,15 @@ class OpportunityExplorer:
 
     def notify_margin_lock_resolution_attempted(self):
         self.last_margin_lock_resolution_attempt_time = time.time()
+
+    def get_last_put_option_price(self):
+        if self.is_last_put_option_ml_derived:
+            return self.last_ml_derived_put_option_price
+        else:
+            return self.last_put_option_price
+
+    def get_last_call_option_price(self):
+        if self.is_last_call_option_ml_derived:
+            return self.last_ml_derived_call_option_price
+        else:
+            return self.last_call_option_price

@@ -43,13 +43,12 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
 from scipy.special import expit
-from sklearn.model_selection import GroupKFold
 from sklearn.preprocessing import StandardScaler
 
 from .best_subset import MAX_STALE_SIZES, SEARCH_TIME_BUDGET_SEC, CandidateResult, ScoreMethod
 from .regress_max_ask import CV_FOLDS, CV_RANDOM_STATE, GROUP_COLUMN
 from .survival_scoring import (CREDIT_COLUMN, STOP_COLUMN, TARGET_COLUMN, clip_probabilities,
-                               compute_survival_label, max_feature_count, trade_weight)
+                               compute_survival_label, make_fold_splits, max_feature_count, trade_weight)
 
 logger = logging.getLogger(__name__)
 
@@ -359,7 +358,7 @@ def estimate_cost(X: pd.DataFrame, ctx: pd.DataFrame, feature_names: list[str], 
     calibration_fit_seconds = time.time() - t0
 
     estimated_total_sec = calibration_fit_seconds * n_total_fits
-    print(f"    logistic best-subset search: {n_subsets} subsets x {len(fold_splits)} folds x "
+    logger.info(f"    logistic best-subset search: {n_subsets} subsets x {len(fold_splits)} folds x "
           f"{len(C_grid)} C values = {n_total_fits} fits; calibration fit took "
           f"{calibration_fit_seconds:.3f}s -> estimated total {estimated_total_sec / 60:.1f} min "
           f"(budget {time_budget_sec / 60:.1f} min, enforced as a running deadline on the search itself)")
@@ -386,10 +385,7 @@ def search_logistic_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names
     be pooled into the same list the other methods' candidates go into --
     the caller's pooling/SE/report code needs no changes to accept them.
     """
-    groups = ctx[GROUP_COLUMN]
-    n_splits = max(2, min(cv, groups.nunique()))
-    gkf = GroupKFold(n_splits=n_splits, shuffle=True, random_state=CV_RANDOM_STATE)
-    fold_splits = list(gkf.split(np.zeros(len(X)), groups=groups))
+    fold_splits = make_fold_splits(ctx, cv)
 
     k_grid = build_k_grid(k_grid_config)
     searchable_features = _feature_columns(feature_names)
@@ -409,7 +405,7 @@ def search_logistic_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names
     # log_k is always added on top of the subset (see columns_for_subset), so the cap
     # limits the searched features, not log_k. Size 0 is the log_k-only baseline.
     for size in range(0, max_feature_count(ctx, len(searchable_features)) + 1):
-        print(f"    Working on size {size}")
+        logger.info(f"    Working on size {size}")
         improved_this_size = False
         for subset in itertools.combinations(searchable_features, size):
             subset = list(subset)
@@ -464,18 +460,18 @@ def search_logistic_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names
             if stop_search:
                 break
         if stop_search:
-            print(f"    Time budget of {time_budget_sec / 60:.1f} min reached after {len(results)} "
+            logger.info(f"    Time budget of {time_budget_sec / 60:.1f} min reached after {len(results)} "
                   f"candidate(s); stopping the search early and using the results collected so far.")
             break
 
         if improved_this_size:
             stale_sizes = 0
-            print(f"    Size {size} improves best score to {best_score:.4f}, features: {best_subset}, "
+            logger.info(f"    Size {size} improves best score to {best_score:.4f}, features: {best_subset}, "
                   f"C: {best_C}")
         else:
             stale_sizes += 1
             if stale_sizes >= MAX_STALE_SIZES:
-                print(f"    No improvement for {MAX_STALE_SIZES} consecutive sizes, stopping at size {size}")
+                logger.info(f"    No improvement for {MAX_STALE_SIZES} consecutive sizes, stopping at size {size}")
                 break
 
     return results

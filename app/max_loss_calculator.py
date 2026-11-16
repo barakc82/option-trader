@@ -10,7 +10,7 @@ MIN_NUMBER_OF_RECORDED_OPTIONS_QUANTITIES = 5
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-WINDOW_SECONDS = 7 * 24 * 60 * 60  # 1 week
+WINDOW_SECONDS = 10 * 24 * 60 * 60  # 1 week
 STOP_LOSS_CHANGE_INTERVAL = 900
 
 INITIAL_FULL_MODE = 0

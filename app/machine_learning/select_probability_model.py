@@ -25,9 +25,8 @@ best_subset.SCORE_METHODS (see that module's docstring):
     probability via a residual distribution (normal or empirical). Directly
     comparable across transforms, no rescoring step needed.
   - "weighted_logloss" (DEFAULT): same as "logloss", but each row is
-    weighted by stop_loss - estimated_sell_price (the dollar room between
-    the stop and the credit received) instead of counting every row
-    equally.
+    weighted by survival_scoring.trade_weight (the minutes-to-expiration
+    range multiplier) instead of counting every row equally.
 
 For "logloss"/"weighted_logloss", the search enumerates every (feature
 subset x residual distribution) combination for every transform -- turning
@@ -66,15 +65,19 @@ from .regress_max_ask import (
 import pandas as pd
 
 MODEL_PATH = "machine_learning/model/best_probability_model.pkl"
+LOG_PATH = "logs/model_selection.log"
+
+logger = logging.getLogger(__name__)
+
 
 def _print_days_above_stop(stop_col, above_stop) -> None:
     """Count of distinct days (GROUP_COLUMN) with at least one row whose
-    max_ask exceeded that row's own stop_loss -- i.e. would have been
+    max_ask reached (>=) that row's own stop_loss -- i.e. would have been
     stopped out. Printed fresh before each method/transform below since
     they don't all share the exact same filtered subset."""
     n_days = above_stop[GROUP_COLUMN].nunique()
     if n_days:
-        print(f"  Last day with {TARGET_COLUMN} > {stop_col}: {above_stop[GROUP_COLUMN].max()}")
+        logger.info(f"  Last day with {TARGET_COLUMN} >= {stop_col}: {above_stop[GROUP_COLUMN].max()}")
 
 
 def _select_best_model_rss(df: pd.DataFrame, right: str, score_method: ScoreMethod) -> tuple[ProbabilityClassifier, dict]:
@@ -87,12 +90,12 @@ def _select_best_model_rss(df: pd.DataFrame, right: str, score_method: ScoreMeth
     y_raw = subset[TARGET_COLUMN]
     groups = subset[GROUP_COLUMN]
     stop_col = survival_scoring.STOP_COLUMN
-    above_stop = subset.loc[subset[TARGET_COLUMN] > subset[stop_col]]
+    above_stop = subset.loc[survival_scoring.is_stop_loss_hit(subset[TARGET_COLUMN], subset[stop_col])]
     _print_days_above_stop(stop_col, above_stop)
 
     if (y_raw <= 0).any():
         n_bad = int((y_raw <= 0).sum())
-        print(f"  Dropping {n_bad} rows with {TARGET_COLUMN} <= 0 (undefined for the log and log_ratio transforms)")
+        logger.info(f"  Dropping {n_bad} rows with {TARGET_COLUMN} <= 0 (undefined for the log and log_ratio transforms)")
         keep = y_raw > 0
         X, y_raw, groups = X[keep], y_raw[keep], groups[keep]
 
@@ -101,7 +104,7 @@ def _select_best_model_rss(df: pd.DataFrame, right: str, score_method: ScoreMeth
         bad = X[extra_col] <= 0
         if bad.any():
             n_bad = int(bad.sum())
-            print(f"  Dropping {n_bad} rows with {extra_col} <= 0 (required by a log_ratio-style transform)")
+            logger.info(f"  Dropping {n_bad} rows with {extra_col} <= 0 (required by a log_ratio-style transform)")
             keep = ~bad
             X, y_raw, groups = X[keep], y_raw[keep], groups[keep]
 
@@ -111,7 +114,7 @@ def _select_best_model_rss(df: pd.DataFrame, right: str, score_method: ScoreMeth
 
     candidates = {}
     for method_name, transform in TRANSFORMS.items():
-        print(f"  Method = {method_name}")
+        logger.info(f"  Method = {method_name}")
         extra_col = transform["extra_column"]
         extra_arr = X[extra_col].to_numpy() if extra_col is not None else None
         y_transformed = pd.Series(transform["forward"](y_raw.to_numpy(), extra_arr), index=y_raw.index)
@@ -126,13 +129,13 @@ def _select_best_model_rss(df: pd.DataFrame, right: str, score_method: ScoreMeth
             "within_method_score": within_method_score,
             "dollar_space_score": dollar_space_score,
         }
-        print(f"    Best subset: {best_subset}")
-        print(f"    Within-method CV score ({method_name} space): {within_method_score:.4f}")
-        print(f"    Dollar-space CV score (for cross-method comparison): {dollar_space_score:.4f}")
+        logger.info(f"    Best subset: {best_subset}")
+        logger.info(f"    Within-method CV score ({method_name} space): {within_method_score:.4f}")
+        logger.info(f"    Dollar-space CV score (for cross-method comparison): {dollar_space_score:.4f}")
 
     winner_name = min(candidates, key=lambda name: candidates[name]["dollar_space_score"])
     winner = candidates[winner_name]
-    print(f"  Winner: {winner_name} (dollar-space CV score {winner['dollar_space_score']:.4f})")
+    logger.info(f"  Winner: {winner_name} (dollar-space CV score {winner['dollar_space_score']:.4f})")
 
     transform = TRANSFORMS[winner_name]
     extra_col = transform["extra_column"]
@@ -149,10 +152,10 @@ def _select_best_model_rss(df: pd.DataFrame, right: str, score_method: ScoreMeth
 
     residuals = np.sort(y_raw.to_numpy() - model.predict(X[feature_columns]))
 
-    print(f"  R^2 ({winner_name} space): {linear_model.score(X[best_subset], y_transformed):.4f}")
+    logger.info(f"  R^2 ({winner_name} space): {linear_model.score(X[best_subset], y_transformed):.4f}")
     for feature, coef in zip(best_subset, linear_model.coef_):
-        print(f"    {feature}: {coef:.4f}")
-    print(f"    intercept: {linear_model.intercept_:.4f}")
+        logger.info(f"    {feature}: {coef:.4f}")
+    logger.info(f"    intercept: {linear_model.intercept_:.4f}")
 
     classifier = ProbabilityClassifier(model, residuals, feature_columns)
     report = {"score_method": "rss", "winner": winner_name, "candidates": candidates}
@@ -172,17 +175,17 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
 
     if (subset[TARGET_COLUMN] <= 0).any():
         n_bad = int((subset[TARGET_COLUMN] <= 0).sum())
-        print(f"  Dropping {n_bad} rows with {TARGET_COLUMN} <= 0 (undefined for the log and log_ratio transforms)")
+        logger.info(f"  Dropping {n_bad} rows with {TARGET_COLUMN} <= 0 (undefined for the log and log_ratio transforms)")
         subset = subset[subset[TARGET_COLUMN] > 0]
 
     credit_col = survival_scoring.CREDIT_COLUMN
     if (subset[credit_col] <= 0).any():
         n_bad = int((subset[credit_col] <= 0).sum())
-        print(f"  Dropping {n_bad} rows with {credit_col} <= 0 (required by the log_ratio transform and the weight)")
+        logger.info(f"  Dropping {n_bad} rows with {credit_col} <= 0 (required by the log_ratio transform and the weight)")
         subset = subset[subset[credit_col] > 0]
 
     stop_report = survival_scoring.validate_stop_column(subset)
-    print(f"  Stop/credit quantiles [0,25,50,75,100]: "
+    logger.info(f"  Stop/credit quantiles [0,25,50,75,100]: "
           f"{[round(v, 3) for v in stop_report.stop_over_credit_quantiles.values()]}")
 
     subset = subset.reset_index(drop=True)
@@ -193,19 +196,19 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
     per_transform_best = {}
     groups = ctx[GROUP_COLUMN]
     stop_col = survival_scoring.STOP_COLUMN
-    above_stop = subset.loc[subset[TARGET_COLUMN] > subset[stop_col]]
+    above_stop = subset.loc[survival_scoring.is_stop_loss_hit(subset[TARGET_COLUMN], subset[stop_col])]
     _print_days_above_stop(stop_col, above_stop)
     n_days = above_stop[GROUP_COLUMN].nunique()
-    print(f"  Number of trade days: {groups.nunique()}, number of samples: {X.shape[0]}, {n_days} day(s) with {TARGET_COLUMN} > {stop_col}")
+    logger.info(f"  Number of trade days: {groups.nunique()}, number of samples: {X.shape[0]}, {n_days} day(s) with {TARGET_COLUMN} >= {stop_col}")
     for transform_name, transform in TRANSFORMS.items():
-        print(f"  Transform = {transform_name}")
+        logger.info(f"  Transform = {transform_name}")
         results = search_best_subset_with_distribution(
             X, ctx, transform, transform_name, CANDIDATE_FEATURE_COLUMNS, score_method,
         )
         all_candidates.extend(results)
         best_for_transform = min(results, key=lambda c: c.score)
         per_transform_best[transform_name] = best_for_transform
-        print(f"    Best for {transform_name}: subset={best_for_transform.subset}, "
+        logger.info(f"    Best for {transform_name}: subset={best_for_transform.subset}, "
               f"distribution={best_for_transform.distribution}, score={best_for_transform.score:.4f}")
 
     # Logistic: a seventh method that doesn't go through the (transform x
@@ -213,19 +216,19 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
     # candidates are just more CandidateResult objects pooled into the same
     # all_candidates list the min()/SE/count-within-1SE code below already
     # operates on, so that code needs no changes to accommodate it.
-    print(f"  Transform = logistic")
+    logger.info(f"  Transform = logistic")
     logistic_results = logistic_survival.search_logistic_candidates(
         X, ctx, CANDIDATE_FEATURE_COLUMNS, score_method,
     )
     all_candidates.extend(logistic_results)
     logistic_recommended = logistic_survival.select_logistic_recommended(logistic_results)
     per_transform_best["logistic"] = logistic_recommended
-    print(f"    Best for logistic (1-SE + fewest-features rule): subset={logistic_recommended.subset}, "
+    logger.info(f"    Best for logistic (1-SE + fewest-features rule): subset={logistic_recommended.subset}, "
           f"score={logistic_recommended.score:.4f}, log_k_coef={logistic_recommended.log_k_coef:.4f}, "
           f"max|coef|={logistic_recommended.max_abs_coef:.4f}, C={logistic_recommended.logistic_c}")
 
     logistic_extrapolation_fraction = logistic_survival.extrapolation_fraction(ctx, logistic_survival.build_k_grid())
-    print(f"    Out-of-grid extrapolation fraction (evaluated trades whose log(stop/credit) falls "
+    logger.info(f"    Out-of-grid extrapolation fraction (evaluated trades whose log(stop/credit) falls "
           f"outside the training grid): {logistic_extrapolation_fraction:.3f}")
 
     # Diagnostic: a linear regression on log(max_ask/credit) with normal
@@ -246,7 +249,7 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
         lrn_residuals = lrn_y.to_numpy() - lrn_model.predict(X[best_lrn.subset])
         lrn_std = float(np.std(lrn_residuals, ddof=1)) if len(lrn_residuals) > 1 else float("nan")
         inv_log_k_coef = 1.0 / logistic_recommended.log_k_coef
-        print(f"    Spread comparison: 1/coef(log_k) [logistic] = {inv_log_k_coef:.4f} vs "
+        logger.info(f"    Spread comparison: 1/coef(log_k) [logistic] = {inv_log_k_coef:.4f} vs "
               f"residual std [log_ratio_normal, subset={best_lrn.subset}] = {lrn_std:.4f}")
         logistic_spread_comparison = {"inv_log_k_coef": inv_log_k_coef, "log_ratio_normal_residual_std": lrn_std}
 
@@ -255,35 +258,35 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
     # same CANDIDATE_FEATURE_COLUMNS -- "same features as logistic" by
     # construction, not by convention. Its candidates are more
     # CandidateResult objects pooled into the same all_candidates list.
-    print(f"  Transform = xgboost")
+    logger.info(f"  Transform = xgboost")
     xgboost_results = xgboost_survival.search_xgboost_candidates(
         X, ctx, CANDIDATE_FEATURE_COLUMNS, score_method,
     )
     all_candidates.extend(xgboost_results)
     xgboost_recommended = xgboost_survival.select_xgboost_recommended(xgboost_results)
     per_transform_best["xgboost"] = xgboost_recommended
-    print(f"    Best for xgboost (1-SE + fewest-features rule): subset={xgboost_recommended.subset}, "
+    logger.info(f"    Best for xgboost (1-SE + fewest-features rule): subset={xgboost_recommended.subset}, "
           f"score={xgboost_recommended.score:.4f}, reg_lambda={xgboost_recommended.reg_lambda}")
 
     # kNN: a ninth method, P(survive) = share of the nearest past trades whose
     # max_ask/credit stayed below the candidate's stop/credit (see knn_survival.py).
-    print(f"  Transform = knn")
+    logger.info(f"  Transform = knn")
     knn_results = knn_survival.search_knn_candidates(X, ctx, CANDIDATE_FEATURE_COLUMNS, score_method)
     all_candidates.extend(knn_results)
     knn_recommended = knn_survival.select_knn_recommended(knn_results)
     per_transform_best["knn"] = knn_recommended
-    print(f"    Best for knn (1-SE + fewest-features rule): subset={knn_recommended.subset}, "
+    logger.info(f"    Best for knn (1-SE + fewest-features rule): subset={knn_recommended.subset}, "
           f"score={knn_recommended.score:.4f}, n_neighbors={knn_recommended.n_neighbors}")
 
     # Fewest features within one standard error of the best score; ties by best score.
     best, best_scoring, se = select_one_se_fewest_features(all_candidates)
     n_within = count_within_one_se(all_candidates, best_scoring.score, se)
-    print(f"  Best score: transform={best_scoring.transform_name}, subset={best_scoring.subset}, "
+    logger.info(f"  Best score: transform={best_scoring.transform_name}, subset={best_scoring.subset}, "
           f"distribution={best_scoring.distribution}, score={best_scoring.score:.4f}")
-    print(f"  Standard error (from the best-scoring candidate's per-fold scores): {se:.4f}")
-    print(f"  {n_within}/{len(all_candidates)} (transform, feature subset[, residual distribution]) "
+    logger.info(f"  Standard error (from the best-scoring candidate's per-fold scores): {se:.4f}")
+    logger.info(f"  {n_within}/{len(all_candidates)} (transform, feature subset[, residual distribution]) "
           f"combinations fall within 1 SE of the best score")
-    print(f"  Winner (fewest features within 1 SE, then best score): transform={best.transform_name}, "
+    logger.info(f"  Winner (fewest features within 1 SE, then best score): transform={best.transform_name}, "
           f"subset={best.subset}, distribution={best.distribution}, score={best.score:.4f}")
 
     # Refit the winner on all available rows for the shipped artifact.
@@ -294,10 +297,10 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
         model, scaler, coefs = logistic_survival.fit_logistic(
             X_rep, y_rep, w_rep, columns, best.logistic_c, fold_idx="final", subset=best.subset,
         )
-        print(f"  Final logistic fit: log_k_coef={coefs[columns.index(logistic_survival.LOG_K_COLUMN)]:.4f}, "
+        logger.info(f"  Final logistic fit: log_k_coef={coefs[columns.index(logistic_survival.LOG_K_COLUMN)]:.4f}, "
               f"max|coef|={float(np.max(np.abs(coefs))):.4f}, C={best.logistic_c}")
         for feature, coef in zip(columns, coefs):
-            print(f"    {feature}: {coef:.4f}")
+            logger.info(f"    {feature}: {coef:.4f}")
 
         classifier = logistic_survival.LogisticSurvivalClassifier(model, scaler, best.subset, columns)
     elif best.transform_name == "xgboost":
@@ -306,13 +309,13 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
         X_rep, y_rep, w_rep, _ = logistic_survival.replicate_for_training(X, ctx, best.subset, k_grid)
         final_params = {**xgboost_survival.XGBOOST_PARAMS, "reg_lambda": best.reg_lambda}
         model = xgboost_survival.fit_xgboost(X_rep, y_rep, w_rep, columns, final_params)
-        print(f"  Final xgboost fit: {xgboost_survival.XGBOOST_PARAMS['n_estimators']} trees, "
+        logger.info(f"  Final xgboost fit: {xgboost_survival.XGBOOST_PARAMS['n_estimators']} trees, "
               f"max_depth={xgboost_survival.XGBOOST_PARAMS['max_depth']}, reg_lambda={best.reg_lambda}")
 
         classifier = xgboost_survival.XgboostSurvivalClassifier(model, best.subset, columns)
     elif best.transform_name == "knn":
         model = knn_survival.KnnModel(X[best.subset].to_numpy(dtype=float), knn_survival.max_ask_ratio(ctx))
-        print(f"  Final knn fit: {len(X)} past trades, n_neighbors={best.n_neighbors}")
+        logger.info(f"  Final knn fit: {len(X)} past trades, n_neighbors={best.n_neighbors}")
         classifier = knn_survival.KnnSurvivalClassifier(model, best.subset, best.n_neighbors)
     else:
         transform = TRANSFORMS[best.transform_name]
@@ -328,10 +331,10 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
         residual_distribution = survival_scoring.RESIDUAL_DISTRIBUTIONS[best.distribution]()
         residual_distribution.fit(residuals_full)
 
-        print(f"  R^2 ({best.transform_name} space): {linear_model.score(X[best.subset], y_transformed):.4f}")
+        logger.info(f"  R^2 ({best.transform_name} space): {linear_model.score(X[best.subset], y_transformed):.4f}")
         for feature, coef in zip(best.subset, linear_model.coef_):
-            print(f"    {feature}: {coef:.4f}")
-        print(f"    intercept: {linear_model.intercept_:.4f}")
+            logger.info(f"    {feature}: {coef:.4f}")
+        logger.info(f"    intercept: {linear_model.intercept_:.4f}")
 
         classifier = survival_scoring.TransformedResidualClassifier(
             linear_model, best.subset, transform, extra_col, residual_distribution,
@@ -363,72 +366,82 @@ def select_best_model_for_side(df: pd.DataFrame, right: str,
 
 def print_selection_report(right: str, report: dict) -> None:
     if report["score_method"] == "rss":
-        print(f"  {right}: RSS-lowest = {report['winner']}")
+        logger.info(f"  {right}: RSS-lowest = {report['winner']}")
         for method_name, candidate in report["candidates"].items():
             marker = "*" if method_name == report["winner"] else " "
-            print(f"    {marker} {method_name}: dollar-space score={candidate['dollar_space_score']:.4f}, "
+            logger.info(f"    {marker} {method_name}: dollar-space score={candidate['dollar_space_score']:.4f}, "
                   f"subset={candidate['best_subset']}")
         return
 
-    print(f"  {right}: score_method={report['score_method']}")
-    print(f"    Winner: transform={report['winner_transform']}, distribution={report['winner_distribution']}, "
+    logger.info(f"  {right}: score_method={report['score_method']}")
+    logger.info(f"    Winner: transform={report['winner_transform']}, distribution={report['winner_distribution']}, "
           f"subset={report['winner_subset']}, score={report['winner_score']:.4f}")
-    print(f"    Standard error: {report['standard_error']:.4f} "
+    logger.info(f"    Standard error: {report['standard_error']:.4f} "
           f"({report['n_within_one_se']}/{report['n_candidates_total']} combinations within 1 SE)")
-    print(f"    Best per transform:")
+    logger.info(f"    Best per transform:")
     for transform_name, candidate in report["per_transform_best"].items():
         if transform_name == "logistic":
-            print(f"      logistic: subset={candidate.subset}, score={candidate.score:.4f}, "
+            logger.info(f"      logistic: subset={candidate.subset}, score={candidate.score:.4f}, "
                   f"log_k_coef={candidate.log_k_coef:.4f} (sign={'+' if candidate.log_k_coef > 0 else '-'}), "
                   f"1/coef(log_k)={1.0 / candidate.log_k_coef:.4f}, max|coef|={candidate.max_abs_coef:.4f}, "
                   f"C={candidate.logistic_c}")
         elif transform_name == "xgboost":
-            print(f"      xgboost: subset={candidate.subset}, score={candidate.score:.4f}, "
+            logger.info(f"      xgboost: subset={candidate.subset}, score={candidate.score:.4f}, "
                   f"reg_lambda={candidate.reg_lambda}")
         elif transform_name == "knn":
-            print(f"      knn: subset={candidate.subset}, score={candidate.score:.4f}, "
+            logger.info(f"      knn: subset={candidate.subset}, score={candidate.score:.4f}, "
                   f"n_neighbors={candidate.n_neighbors}")
         else:
-            print(f"      {transform_name}: distribution={candidate.distribution}, subset={candidate.subset}, "
+            logger.info(f"      {transform_name}: distribution={candidate.distribution}, subset={candidate.subset}, "
                   f"score={candidate.score:.4f}")
 
     if report.get("logistic_extrapolation_fraction") is not None:
-        print(f"    Logistic out-of-grid extrapolation fraction: {report['logistic_extrapolation_fraction']:.3f}")
+        logger.info(f"    Logistic out-of-grid extrapolation fraction: {report['logistic_extrapolation_fraction']:.3f}")
     if report.get("logistic_spread_comparison") is not None:
         cmp = report["logistic_spread_comparison"]
-        print(f"    Spread comparison: 1/coef(log_k) [logistic] = {cmp['inv_log_k_coef']:.4f} vs "
+        logger.info(f"    Spread comparison: 1/coef(log_k) [logistic] = {cmp['inv_log_k_coef']:.4f} vs "
               f"residual std [log_ratio_normal] = {cmp['log_ratio_normal_residual_std']:.4f}")
 
 
+def configure_logging():
+    """Sends every module's logger.info to both the console and LOG_PATH (overwritten
+    each run). The root logger defaults to WARNING, so without this all logger.info
+    output would be silently dropped. The console shows the bare message, as print did;
+    the file adds a timestamp and level."""
+    Path(LOG_PATH).parent.mkdir(parents=True, exist_ok=True)
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter("%(message)s"))
+    file_handler = logging.FileHandler(LOG_PATH, mode="w", encoding="utf-8")
+    file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    logging.basicConfig(level=logging.INFO, handlers=[console_handler, file_handler], force=True)
+
+
 def main(argv=None):
-    # Nothing in this package ever called logging.basicConfig, so the root
-    # logger's default level (WARNING) silently dropped every logger.info
-    # call (e.g. LogisticSurvivalClassifier/TransformedResidualClassifier's
-    # __call__ diagnostics) before it reached any handler -- not even to
-    # console. Configuring it once here, at the actual entry point, makes
-    # every module's logger.info calls show up alongside the existing
-    # print() output, regardless of which module's logger fires.
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    configure_logging()
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--score-method", choices=sorted(SCORE_METHODS), default=DEFAULT_SCORE_METHOD_NAME)
+    parser.add_argument("--fold-strategy", choices=["stratified", "group"],
+                        default="stratified" if survival_scoring.STRATIFY_FOLDS else "group",
+                        help="stratified: balance stop-loss-hit rows across CV folds; group: random day folds")
     args = parser.parse_args(argv)
+    survival_scoring.STRATIFY_FOLDS = args.fold_strategy == "stratified"
 
     df = pre_processing.main()
     classifiers = {}
     reports = {}
     for right in ["C", "P"]:
-        print(f"Right = {right}")
+        logger.info(f"Right = {right}")
         classifiers[right], reports[right] = select_best_model_for_side(df, right, args.score_method)
 
-    print("\nModel selection summary:")
+    logger.info("\nModel selection summary:")
     for right, report in reports.items():
         print_selection_report(right, report)
 
     Path(MODEL_PATH).parent.mkdir(parents=True, exist_ok=True)
     with open(MODEL_PATH, "wb") as f:
         pickle.dump(classifiers, f)
-    print(f"\nSaved: {MODEL_PATH}")
+    logger.info(f"\nSaved: {MODEL_PATH}")
 
 
 if __name__ == "__main__":

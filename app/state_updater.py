@@ -362,8 +362,8 @@ class StateUpdater:
                 state['daily_profit'] += state['after_hours_profit']
 
         opportunity_explorer = OpportunityExplorer()
-        state['last_put_option_price'] = round(opportunity_explorer.last_put_option_price, 2)
-        state['last_call_option_price'] = round(opportunity_explorer.last_call_option_price, 2)
+        state['last_put_option_price'] = round(opportunity_explorer.get_last_put_option_price(), 2)
+        state['last_call_option_price'] = round(opportunity_explorer.get_last_call_option_price(), 2)
         state['call_margin_reduction'] = opportunity_explorer.call_margin_reduction
         state['put_margin_reduction'] = opportunity_explorer.put_margin_reduction
         
