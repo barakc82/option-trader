@@ -183,6 +183,12 @@ def sync_holdings_to_sheet(aggregated: list[dict], sheet_name: str, ticker_range
         # Create a lookup map for faster access
         weight_map = {h["ticker"]: h["weight"] for h in aggregated if h["ticker"]}
 
+        # GOOGL has no row of its own in the sheet: its weight goes on the GOOG row
+        # (added to GOOG's own weight when the portfolio holds both share classes).
+        if "GOOGL" in weight_map and "GOOGL" not in sheet_tickers:
+            googl_weight = weight_map.pop("GOOGL")
+            weight_map["GOOG"] = weight_map.get("GOOG", 0) + googl_weight
+
         # Prepare weights for column H
         weights_to_write = [[total]]
         for ticker in sheet_tickers:
@@ -219,11 +225,11 @@ def update_portfolio_for_cik(cik: str, column_letter: str):
 
 
 def main():
-    update_portfolio_for_cik(cik="0001067983", column_letter="H") # buffett
-    update_portfolio_for_cik(cik="0001569205", column_letter="I") # smith
-    update_portfolio_for_cik(cik="0001647251", column_letter="J") # hohn
-    update_portfolio_for_cik(cik="0001112520", column_letter="K")  # akre
-    update_portfolio_for_cik(cik="0001697868", column_letter="L")  # akre
+    update_portfolio_for_cik(cik="0001067983", column_letter="I") # buffett
+    update_portfolio_for_cik(cik="0001569205", column_letter="J") # smith
+    update_portfolio_for_cik(cik="0001647251", column_letter="K") # hohn
+    update_portfolio_for_cik(cik="0001112520", column_letter="L")  # akre
+    update_portfolio_for_cik(cik="0001697868", column_letter="M")  # Kantesaria
 
     sheet = get_worksheet('Carlson')
     sheet.format("H16:L46", {
