@@ -101,12 +101,16 @@ class KnnModel:
 def search_knn_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names: list[str],
                           score_method: ScoreMethod, cv: int = CV_FOLDS,
                           n_neighbors_grid: list[int] = N_NEIGHBORS_GRID,
-                          time_budget_sec: float = KNN_SEARCH_TIME_BUDGET_SEC) -> list[CandidateResult]:
+                          time_budget_sec: float = KNN_SEARCH_TIME_BUDGET_SEC,
+                          fold_splits: list | None = None) -> list[CandidateResult]:
     """Best-subset search over feature_names crossed with n_neighbors_grid, on the same
     GroupKFold split and score_method as the other methods. Returns every evaluated
     CandidateResult (transform_name="knn", distribution=None, n_neighbors set; None
     for the size-0 base-rate candidate)."""
-    fold_splits = make_fold_splits(ctx, cv)
+    # Passed in by the caller so every method is scored on the same folds; built
+    # here only when this search runs on its own.
+    if fold_splits is None:
+        fold_splits = make_fold_splits(ctx, cv)
 
     ratios = max_ask_ratio(ctx)
     k_all = stop_multiple(ctx[STOP_COLUMN], ctx[CREDIT_COLUMN])

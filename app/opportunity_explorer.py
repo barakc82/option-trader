@@ -323,9 +323,9 @@ class OpportunityExplorer:
             if self.get_last_call_option_price() != price:
                 logger.info(
                     f"The current price level for call options changed from {self.last_call_option_price} to {price}")
-                if self.last_call_option_price < 0.15 < price:
+                if self.get_last_call_option_price() < 0.15 < price:
                     logger.info(
-                        f"However, this is a high jump, slowing the pace of increase so that the price level for call options is {price}")
+                        f"However, this is a high jump from the previous level of {self.last_call_option_price}, slowing the pace of increase so that the price level for call options is {price}")
                     price = 0.15
                 if is_ml_derived:
                     self.last_ml_derived_call_option_price = price
@@ -336,9 +336,9 @@ class OpportunityExplorer:
             if self.get_last_put_option_price() != price:
                 logger.info(
                     f"The current price level for put options changed from {self.last_put_option_price} to {price}")
-                if self.last_put_option_price < 0.15 < price:
+                if self.get_last_put_option_price() < 0.15 < price:
                     logger.info(
-                        f"However, this is a high jump, slowing the pace of increase so that the price level for put options is {price}")
+                        f"However, this is a high  from the previous level of {self.last_put_option_price}, slowing the pace of increase so that the price level for put options is {price}")
                     price = 0.15
                 if is_ml_derived:
                     self.last_ml_derived_put_option_price = price

@@ -373,7 +373,8 @@ def search_logistic_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names
                                 score_method: ScoreMethod, cv: int = CV_FOLDS,
                                 k_grid_config: dict = LOGISTIC_K_GRID, C: float = LOGISTIC_C,
                                 time_budget_sec: float = LOGISTIC_SEARCH_TIME_BUDGET_SEC,
-                                C_grid: list[float] = LOGISTIC_C_GRID) -> list[CandidateResult]:
+                                C_grid: list[float] = LOGISTIC_C_GRID,
+                                fold_splits: list | None = None) -> list[CandidateResult]:
     """Exhaustive best-subset search over feature_names (log_k is always
     included and never a candidate for removal -- see module docstring),
     crossed with C_grid the same way xgboost_survival.search_xgboost_candidates
@@ -385,7 +386,10 @@ def search_logistic_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names
     be pooled into the same list the other methods' candidates go into --
     the caller's pooling/SE/report code needs no changes to accept them.
     """
-    fold_splits = make_fold_splits(ctx, cv)
+    # Passed in by the caller so every method is scored on the same folds; built
+    # here only when this search runs on its own.
+    if fold_splits is None:
+        fold_splits = make_fold_splits(ctx, cv)
 
     k_grid = build_k_grid(k_grid_config)
     searchable_features = _feature_columns(feature_names)

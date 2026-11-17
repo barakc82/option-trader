@@ -179,7 +179,8 @@ class CandidateResult:
 
 def search_best_subset_with_distribution(X: pd.DataFrame, ctx: pd.DataFrame, transform: dict, transform_name: str,
                                           feature_names: list[str], score_method: ScoreMethod,
-                                          cv: int = CV_FOLDS) -> list[CandidateResult]:
+                                          cv: int = CV_FOLDS,
+                                          fold_splits: list | None = None) -> list[CandidateResult]:
     """See module docstring. Returns every evaluated (subset[, distribution])
     CandidateResult for this one transform; only meaningful for
     score_method.needs_distribution -- callers wanting the RSS path should
@@ -192,7 +193,10 @@ def search_best_subset_with_distribution(X: pd.DataFrame, ctx: pd.DataFrame, tra
     y_survived = compute_survival_label(ctx)
     weight = trade_weight(ctx)
 
-    fold_splits = make_fold_splits(ctx, cv)
+    # Passed in by the caller so every method is scored on the same folds; built
+    # here only when this search runs on its own.
+    if fold_splits is None:
+            fold_splits = make_fold_splits(ctx, cv)
 
     distribution_kinds = list(RESIDUAL_DISTRIBUTIONS) if score_method.needs_distribution else [None]
 

@@ -144,7 +144,8 @@ def search_xgboost_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names:
                                score_method: ScoreMethod, cv: int = CV_FOLDS,
                                params: dict = XGBOOST_PARAMS,
                                time_budget_sec: float = XGBOOST_SEARCH_TIME_BUDGET_SEC,
-                               reg_lambda_grid: list[float] = REG_LAMBDA_GRID) -> list[CandidateResult]:
+                               reg_lambda_grid: list[float] = REG_LAMBDA_GRID,
+                               fold_splits: list | None = None) -> list[CandidateResult]:
     """Exhaustive best-subset search over feature_names (log_k is always
     included and never a candidate for removal -- see module docstring),
     crossed with reg_lambda_grid the same way
@@ -156,7 +157,10 @@ def search_xgboost_candidates(X: pd.DataFrame, ctx: pd.DataFrame, feature_names:
     evaluated CandidateResult (transform_name="xgboost", distribution=None),
     meant to be pooled into the same list the other methods' candidates go
     into."""
-    fold_splits = make_fold_splits(ctx, cv)
+    # Passed in by the caller so every method is scored on the same folds; built
+    # here only when this search runs on its own.
+    if fold_splits is None:
+        fold_splits = make_fold_splits(ctx, cv)
 
     k_grid = build_k_grid()
 

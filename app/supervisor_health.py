@@ -15,12 +15,15 @@ IBGATEWAY_RESTART_REQUIRED = "IBGATEWAY_RESTART_REQUIRED"
 UNKNOWN_ISSUE = "UNKNOWN_ISSUE"
 
 TIMEOUT_ERROR_THRESHOLD = 10
+RECONNECT_THRESHOLD = 10
 LOG_TIMESTAMP_PATTERN = re.compile(r"^\[\w+\] (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 
 
 class ExcessiveTimeoutError(Exception):
     """Raised when 'TimeoutError' appears too many times in the recent option trader log."""
 
+class ExcessiveReconnectError(Exception):
+    """Raised when 'Reconnecting in' appears too many times in the recent option trader log."""
 
 def _parse_log_timestamp(line):
     match = LOG_TIMESTAMP_PATTERN.match(line)
@@ -88,24 +91,36 @@ def check_process_state(process, should_print_health=False):
 
         latest_log = find_latest_option_trader_log()
         timeout_error_count = 0
+        reconnect_count = 0
         try:
             with open(latest_log, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
 
             one_hour_ago = datetime.datetime.now() - datetime.timedelta(hours=1)
             for line in lines:
-                if "TimeoutError" not in line:
-                    continue
-                timestamp = _parse_log_timestamp(line)
-                if timestamp is not None and timestamp >= one_hour_ago:
-                    timeout_error_count += 1
+                if "TimeoutError" in line:
+                    timestamp = _parse_log_timestamp(line)
+                    if timestamp is not None and timestamp >= one_hour_ago:
+                        timeout_error_count += 1
+                if "Reconnecting in" in line:
+                    timestamp = _parse_log_timestamp(line)
+                    if timestamp is not None and timestamp >= one_hour_ago:
+                        reconnect_count += 1
 
         except Exception as e:
             logger.error(f"Error analyzing log {latest_log}: {e}")
 
+        if timeout_error_count:
+            logger.warning(f"Number of times 'TimeoutError' appeared in the pas hour: {timeout_error_count}")
+
         if timeout_error_count >= TIMEOUT_ERROR_THRESHOLD:
             raise ExcessiveTimeoutError(
                 f"'TimeoutError' appeared {timeout_error_count} times in the past hour ({latest_log})."
+            )
+
+        if reconnect_count >= RECONNECT_THRESHOLD:
+            raise ExcessiveReconnectError(
+                f"'Reconnecting in' appeared {reconnect_count} times in the past hour ({latest_log})."
             )
 
         if random.random() < 0.01 or should_print_health:
@@ -157,7 +172,7 @@ def is_process_active():
                 except psutil.NoSuchProcess:
                     pass
 
-        except ExcessiveTimeoutError:
+        except ExcessiveTimeoutError or ExcessiveReconnectError:
             raise
         except (Exception) as e:
             logger.error(f"Invalid data in heartbeat file: {e}")

@@ -262,37 +262,48 @@ class PositionsManager:
             await self.dump_positions_initial_states()
         self._dumped_during_night_break &= not is_after_hours()
 
-        for position in positions:
-            write_heartbeat()
-            option = position.contract
+        # Calls from the highest strike down, puts from the lowest strike up.
+        call_positions = sorted((position for position in positions if position.contract.right == 'C'),
+                                key=lambda position: position.contract.strike, reverse=True)
+        put_positions = sorted((position for position in positions if position.contract.right == 'P'),
+                               key=lambda position: position.contract.strike)
+        positions_by_right = {'C': call_positions, 'P': put_positions}
 
-            opportunity_explorer = OpportunityExplorer()
-            current_price_level = opportunity_explorer.get_last_call_option_price() if option.right == 'C' else opportunity_explorer.get_last_put_option_price()
-
+        opportunity_explorer = OpportunityExplorer()
+        for right in ['C', 'P']:
+            current_price_level = opportunity_explorer.get_last_call_option_price() if right == 'C' else opportunity_explorer.get_last_put_option_price()
             if current_price_level < MINIMAL_SELL_PRICE_TO_CLOSE_POSITION:
                 continue
 
-            limit_buy_trade = self.find_low_limit_buy_trade(option, open_buy_trades)
-            if limit_buy_trade:
-                continue
+            for position in positions_by_right[right]:
+                write_heartbeat()
+                option = position.contract
 
-            if not hasattr(option, "ticker") or option.ticker is None:
-                logger.info(f"Option {get_option_name(option)} has no ticker")
-                continue
+                limit_buy_trade = self.find_low_limit_buy_trade(option, open_buy_trades)
+                if limit_buy_trade:
+                    continue
 
-            bid = option.ticker.bid
-            ask = option.ticker.ask
-            if not self.can_buy_options() or math.isnan(bid) or bid > 0.05 or math.isnan(ask) or ask > 0.2 or ask < 0:
-                continue
+                if not hasattr(option, "ticker") or option.ticker is None:
+                    logger.info(f"Option {get_option_name(option)} has no ticker")
+                    continue
 
-            quantity = abs(position.position)
-            slots_limit = self.get_available_ml_slots_count(option.right)
-            if slots_limit > 0:
-                quantity = min(slots_limit, quantity)
-            logger.info(
-                f"Submitting a buy trade for position of {get_option_name(position.contract)}, quantity: {quantity}, bid is {bid}, current price level is {current_price_level}")
-            close_position_trade = await self.trading_bot.close_short_option(option, quantity, limit=0.05)
-            req_id_to_comment[close_position_trade.order.orderId] = "Position buyback"
+                bid = option.ticker.bid
+                ask = option.ticker.ask
+                if not self.can_buy_options() or math.isnan(bid) or bid > 0.05 or math.isnan(ask) or ask > 0.2 or ask < 0:
+                    continue
+
+                quantity = abs(position.position)
+                slots_limit = self.get_available_ml_slots_count(right)
+                if slots_limit > 0:
+                    quantity = min(slots_limit, quantity)
+                logger.info(
+                    f"Submitting a buy trade for position of {get_option_name(position.contract)}, quantity: {quantity}, bid is {bid}, current price level is {current_price_level}")
+                close_position_trade = await self.trading_bot.close_short_option(option, quantity, limit=0.05)
+                req_id_to_comment[close_position_trade.order.orderId] = "Position buyback"
+                if opportunity_explorer.is_last_call_option_ml_derived:
+                    logger.info(f"Following the availability of ML slots, no need to close more positions in this session, "
+                                f"because an attempt to close a position was already made")
+                    break
 
     async def dump_positions_initial_states(self):
         logger.info(f"Dumping position initial states, map size: {len(self.position_initial_state_map)}")

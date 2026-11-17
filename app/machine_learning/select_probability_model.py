@@ -59,7 +59,7 @@ from .best_subset import (
 )
 from .probability_transforms import TRANSFORMS, TransformedLinearModel
 from .regress_max_ask import (
-    CANDIDATE_FEATURE_COLUMNS, CSV_PATH, GROUP_COLUMN, TARGET_COLUMN, ProbabilityClassifier,
+    CANDIDATE_FEATURE_COLUMNS, CSV_PATH, CV_FOLDS, GROUP_COLUMN, TARGET_COLUMN, ProbabilityClassifier,
 )
 
 import pandas as pd
@@ -200,10 +200,13 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
     _print_days_above_stop(stop_col, above_stop)
     n_days = above_stop[GROUP_COLUMN].nunique()
     logger.info(f"  Number of trade days: {groups.nunique()}, number of samples: {X.shape[0]}, {n_days} day(s) with {TARGET_COLUMN} >= {stop_col}")
+    # Built once and shared by every method below, so all candidates are scored on
+    # identical folds and their scores (and the 1-SE comparison) stay comparable.
+    fold_splits = survival_scoring.make_fold_splits(ctx, CV_FOLDS)
     for transform_name, transform in TRANSFORMS.items():
         logger.info(f"  Transform = {transform_name}")
         results = search_best_subset_with_distribution(
-            X, ctx, transform, transform_name, CANDIDATE_FEATURE_COLUMNS, score_method,
+            X, ctx, transform, transform_name, CANDIDATE_FEATURE_COLUMNS, score_method, fold_splits=fold_splits,
         )
         all_candidates.extend(results)
         best_for_transform = min(results, key=lambda c: c.score)
@@ -218,7 +221,7 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
     # operates on, so that code needs no changes to accommodate it.
     logger.info(f"  Transform = logistic")
     logistic_results = logistic_survival.search_logistic_candidates(
-        X, ctx, CANDIDATE_FEATURE_COLUMNS, score_method,
+        X, ctx, CANDIDATE_FEATURE_COLUMNS, score_method, fold_splits=fold_splits,
     )
     all_candidates.extend(logistic_results)
     logistic_recommended = logistic_survival.select_logistic_recommended(logistic_results)
@@ -260,7 +263,7 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
     # CandidateResult objects pooled into the same all_candidates list.
     logger.info(f"  Transform = xgboost")
     xgboost_results = xgboost_survival.search_xgboost_candidates(
-        X, ctx, CANDIDATE_FEATURE_COLUMNS, score_method,
+        X, ctx, CANDIDATE_FEATURE_COLUMNS, score_method, fold_splits=fold_splits,
     )
     all_candidates.extend(xgboost_results)
     xgboost_recommended = xgboost_survival.select_xgboost_recommended(xgboost_results)
@@ -271,7 +274,8 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
     # kNN: a ninth method, P(survive) = share of the nearest past trades whose
     # max_ask/credit stayed below the candidate's stop/credit (see knn_survival.py).
     logger.info(f"  Transform = knn")
-    knn_results = knn_survival.search_knn_candidates(X, ctx, CANDIDATE_FEATURE_COLUMNS, score_method)
+    knn_results = knn_survival.search_knn_candidates(X, ctx, CANDIDATE_FEATURE_COLUMNS, score_method,
+                                                    fold_splits=fold_splits)
     all_candidates.extend(knn_results)
     knn_recommended = knn_survival.select_knn_recommended(knn_results)
     per_transform_best["knn"] = knn_recommended
