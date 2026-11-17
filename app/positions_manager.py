@@ -271,7 +271,12 @@ class PositionsManager:
 
         opportunity_explorer = OpportunityExplorer()
         for right in ['C', 'P']:
-            current_price_level = opportunity_explorer.get_last_call_option_price() if right == 'C' else opportunity_explorer.get_last_put_option_price()
+            if right == 'C':
+                current_price_level = opportunity_explorer.get_last_call_option_price()
+                is_price_level_ml_derived = opportunity_explorer.is_last_call_option_ml_derived
+            else:
+                current_price_level = opportunity_explorer.get_last_put_option_price()
+                is_price_level_ml_derived = opportunity_explorer.is_last_put_option_ml_derived
             if current_price_level < MINIMAL_SELL_PRICE_TO_CLOSE_POSITION:
                 continue
 
@@ -300,7 +305,7 @@ class PositionsManager:
                     f"Submitting a buy trade for position of {get_option_name(position.contract)}, quantity: {quantity}, bid is {bid}, current price level is {current_price_level}")
                 close_position_trade = await self.trading_bot.close_short_option(option, quantity, limit=0.05)
                 req_id_to_comment[close_position_trade.order.orderId] = "Position buyback"
-                if opportunity_explorer.is_last_call_option_ml_derived:
+                if is_price_level_ml_derived:
                     logger.info(f"Following the availability of ML slots, no need to close more positions in this session, "
                                 f"because an attempt to close a position was already made")
                     break
