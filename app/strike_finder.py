@@ -190,7 +190,7 @@ class StrikeFinder:
 
             expected_profit = calculate_expected_profit(estimated_sell_price, stop_loss_per_option, out_of_the_money_probability)
 
-            if best is None or expected_profit > best.expected_profit and expected_profit > 0:
+            if (best is None or expected_profit > best.expected_profit) and expected_profit > 0:
                 best = SimpleNamespace(
                     option=option,
                     expected_profit=expected_profit,

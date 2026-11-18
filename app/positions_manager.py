@@ -271,12 +271,8 @@ class PositionsManager:
 
         opportunity_explorer = OpportunityExplorer()
         for right in ['C', 'P']:
-            if right == 'C':
-                current_price_level = opportunity_explorer.get_last_call_option_price()
-                is_price_level_ml_derived = opportunity_explorer.is_last_call_option_ml_derived
-            else:
-                current_price_level = opportunity_explorer.get_last_put_option_price()
-                is_price_level_ml_derived = opportunity_explorer.is_last_put_option_ml_derived
+            current_price_level = opportunity_explorer.get_last_call_option_price() if right == 'C' else opportunity_explorer.get_last_put_option_price()
+            is_price_level_ml_derived = opportunity_explorer.is_last_option_ml_derived[right]
             if current_price_level < MINIMAL_SELL_PRICE_TO_CLOSE_POSITION:
                 continue
 

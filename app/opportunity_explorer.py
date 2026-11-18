@@ -66,8 +66,7 @@ class OpportunityExplorer:
             self.last_call_margin_reduction_record_time = 0
             self.last_put_margin_reduction_record_time = 0
             self.last_margin_lock_resolution_attempt_time = 0
-            self.is_last_call_option_ml_derived = False
-            self.is_last_put_option_ml_derived = False
+            self.is_last_option_ml_derived = {'C': False, 'P': False}
 
             # Dynamic config fields
             self.should_write_options_overnight = True
@@ -318,32 +317,49 @@ class OpportunityExplorer:
         if math.isnan(price):
             return
 
+        is_ml_derived_text = "" if is_ml_derived else "non-"
+        is_change = False
         if right == 'C':
-            self.is_last_call_option_ml_derived = is_ml_derived
             if self.get_last_call_option_price() != price:
                 logger.info(
-                    f"The current price level for call options changed from {self.last_call_option_price} to {price}")
-                if self.get_last_call_option_price() < 0.15 < price:
+                    f"The current price level for call options changed from {self.get_last_call_option_price()} to {price}")
+                if self.get_last_call_option_price() < 0.15 < price and not is_ml_derived:
                     logger.info(
-                        f"However, this is a high jump from the previous level of {self.last_call_option_price}, slowing the pace of increase so that the price level for call options is {price}")
+                        f"However, this is a high jump from the previous level of {self.get_last_call_option_price()}, slowing the pace of increase so that the price level for call options is {price}")
                     price = 0.15
+                is_change = True
+
+            if self.is_last_option_ml_derived['C'] != is_ml_derived:
+                logger.info(
+                    f"The current price level for call options changed to {is_ml_derived_text}-ml-derived with a price of {price}")
+                is_change = True
+
+            if is_change:
                 if is_ml_derived:
                     self.last_ml_derived_call_option_price = price
                 else:
                     self.last_call_option_price = price
         else:
-            self.is_last_put_option_ml_derived = is_ml_derived
+            self.is_last_option_ml_derived['P'] = is_ml_derived
             if self.get_last_put_option_price() != price:
                 logger.info(
-                    f"The current price level for put options changed from {self.last_put_option_price} to {price}")
-                if self.get_last_put_option_price() < 0.15 < price:
+                    f"The current price level for put options changed from {self.get_last_put_option_price()} to {price}")
+                if self.get_last_put_option_price() < 0.15 < price and not is_ml_derived:
                     logger.info(
-                        f"However, this is a high  from the previous level of {self.last_put_option_price}, slowing the pace of increase so that the price level for put options is {price}")
+                        f"However, this is a high from the previous level of {self.get_last_put_option_price()}, slowing the pace of increase so that the price level for put options is {price}")
                     price = 0.15
-                if is_ml_derived:
-                    self.last_ml_derived_put_option_price = price
-                else:
-                    self.last_put_option_price = price
+                is_change = True
+
+                if self.is_last_option_ml_derived['P'] != is_ml_derived:
+                    logger.info(
+                        f"The current price level for put options changed to {is_ml_derived_text}-ml-derived with a price of {price}")
+                    is_change = True
+
+                if is_change:
+                    if is_ml_derived:
+                        self.last_ml_derived_put_option_price = price
+                    else:
+                        self.last_put_option_price = price
 
     def try_to_publish_available_cheap_option(self, right):
         strike_finder = StrikeFinder()
@@ -385,9 +401,7 @@ class OpportunityExplorer:
             req_id_to_comment[result.trade.order.orderId] = comment
             logger.info(f"Submitted sell option of {get_option_name(option)}, order ID: {result.trade.order.orderId}, "
                         f"target delta: {target_delta:.3f}")
-            if option.right == 'P' and self.is_last_put_option_ml_derived:
-                self.pending_trades_manager.notify_ml_derived_option_sell_submitted(option)
-            if option.right == 'C' and self.is_last_call_option_ml_derived:
+            if self.is_last_option_ml_derived[option.right]:
                 self.pending_trades_manager.notify_ml_derived_option_sell_submitted(option)
         return result
 
@@ -718,13 +732,13 @@ class OpportunityExplorer:
         self.last_margin_lock_resolution_attempt_time = time.time()
 
     def get_last_put_option_price(self):
-        if self.is_last_put_option_ml_derived:
+        if self.is_last_option_ml_derived['P']:
             return self.last_ml_derived_put_option_price
         else:
             return self.last_put_option_price
 
     def get_last_call_option_price(self):
-        if self.is_last_call_option_ml_derived:
+        if self.is_last_option_ml_derived['C']:
             return self.last_ml_derived_call_option_price
         else:
             return self.last_call_option_price

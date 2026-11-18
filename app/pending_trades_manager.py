@@ -6,7 +6,7 @@ from utilities.ib_utils import *
 
 from .net_worth_calculator import NetWorthCalculator
 from .opportunity_explorer import OpportunityExplorer, MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION
-from .positions_manager import MINIMAL_SELL_PRICE_TO_CLOSE_POSITION
+from .positions_manager import MINIMAL_SELL_PRICE_TO_CLOSE_POSITION, PositionsManager
 from .trading_bot import TradingBot
 from .target_delta_calculator import TargetDeltaCalculator
 from .strike_finder import StrikeFinder
@@ -31,6 +31,7 @@ class PendingTradesManager:
 
     def __init__(self):
         if not self._initialized:
+            self.positions_manager = PositionsManager()
             self.trading_bot = TradingBot()
             self.net_worth_calculator = NetWorthCalculator()
             self.target_delta_calculator = TargetDeltaCalculator()
@@ -139,6 +140,12 @@ class PendingTradesManager:
         logger.info("Checking for excessive buy-limit trades")
         buy_limit_trades = [trade for trade in open_trades if
                             trade.order.orderType == 'LMT' and trade.order.action.upper() == 'BUY']
+
+        available_ml_slots_count = {
+            'C': self.positions_manager.get_available_ml_slots_count('C'),
+            'P': self.positions_manager.get_available_ml_slots_count('P')
+        }
+
         for buy_limit_trade in buy_limit_trades:
             option = buy_limit_trade.contract
             corresponding_position = next((position for position in positions if option.conId == position.contract.conId), None)
@@ -149,9 +156,10 @@ class PendingTradesManager:
 
             if corresponding_position and order_limit == 0.05:
                 position_quantity = abs(corresponding_position.position)
-                if position_quantity != buy_limit_trade.remaining():
+                if (position_quantity != buy_limit_trade.remaining() and
+                        not (self.opportunity_explorer.is_last_option_ml_derived[option.right] and buy_limit_trade.remaining() == available_ml_slots_count[option.right])):
                     logger.info(f"Cancelling {get_option_name(option)} because the position has {position_quantity} units "
-                                f"while there are {buy_limit_trade.remaining()} remaining units in the trade")
+                                    f"while there are {buy_limit_trade.remaining()} remaining units in the trade")
                     self.trading_bot.cancel_trade(buy_limit_trade)
                 elif price_level < MINIMAL_SELL_PRICE_TO_CLOSE_POSITION and time_passed_since_submission > POSITION_BUYBACK_ORDER_EXPIRATION_TIME:
                     logger.info(f"Cancelling {get_option_name(option)} because it has the current price level for "
