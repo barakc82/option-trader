@@ -15,7 +15,8 @@ from utilities.ib_utils import (extract_ask, get_delta, get_delta_for_sell, get_
 from .limit_adjuster import LimitAdjuster
 from .market_data_fetcher import MarketDataFetcher
 from .max_loss_calculator import MaxLossCalculator
-from .net_worth_calculator import NetWorthCalculator, FOLD_AFTER_MARKET_RISE, FOLD_AFTER_MARKET_DROP
+from .net_worth_calculator import NetWorthCalculator, FOLD_AFTER_MARKET_RISE, FOLD_AFTER_MARKET_DROP, \
+    is_net_worth_check_required
 from .predictor import Predictor
 from .price_estimator import PriceEstimator
 from .target_delta_calculator import TargetDeltaCalculator
@@ -135,12 +136,20 @@ class StrikeFinder:
     def _find_highest_delta_under_target(self, options_block, target_delta, right, net_liquidation_value):
         """Returns the option with the highest delta under target_delta whose sale (one contract,
         on top of the current short options) would keep the net worth after the worst-case market
-        move non-negative, or None if no option qualifies."""
-        current_spx_value = self.market_data_fetcher.get_spx_price()
-        if math.isnan(current_spx_value):
-            logger.error(f"Cannot check the net worth after a market change for {right} options because the "
-                         f"S&P 500 index value is NaN")
+        move non-negative, or None if no option qualifies. All options are assumed to share one
+        last trade date; when the net worth check is not required for it (see
+        is_net_worth_check_required), the check is skipped."""
+        if not options_block:
             return None
+
+        should_check_net_worth = is_net_worth_check_required(options_block[0].lastTradeDateOrContractMonth)
+        if should_check_net_worth:
+            current_spx_value = self.market_data_fetcher.get_spx_price()
+            if math.isnan(current_spx_value):
+                logger.error(f"Cannot check the net worth after a market change for {right} options because the "
+                             f"S&P 500 index value is NaN")
+                return None
+
         fold_after_market_change = FOLD_AFTER_MARKET_RISE if right == 'C' else FOLD_AFTER_MARKET_DROP
         short_options = self.trading_bot.get_short_options()
 
@@ -153,14 +162,15 @@ class StrikeFinder:
             if not highest_delta_under_target < delta < target_delta:
                 continue
 
-            potential_portfolio = short_options + [Position(account='', contract=option, position=-1, avgCost=0)]
-            net_worth_after_change = self.net_worth_calculator.calculate_net_worth_after_change(
-                fold_after_market_change, current_spx_value, potential_portfolio, net_liquidation_value)
-            if net_worth_after_change < 0:
-                market_change = "rise" if right == 'C' else "drop"
-                logger.info(f"Skipping {get_option_name(option)} in highest-delta-under-target scan: net worth "
-                            f"after a market {market_change} would be {net_worth_after_change:.2f}")
-                continue
+            if should_check_net_worth:
+                potential_portfolio = short_options + [Position(account='', contract=option, position=-1, avgCost=0)]
+                net_worth_after_change = self.net_worth_calculator.calculate_net_worth_after_change(
+                    fold_after_market_change, current_spx_value, potential_portfolio, net_liquidation_value)
+                if net_worth_after_change < 0:
+                    market_change = "rise" if right == 'C' else "drop"
+                    logger.info(f"Skipping {get_option_name(option)} in highest-delta-under-target scan: net worth "
+                                f"after a market {market_change} would be {net_worth_after_change:.2f}")
+                    continue
 
             highest_delta_under_target = delta
             best_candidate = option
@@ -173,22 +183,25 @@ class StrikeFinder:
         all) are skipped. When net_liquidation_value is given, options that would leave a
         negative net worth after the worst-case market move (a rise for calls, a drop for
         puts), counting the current short options plus one contract of the option itself,
-        are skipped as well; when it is None, that check is not made. Returns a
-        SimpleNamespace describing the best option, or None."""
+        are skipped as well, unless the options' last trade date doesn't require that check
+        (see is_net_worth_check_required; all options are assumed to share one last trade
+        date); when it is None, that check is not made. Returns a SimpleNamespace describing
+        the best option, or None."""
         if not max_delta:
             max_delta = self.max_delta[right]
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss(right)
         atm_iv = self.market_data_fetcher.get_cached_spx_implied_volatility(right)
 
-        should_check_net_worth = net_liquidation_value is not None
+        should_check_net_worth = (net_liquidation_value is not None and bool(options)
+                                  and is_net_worth_check_required(options[0].lastTradeDateOrContractMonth))
         if should_check_net_worth:
             current_spx_value = self.market_data_fetcher.get_spx_price()
             if math.isnan(current_spx_value):
                 logger.error(f"Cannot check the net worth after a market change for {right} options because the "
                              f"S&P 500 index value is NaN")
                 return None
-            fold_after_market_change = FOLD_AFTER_MARKET_RISE if right == 'C' else FOLD_AFTER_MARKET_DROP
-            short_options = self.trading_bot.get_short_options()
+        fold_after_market_change = FOLD_AFTER_MARKET_RISE if right == 'C' else FOLD_AFTER_MARKET_DROP
+        short_options = self.trading_bot.get_short_options()
 
         best = None
         for option in options:

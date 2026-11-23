@@ -13,6 +13,17 @@ FOLD_AFTER_MARKET_RISE = 1 + 0.2
 FOLD_AFTER_MARKET_DROP = 1 - 0.3
 
 
+def is_net_worth_check_required(last_trade_date: str) -> bool:
+    """Whether selling an option whose last trade date is last_trade_date ("YYYYMMDD", as in
+    lastTradeDateOrContractMonth) has to pass the net-worth-after-a-market-change check. It
+    doesn't on that date or the day before (New York time), unless trading has switched to
+    overnight trading."""
+    expiry_date = datetime.strptime(last_trade_date, "%Y%m%d").date()
+    today_nyc = datetime.now(new_york_timezone).date()
+    is_expiry_or_day_before = (today_nyc == expiry_date) or (today_nyc == expiry_date - timedelta(days=1))
+    return not is_expiry_or_day_before or is_switched_to_overnight_trading()
+
+
 class NetWorthCalculator:
     _instance = None
 
@@ -31,10 +42,7 @@ class NetWorthCalculator:
             self._initialized = True
 
     async def calculate_max_options_for_market_rise(self, call_option):
-        expiry_date = datetime.strptime(call_option.lastTradeDateOrContractMonth, "%Y%m%d").date()
-        today_nyc = datetime.now(new_york_timezone).date()
-        is_expiry_or_day_before = (today_nyc == expiry_date) or (today_nyc == expiry_date - timedelta(days=1))
-        if is_expiry_or_day_before and not is_switched_to_overnight_trading():
+        if not is_net_worth_check_required(call_option.lastTradeDateOrContractMonth):
             return sys.float_info.max
 
         current_spx_value = self.index_price_manager.get_spx_price()
@@ -61,10 +69,7 @@ class NetWorthCalculator:
         return math.floor(net_worth_after_rise / liability_per_contract)
 
     async def calculate_max_options_for_market_drop(self, put_option):
-        expiry_date = datetime.strptime(put_option.lastTradeDateOrContractMonth, "%Y%m%d").date()
-        today_nyc = datetime.now(new_york_timezone).date()
-        is_expiry_or_day_before = (today_nyc == expiry_date) or (today_nyc == expiry_date - timedelta(days=1))
-        if is_expiry_or_day_before and not is_switched_to_overnight_trading():
+        if not is_net_worth_check_required(put_option.lastTradeDateOrContractMonth):
             return sys.float_info.max
 
         current_spx_value = self.index_price_manager.get_spx_price()
@@ -117,7 +122,6 @@ class NetWorthCalculator:
     async def ensure_safe_exposure_with_all_trades(self):
         positions = self.trading_bot.get_short_options()
         open_trades = self.trading_bot.get_open_trades()
-        today_nyc = datetime.now(new_york_timezone).date()
         current_spx_value = self.index_price_manager.get_spx_price()
         if math.isnan(current_spx_value):
             logger.error(
@@ -131,9 +135,7 @@ class NetWorthCalculator:
                 continue
 
             call_option = open_sell_call_trade.contract
-            expiry_date = datetime.strptime(call_option.lastTradeDateOrContractMonth, "%Y%m%d").date()
-            is_expiry_or_day_before = (today_nyc == expiry_date) or (today_nyc == expiry_date - timedelta(days=1))
-            if is_expiry_or_day_before and not is_switched_to_overnight_trading():
+            if not is_net_worth_check_required(call_option.lastTradeDateOrContractMonth):
                 continue
 
             position = Position(account='', contract=call_option, position=open_sell_call_trade.remaining(), avgCost=0)
@@ -154,9 +156,7 @@ class NetWorthCalculator:
                 continue
 
             put_option = open_sell_put_trade.contract
-            expiry_date = datetime.strptime(put_option.lastTradeDateOrContractMonth, "%Y%m%d").date()
-            is_expiry_or_day_before = (today_nyc == expiry_date) or (today_nyc == expiry_date - timedelta(days=1))
-            if is_expiry_or_day_before and not is_switched_to_overnight_trading():
+            if not is_net_worth_check_required(put_option.lastTradeDateOrContractMonth):
                 continue
 
             position = Position(account='', contract=put_option, position=open_sell_put_trade.remaining(), avgCost=0)
