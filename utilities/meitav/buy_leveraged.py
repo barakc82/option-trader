@@ -6,7 +6,7 @@ from selenium.common import ElementNotVisibleException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
-from utilities.meitav.fill_in_operation import fill_in_operation, open_operation_window, find_current_price
+from utilities.meitav.fill_in_operation import fill_in_operation, open_operation_window, find_current_bid_ask
 from utilities.meitav.get_status import extract_status
 from utilities.meitav.meitav_common import *
 from utilities.meitav.spark_falling_knife import calculate_next_buy2
@@ -29,10 +29,15 @@ def main(user, program_type):
         update_status_in_spreadsheet(user, program_type, status)
 
         open_operation_window(driver, operation_type='buy', security_id=1144708, target_date=target_date)
-        find_current_price(driver)
+        bid, ask = find_current_bid_ask(driver, operation_type='buy')
+        best_price_estimate = (bid + ask) / 2
+
+        holdings = status['holdings']
+        ta35_3x_holding = holdings[1144708]
+        ta35_3x_holding['last_price'] = best_price_estimate
 
         # price, units = calculate_next_buy(user, program_type)
-        price, units = calculate_next_buy2(driver, status)
+        price, units = calculate_next_buy2(status, ask)
         print(f"price = {price}, units = {units}")
 
         fill_in_operation(driver, units=units, price=price)

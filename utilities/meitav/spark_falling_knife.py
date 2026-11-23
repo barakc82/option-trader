@@ -11,7 +11,7 @@ from utilities.meitav.falling_knife_logic import FallingKnifeCalculator
 # =======================
 
 
-def calculate_next_buy2(driver, status):
+def calculate_next_buy2(status, ask):
 
     """holdings_tab_element = driver.find_element(By.CSS_SELECTOR, "div[ph='ph4']")
     is_balance_values_tab_selected_result = is_balance_values_tab_selected(holdings_tab_element)
@@ -45,5 +45,7 @@ def calculate_next_buy2(driver, status):
     target_price, result = calculator.find_next_transfer_price()
     units = calculator.calculate_units(target_price)
     calculator.print_summary(target_price, result, units)
-    
+    if target_price > ask:
+        print(f"Warning: the target price {target_price} is greater than the ask value {ask}")
+
     return target_price, units

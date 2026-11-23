@@ -65,29 +65,31 @@ class FallingKnifeCalculator:
     def _portfolio_after_rebalancing(self):
         """Simulate buying 1000 NIS at a time at the current price until rebalanced.
         Returns (leveraged_quantity, cash) reflecting all simulated purchases."""
-        qty, cash = self.leveraged_quantity, self.cash
+        leveraged_quantity, cash = self.leveraged_quantity, self.cash
         person_data = {'max_leveraged_share': self.max_leveraged_share, 'min_leveraged_share': self.min_leveraged_share}
         while cash >= 1000:
-            temp = FallingKnifeCalculator(qty, self.current_leveraged_price,
+            temp = FallingKnifeCalculator(leveraged_quantity, self.current_leveraged_price,
                                           self.base_etfs_data, cash, person_data, self.should_decrease_base)
             if temp.calculate_at_price(self.current_leveraged_price)['required_transfer'] <= 1000:
                 break
-            qty += 100000 / self.current_leveraged_price  # 1000 NIS / (price in agorot)
+            leveraged_quantity += 100000 / self.current_leveraged_price  # 1000 NIS / (price in agorot)
             cash -= 1000
-        return qty, cash
+        return leveraged_quantity, cash
 
     def find_next_transfer_price(self):
         """Searches for the next lower price at which a transfer of 1000 NIS will be required."""
         current_result = self.calculate_at_price(self.current_leveraged_price)
 
+        required_transfer = current_result['required_transfer']
         if current_result['required_transfer'] > 1000:
-            print(f"The required transfer is more than 1000 NIS: {current_result['required_transfer']}")
+            print(f"The required transfer is more than 1000 NIS: {required_transfer:.2f}")
             qty, cash = self._portfolio_after_rebalancing()
             person_data = {'max_leveraged_share': self.max_leveraged_share, 'min_leveraged_share': self.min_leveraged_share}
             search_calc = FallingKnifeCalculator(qty, self.current_leveraged_price,
                                                  self.base_etfs_data, cash, person_data, self.should_decrease_base)
         else:
-            print("The required transfer is less than 1000 NIS")
+            print(f"Considering the current price of {self.current_leveraged_price}, the required transfer is less than "
+                  f"1000 NIS ({required_transfer}:.2f)")
             search_calc = self
 
         for price in range(self.current_leveraged_price - 1, 0, -1):

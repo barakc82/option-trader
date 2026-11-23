@@ -99,18 +99,30 @@ def open_operation_window(driver, operation_type, security_id, target_date):
                                                      f".//tbody//button[span[normalize-space()='{formatted_day}']]")
     day_buttons[0].click()
 
-def find_current_price(driver):
+def find_current_bid_ask(driver, operation_type):
     time.sleep(0.4)
     quote_data_span = driver.find_element(By.XPATH, "//span[@quote-data='sendOrderPopupVm.stock.quoteData']/*")
     quote_data_span.click()
+    time.sleep(0.1)
 
-    stock_info_main_view_div = driver.find_element(By.XPATH, "//div[@class='stock-info-main-view']")
-    bid_table_container_div = stock_info_main_view_div.find_element(By.XPATH, ".//div[@class='bid-table-container']")
-    rows = bid_table_container_div.find_elements(By.XPATH, ".//div[@role='row']")
-    best_data_row = rows[1]
-    price_text = best_data_row.find_element(
-        By.XPATH, ".//div[normalize-space()]"
-    )
-    print(f"barak: price text: {price_text} !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    ask_value = extract_bid_ask_value(4, driver, 'ask')
+    bid_value = extract_bid_ask_value(1, driver, 'bid')
+    print(f"barak: bid value is {bid_value} and ask value is {ask_value}")
+    return bid_value, ask_value
 
-    return 0
+
+def extract_bid_ask_value(cell_index: int, driver, table_type: str) -> int:
+    """Reads the best bid/ask value from the quote table. Until the table has loaded, the
+    cell's text is not a number yet (int() raises ValueError), so keep retrying every half
+    a second until it is."""
+    while True:
+        try:
+            stock_info_main_view_div = driver.find_element(By.XPATH, "//div[@class='stock-info-main-view']")
+            table_container_div = stock_info_main_view_div.find_element(
+                By.XPATH, f".//div[@class='{table_type}-table-container']")
+            rows = table_container_div.find_elements(By.XPATH, ".//div[@role='row']")
+            best_data_row = rows[1]
+            first_grandchild = best_data_row.find_element(By.XPATH, f"(./*[{cell_index}]/*)[1]")
+            return int(first_grandchild.text.replace(',', ''))
+        except ValueError:
+            time.sleep(0.5)
