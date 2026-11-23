@@ -6,7 +6,7 @@ from selenium.common import ElementNotVisibleException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
-from utilities.meitav.fill_in_operation import fill_in_operation
+from utilities.meitav.fill_in_operation import fill_in_operation, open_operation_window, find_current_price
 from utilities.meitav.get_status import extract_status
 from utilities.meitav.meitav_common import *
 from utilities.meitav.spark_falling_knife import calculate_next_buy2
@@ -28,11 +28,14 @@ def main(user, program_type):
             raise Exception("Username and program type mismatch")
         update_status_in_spreadsheet(user, program_type, status)
 
+        open_operation_window(driver, operation_type='buy', security_id=1144708, target_date=target_date)
+        find_current_price(driver)
+
         # price, units = calculate_next_buy(user, program_type)
         price, units = calculate_next_buy2(driver, status)
         print(f"price = {price}, units = {units}")
 
-        fill_in_operation(driver, operation_type='buy', security_id=1144708, units=units, price=price, target_date=target_date)
+        fill_in_operation(driver, units=units, price=price)
 
         update_next_buy_in_spreadsheet(user, program_type, price, f"{target_date:%d/%m/%Y}")
 

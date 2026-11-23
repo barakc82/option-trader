@@ -39,7 +39,22 @@ def fill_in_operation_by_total_value(driver, operation_type, security_id, total_
     insert_text(driver, units_input, str(total_value))
 
 
-def fill_in_operation(driver, operation_type, security_id, units, price, target_date):
+def fill_in_operation(driver, units, price):
+    inputs = driver.find_elements(By.CSS_SELECTOR, ".send-order-control-item-body input")
+    units_input = inputs[0]
+    units_input.clear()
+    units_input.send_keys(str(units))
+
+    price_input = inputs[1]
+    try:
+        price_input.clear()
+    except InvalidElementStateException:
+        pass
+    price_input.send_keys(str(price))
+
+
+
+def open_operation_window(driver, operation_type, security_id, target_date):
     element = driver.find_element(By.XPATH, f"//*[text()='{security_id}']")
     element.click()
     time.sleep(1)
@@ -54,18 +69,6 @@ def fill_in_operation(driver, operation_type, security_id, units, price, target_
 
     wait_object = WebDriverWait(driver, 40, 1, ([ElementNotVisibleException]))
     wait_object.until(lambda x: x.find_element(By.XPATH, f"//*[text()='מחיר באגורות']") is not None)
-
-    inputs = driver.find_elements(By.CSS_SELECTOR, ".send-order-control-item-body input")
-    units_input = inputs[0]
-    units_input.clear()
-    units_input.send_keys(str(units))
-
-    price_input = inputs[1]
-    try:
-        price_input.clear()
-    except InvalidElementStateException:
-        pass
-    price_input.send_keys(str(price))
 
     buttons = driver.find_elements(By.CSS_SELECTOR, "button[aria-label*='לחץ לבחירת תאריך']")
     until_date_button = buttons[1]
@@ -95,3 +98,19 @@ def fill_in_operation(driver, operation_type, security_id, units, price, target_
     day_buttons = date_picker_items[1].find_elements(By.XPATH,
                                                      f".//tbody//button[span[normalize-space()='{formatted_day}']]")
     day_buttons[0].click()
+
+def find_current_price(driver):
+    time.sleep(0.4)
+    quote_data_span = driver.find_element(By.XPATH, "//span[@quote-data='sendOrderPopupVm.stock.quoteData']/*")
+    quote_data_span.click()
+
+    stock_info_main_view_div = driver.find_element(By.XPATH, "//div[@class='stock-info-main-view']")
+    bid_table_container_div = stock_info_main_view_div.find_element(By.XPATH, ".//div[@class='bid-table-container']")
+    rows = bid_table_container_div.find_elements(By.XPATH, ".//div[@role='row']")
+    best_data_row = rows[1]
+    price_text = best_data_row.find_element(
+        By.XPATH, ".//div[normalize-space()]"
+    )
+    print(f"barak: price text: {price_text} !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+
+    return 0

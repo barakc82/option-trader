@@ -7,7 +7,7 @@ from selenium.common import ElementNotVisibleException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
-from utilities.meitav.fill_in_operation import fill_in_operation
+from utilities.meitav.fill_in_operation import fill_in_operation, open_operation_window
 from utilities.meitav.get_status import extract_status
 from utilities.meitav.meitav_common import *
 from utilities.meitav.start import start
@@ -31,8 +31,8 @@ def main(user, program_type):
         units = math.floor(sum * 100 / price)
         update_next_sell_in_spreadsheet(user, program_type, price, f"{target_date:%d/%m/%Y}")
 
-        fill_in_operation(driver, operation_type='sell', security_id=1144708, units=units, price=price,
-                          target_date=target_date)
+        open_operation_window(driver, operation_type='sell', security_id=1144708, target_date=target_date)
+        fill_in_operation(driver, units=units, price=price)
     finally:
         driver.quit()
 

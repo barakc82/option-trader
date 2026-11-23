@@ -13,14 +13,10 @@ from utilities.meitav.falling_knife_logic import FallingKnifeCalculator
 
 def calculate_next_buy2(driver, status):
 
-    holdings_tab_element = driver.find_element(By.CSS_SELECTOR, "div[ph='ph4']")
+    """holdings_tab_element = driver.find_element(By.CSS_SELECTOR, "div[ph='ph4']")
     is_balance_values_tab_selected_result = is_balance_values_tab_selected(holdings_tab_element)
     if not is_balance_values_tab_selected_result:
-        select_balance_values_tab(driver)
-
-    element = driver.find_element(By.XPATH, f"//*[text()='1144708']")
-    element.click()
-    time.sleep(1)
+        select_balance_values_tab(driver)"""
 
     holdings = status['holdings']
     ta35_3x_holding = holdings[1144708]
