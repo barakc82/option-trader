@@ -11,6 +11,7 @@ from .net_worth_calculator import NetWorthCalculator
 from .option_data_fetcher import OptionDataFetcher
 from .predictor import Predictor
 from .price_estimator import PriceEstimator
+from .price_levels_manager import PriceLevelsManager
 from .strike_finder import StrikeFinder
 from .target_delta_calculator import TargetDeltaCalculator
 from .connection_manager import ConnectionManager
@@ -57,16 +58,12 @@ class OpportunityExplorer:
             self.pending_trades_manager = PendingTradesManager()
             self.last_submit_order_attempt_time = 0
             self.can_submit_orders = True
-            self.last_put_option_price = 0
-            self.last_call_option_price = 0
-            self.last_ml_derived_put_option_price = 0
-            self.last_ml_derived_call_option_price = 0
+            self.price_levels_manager = PriceLevelsManager()
             self.call_margin_reduction = None
             self.put_margin_reduction = None
             self.last_call_margin_reduction_record_time = 0
             self.last_put_margin_reduction_record_time = 0
             self.last_margin_lock_resolution_attempt_time = 0
-            self.is_last_option_ml_derived = {'C': False, 'P': False}
 
             # Dynamic config fields
             self.should_write_options_overnight = True
@@ -182,7 +179,7 @@ class OpportunityExplorer:
         if estimated_sell_price < 0:
             logger.error("Failed to estimate selling price")
             return SellOptionResult()
-        self._update_last_option_price(estimated_sell_price, 'C', is_ml_derived)
+        self.price_levels_manager.update_last_option_price(estimated_sell_price, 'C', is_ml_derived)
 
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss('C')
         if stop_loss_per_option < estimated_sell_price:
@@ -298,6 +295,7 @@ class OpportunityExplorer:
             logger.info(f"Found available ML slots for {available_ml_slots_count} call options")
             call_option = await strike_finder.get_max_expected_profit_option(call_options, 'C')
             if call_option:
+                logger.info(f"Max expected-profit call option found: {get_option_name(call_option)}")
                 return call_option, True, available_ml_slots_count
             logger.warning("No max expected-profit call option found, falling back to the low-delta call option")
 
@@ -312,54 +310,6 @@ class OpportunityExplorer:
         if not max_options:
             logger.warning(f"Failed to sell {get_option_name(call_option)} due to projected exposure fee")
         return max_options
-
-    def _update_last_option_price(self, price, right, is_ml_derived):
-        if math.isnan(price):
-            return
-
-        is_ml_derived_text = "" if is_ml_derived else "non-"
-        is_change = False
-        if right == 'C':
-            if self.get_last_call_option_price() != price:
-                logger.info(
-                    f"The current price level for call options changed from {self.get_last_call_option_price()} to {price}")
-                if self.get_last_call_option_price() < 0.15 < price and not is_ml_derived:
-                    logger.info(
-                        f"However, this is a high jump from the previous level of {self.get_last_call_option_price()}, slowing the pace of increase so that the price level for call options is {price}")
-                    price = 0.15
-                is_change = True
-
-            if self.is_last_option_ml_derived['C'] != is_ml_derived:
-                logger.info(
-                    f"The current price level for call options changed to {is_ml_derived_text}-ml-derived with a price of {price}")
-                is_change = True
-
-            if is_change:
-                if is_ml_derived:
-                    self.last_ml_derived_call_option_price = price
-                else:
-                    self.last_call_option_price = price
-        else:
-            self.is_last_option_ml_derived['P'] = is_ml_derived
-            if self.get_last_put_option_price() != price:
-                logger.info(
-                    f"The current price level for put options changed from {self.get_last_put_option_price()} to {price}")
-                if self.get_last_put_option_price() < 0.15 < price and not is_ml_derived:
-                    logger.info(
-                        f"However, this is a high from the previous level of {self.get_last_put_option_price()}, slowing the pace of increase so that the price level for put options is {price}")
-                    price = 0.15
-                is_change = True
-
-                if self.is_last_option_ml_derived['P'] != is_ml_derived:
-                    logger.info(
-                        f"The current price level for put options changed to {is_ml_derived_text}-ml-derived with a price of {price}")
-                    is_change = True
-
-                if is_change:
-                    if is_ml_derived:
-                        self.last_ml_derived_put_option_price = price
-                    else:
-                        self.last_put_option_price = price
 
     def try_to_publish_available_cheap_option(self, right):
         strike_finder = StrikeFinder()
@@ -401,7 +351,7 @@ class OpportunityExplorer:
             req_id_to_comment[result.trade.order.orderId] = comment
             logger.info(f"Submitted sell option of {get_option_name(option)}, order ID: {result.trade.order.orderId}, "
                         f"target delta: {target_delta:.3f}")
-            if self.is_last_option_ml_derived[option.right]:
+            if self.price_levels_manager.is_last_option_ml_derived[option.right]:
                 self.pending_trades_manager.notify_ml_derived_option_sell_submitted(option)
         return result
 
@@ -425,7 +375,7 @@ class OpportunityExplorer:
         if estimated_sell_price < 0:
             logger.error("Failed to estimate selling price")
             return SellOptionResult()
-        self._update_last_option_price(estimated_sell_price, 'P', is_ml_derived)
+        self.price_levels_manager.update_last_option_price(estimated_sell_price, 'P', is_ml_derived)
 
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss('P')
         if stop_loss_per_option < estimated_sell_price:
@@ -509,6 +459,7 @@ class OpportunityExplorer:
             logger.info(f"Found available ML slots for {available_ml_slots_count} put options")
             put_option = await strike_finder.get_max_expected_profit_option(put_options, 'P')
             if put_option:
+                logger.info(f"Max expected-profit put option found: {get_option_name(put_option)}")
                 return put_option, True, available_ml_slots_count
             logger.warning("No max expected-profit put option found, falling back to the low-delta put option")
 
@@ -574,9 +525,9 @@ class OpportunityExplorer:
 
     async def try_to_reduce_initial_margin_for_call_options(self, call_option_to_be_sold, required_initial_margin,
                                                             initial_margin_after_sell, call_options):
-        if self.last_call_option_price < MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION:
+        if self.price_levels_manager.last_option_price['C'] < MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION:
             logger.info(
-                f"Will not try to reduce initial margin for call options since the price level of call options is {self.last_call_option_price} while the minimal sell price to close is {MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION}")
+                f"Will not try to reduce initial margin for call options since the price level of call options is {self.price_levels_manager.last_option_price['C']} while the minimal sell price to close is {MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION}")
             return FAILED
 
         positions = self.trading_bot.get_short_options()
@@ -618,13 +569,13 @@ class OpportunityExplorer:
 
         logger.info(
             f"try_to_reduce_initial_margin_for_call_options, required initial margin: {required_initial_margin}, initial margin after sell: {initial_margin_after_sell:.0f}, "
-            f"initial margin change due to buy: {initial_margin_change:.0f}, option to be sold: {get_option_name(call_option_to_be_sold)}, option to buy: {get_option_name(available_cheap_call_option)}, missing sum: {missing_sum:.0f}, required number of units = {required_number_of_units}, last call price: {self.last_call_option_price}")
+            f"initial margin change due to buy: {initial_margin_change:.0f}, option to be sold: {get_option_name(call_option_to_be_sold)}, option to buy: {get_option_name(available_cheap_call_option)}, missing sum: {missing_sum:.0f}, required number of units = {required_number_of_units}, last call price: {self.price_levels_manager.last_option_price['C']}")
 
         if required_number_of_units < 0:
             logger.error(f"The required number of units is {required_number_of_units}")
             return FAILED
 
-        if self.last_call_option_price * 0.4 > 0.07 * required_number_of_units + 0.02:
+        if self.price_levels_manager.last_option_price['C'] * 0.4 > 0.07 * required_number_of_units + 0.02:
             logger.info(
                 f"Buying {required_number_of_units} units of {get_option_name(available_cheap_call_option)} would relax the required initial margin")
             trade = self.trading_bot.buy_low_cost(available_cheap_call_option, required_number_of_units)
@@ -635,7 +586,7 @@ class OpportunityExplorer:
             return SUCCESS
 
         logger.info(
-            f"Will not buy {get_option_name(available_cheap_call_option)} since the potential sell price is too low ({self.last_call_option_price})")
+            f"Will not buy {get_option_name(available_cheap_call_option)} since the potential sell price is too low ({self.price_levels_manager.last_option_price['C']})")
         return FAILED
 
     def calculate_required_level(self, required_number_of_units):
@@ -644,9 +595,9 @@ class OpportunityExplorer:
 
     async def try_to_reduce_initial_margin_for_put_options(self, put_option_to_be_sold, required_initial_margin,
                                                            initial_margin_after_sell, put_options):
-        if self.last_put_option_price < MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION:
+        if self.price_levels_manager.last_option_price['P'] < MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION:
             logger.info(
-                f"Will not try to reduce initial margin for put options since the price level of put options is {self.last_put_option_price} while the minimal sell price to close is {MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION}")
+                f"Will not try to reduce initial margin for put options since the price level of put options is {self.price_levels_manager.last_option_price['P']} while the minimal sell price to close is {MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION}")
             return FAILED
 
         strike_finder = StrikeFinder()
@@ -686,13 +637,13 @@ class OpportunityExplorer:
 
         logger.info(
             f"try_to_reduce_initial_margin_for_put_options, required initial margin: {required_initial_margin:.0f}, initial margin after sell: {initial_margin_after_sell:.0f}, "
-            f"initial margin change due to buy: {initial_margin_change:.0f}, option to be sold: {get_option_name(put_option_to_be_sold)}, option to buy: {get_option_name(available_cheap_put_option)}, missing sum: {missing_sum:.0f}, required number of units = {required_number_of_units}, last put price: {self.last_put_option_price}")
+            f"initial margin change due to buy: {initial_margin_change:.0f}, option to be sold: {get_option_name(put_option_to_be_sold)}, option to buy: {get_option_name(available_cheap_put_option)}, missing sum: {missing_sum:.0f}, required number of units = {required_number_of_units}, last put price: {self.price_levels_manager.last_option_price['P']}")
 
         if required_number_of_units < 0:
             logger.error(f"The required number of units is {required_number_of_units}")
             return FAILED
 
-        if self.last_put_option_price * 0.4 > 0.07 * required_number_of_units + 0.02:
+        if self.price_levels_manager.last_option_price['P'] * 0.4 > 0.07 * required_number_of_units + 0.02:
             logger.info(
                 f"Buying {required_number_of_units} units of {get_option_name(available_cheap_put_option)} would relax the required initial margin")
             trade = self.trading_bot.buy_low_cost(available_cheap_put_option, required_number_of_units)
@@ -702,7 +653,7 @@ class OpportunityExplorer:
             return SUCCESS
 
         logger.info(
-            f"Will not buy {get_option_name(available_cheap_put_option)} since the potential sell price is too low ({self.last_put_option_price})")
+            f"Will not buy {get_option_name(available_cheap_put_option)} since the potential sell price is too low ({self.price_levels_manager.last_option_price['P']})")
         return FAILED
 
     async def try_to_resolve_margin_lock(self, candidate_option, missing_sum, minority_fraction):
@@ -730,15 +681,3 @@ class OpportunityExplorer:
 
     def notify_margin_lock_resolution_attempted(self):
         self.last_margin_lock_resolution_attempt_time = time.time()
-
-    def get_last_put_option_price(self):
-        if self.is_last_option_ml_derived['P']:
-            return self.last_ml_derived_put_option_price
-        else:
-            return self.last_put_option_price
-
-    def get_last_call_option_price(self):
-        if self.is_last_option_ml_derived['C']:
-            return self.last_ml_derived_call_option_price
-        else:
-            return self.last_call_option_price

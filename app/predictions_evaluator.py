@@ -17,6 +17,7 @@ from .market_data_fetcher import MarketDataFetcher
 logger = logging.getLogger(__name__)
 
 PREDICTIONS_CSV_PATTERN = f"{PREDICTION_EVALUATION_DIR}/predictions_*.csv"
+ALL_PREDICTIONS_CSV = f"{PREDICTION_EVALUATION_DIR}/predictions.csv"
 PREDICTION_AVERAGES_CSV_PATH = f"{PREDICTION_EVALUATION_DIR}/prediction_averages.csv"
 PERCENTAGE_BUCKETS_DIR = f"{PREDICTION_EVALUATION_DIR}/percentage_buckets"
 PROBABILITY_BUCKETS_CSV_PATH = f"{PERCENTAGE_BUCKETS_DIR}/all/probability_buckets.csv"
@@ -24,23 +25,26 @@ EARLY_TRADE_PROBABILITY_BUCKETS_CSV_PATH = f"{PERCENTAGE_BUCKETS_DIR}/early_trad
 VERY_EARLY_TRADE_PROBABILITY_BUCKETS_CSV_PATH = f"{PERCENTAGE_BUCKETS_DIR}/very_early_trade/probability_buckets.csv"
 QUANTILES_DIR = f"{PREDICTION_EVALUATION_DIR}/quantiles"
 HISTOGRAM_CSV_PATH = f"{QUANTILES_DIR}/all/histogram.csv"
-QUANTILES_CSV_PATH = f"{QUANTILES_DIR}/all/quantiles.csv"
 EARLY_TRADE_HISTOGRAM_CSV_PATH = f"{QUANTILES_DIR}/early_trade/histogram.csv"
-EARLY_TRADE_QUANTILES_CSV_PATH = f"{QUANTILES_DIR}/early_trade/quantiles.csv"
 VERY_EARLY_TRADE_HISTOGRAM_CSV_PATH = f"{QUANTILES_DIR}/very_early_trade/histogram.csv"
-VERY_EARLY_TRADE_QUANTILES_CSV_PATH = f"{QUANTILES_DIR}/very_early_trade/quantiles.csv"
 # Fixed-resolution probability histograms kept in the *HISTOGRAM_CSV_PATH files: one bin per
 # 0.01 percentage point from 0.00% to 100.00% (HISTOGRAM_BINS bins, bin i = probability i / 10000).
 HISTOGRAM_RESOLUTION = 10000
 HISTOGRAM_BINS = HISTOGRAM_RESOLUTION + 1
 HISTOGRAM_COLUMNS = ['probability_pct', 'prediction_count', 'survival_count', 'stop_loss_hit_count', 'weight_sum']
-# After each histogram update, the matching *QUANTILES_CSV_PATH file gets one row per
+# After each histogram update, every division in QUANTILE_DIVISIONS gets its own file next
+# to the histogram, quantiles_<n>.csv (see quantiles_csv_path), with one row per
 # equal-count quantile of all predictions so far in that histogram.
-NUMBER_OF_QUANTILES = 3
+QUANTILE_DIVISIONS = (3, 4)
 QUANTILES_COLUMNS = ['results_date', 'bucket', 'min_probability', 'max_probability', 'mean_predicted',
                      'survival_rate', 'hits', 'samples']
 PROCESS_LOOP_INTERVAL_SECONDS = 300
-BUCKET_LOWER_BOUNDS = [0.6, 0.7, 0.8, 0.9]
+BUCKET_LOWER_BOUNDS = [0, 0.7, 0.8, 0.9]
+
+def quantiles_csv_path(histogram_file, number_of_quantiles):
+    """The quantiles file of one division, in the same folder as its histogram file."""
+    return os.path.join(os.path.dirname(histogram_file), f"quantiles_{number_of_quantiles}.csv")
+
 
 class PredictionsEvaluator:
     """Groups each day's sampled sell-opportunity predictions by (strike, right) once that
@@ -94,6 +98,7 @@ class PredictionsEvaluator:
             averages_logged = await self._process_file(csv_path, expiration_date_str)
             if averages_logged:
                 processed_any_file = True
+                self._append_to_all_predictions(csv_path)
                 os.remove(csv_path)
                 logger.info(f"PredictionsEvaluator: Deleted {csv_path} after processing")
 
@@ -102,6 +107,27 @@ class PredictionsEvaluator:
             # corrections are stale. Imported here: predictor imports this module.
             from .predictor import Predictor
             Predictor().load_calibration_corrections()
+
+    @staticmethod
+    def _append_to_all_predictions(csv_path):
+        """Appends every row of csv_path except its header to ALL_PREDICTIONS_CSV. The
+        lines are copied as they are. When ALL_PREDICTIONS_CSV doesn't exist yet, it is
+        created with csv_path's header line first, so the file has exactly one header."""
+        with open(csv_path, 'r', newline='') as f:
+            lines = f.readlines()
+        if not lines:
+            return
+        header, rows = lines[0], lines[1:]
+        if rows and not rows[-1].endswith('\n'):
+            rows[-1] += '\n'
+
+        is_new_file = not os.path.exists(ALL_PREDICTIONS_CSV)
+        os.makedirs(os.path.dirname(ALL_PREDICTIONS_CSV), exist_ok=True)
+        with open(ALL_PREDICTIONS_CSV, 'a', newline='') as f:
+            if is_new_file:
+                f.write(header if header.endswith('\n') else header + '\n')
+            f.writelines(rows)
+        logger.info(f"PredictionsEvaluator: Appended {len(rows)} row(s) of {csv_path} to {ALL_PREDICTIONS_CSV}")
 
     @staticmethod
     def _extract_expiration_date(csv_path):
@@ -240,11 +266,10 @@ class PredictionsEvaluator:
                           early_closing_bucket_record_counts, early_closing_bucket_hit_counts)
         self._log_buckets(VERY_EARLY_TRADE_PROBABILITY_BUCKETS_CSV_PATH, expiration_date_str,
                           very_early_closing_bucket_record_counts, very_early_closing_bucket_hit_counts)
-        self._update_probability_histogram(HISTOGRAM_CSV_PATH, QUANTILES_CSV_PATH, histogram, expiration_date_str)
-        self._update_probability_histogram(EARLY_TRADE_HISTOGRAM_CSV_PATH, EARLY_TRADE_QUANTILES_CSV_PATH,
-                                           early_trade_histogram, expiration_date_str)
-        self._update_probability_histogram(VERY_EARLY_TRADE_HISTOGRAM_CSV_PATH, VERY_EARLY_TRADE_QUANTILES_CSV_PATH,
-                                           very_early_trade_histogram, expiration_date_str)
+        self._update_probability_histogram(HISTOGRAM_CSV_PATH, histogram, expiration_date_str)
+        self._update_probability_histogram(EARLY_TRADE_HISTOGRAM_CSV_PATH, early_trade_histogram, expiration_date_str)
+        self._update_probability_histogram(VERY_EARLY_TRADE_HISTOGRAM_CSV_PATH, very_early_trade_histogram,
+                                           expiration_date_str)
 
         logger.info(f"PredictionsEvaluator: Processed {csv_path} into {len(grouped)} strike/right group(s); "
                     f"average expected profit over {len(expected_profits)} record(s) = {average_expected_profit:.4f}; "
@@ -288,11 +313,11 @@ class PredictionsEvaluator:
         histogram['weight_sum'][bin_index] += weight
 
     @staticmethod
-    def _update_probability_histogram(histogram_file, quantiles_file, histogram, expiration_date_str):
+    def _update_probability_histogram(histogram_file, histogram, expiration_date_str):
         """Adds this file's histogram to the running one in histogram_file (all
         HISTOGRAM_BINS rows, written to a temporary file first and then swapped in, so a
         crash mid-write can't leave a partial histogram), then logs the running histogram's
-        quantiles to quantiles_file."""
+        quantiles for every division in QUANTILE_DIVISIONS, each to its own file."""
         totals = PredictionsEvaluator._empty_histogram()
         if os.path.exists(histogram_file):
             with open(histogram_file, 'r', newline='') as f:
@@ -317,12 +342,14 @@ class PredictionsEvaluator:
                     f"{int(histogram['prediction_count'].sum())} new prediction(s), "
                     f"{int(totals['prediction_count'].sum())} in total")
 
-        PredictionsEvaluator._log_quantiles(quantiles_file, totals, expiration_date_str)
+        for number_of_quantiles in QUANTILE_DIVISIONS:
+            PredictionsEvaluator._log_quantiles(quantiles_csv_path(histogram_file, number_of_quantiles),
+                                                number_of_quantiles, totals, expiration_date_str)
 
     @staticmethod
-    def _log_quantiles(quantiles_file, totals, expiration_date_str):
+    def _log_quantiles(quantiles_file, number_of_quantiles, totals, expiration_date_str):
         """Splits all predictions in the running histogram, ordered by predicted
-        probability, into NUMBER_OF_QUANTILES groups of (as near as possible) equal size and
+        probability, into number_of_quantiles groups of (as near as possible) equal size and
         appends one row per group to quantiles_file: its probability range, mean
         predicted probability, observed survival rate, stop-loss hits and sample count.
         Bins are never split, so a group holds every prediction of each bin it covers; a bin
@@ -334,7 +361,7 @@ class PredictionsEvaluator:
 
         probabilities = np.arange(HISTOGRAM_BINS) / HISTOGRAM_RESOLUTION
         predictions_before_bin = np.cumsum(counts) - counts
-        group_of_bin = np.minimum(predictions_before_bin * NUMBER_OF_QUANTILES // total_count, NUMBER_OF_QUANTILES - 1)
+        group_of_bin = np.minimum(predictions_before_bin * number_of_quantiles // total_count, number_of_quantiles - 1)
 
         os.makedirs(os.path.dirname(quantiles_file), exist_ok=True)
         write_header = not os.path.exists(quantiles_file)
@@ -342,7 +369,7 @@ class PredictionsEvaluator:
             writer = csv.writer(f, delimiter='\t')
             if write_header:
                 writer.writerow(QUANTILES_COLUMNS)
-            for group in range(NUMBER_OF_QUANTILES):
+            for group in range(number_of_quantiles):
                 in_group = (group_of_bin == group) & (counts > 0)
                 samples = int(counts[in_group].sum())
                 if not samples:
@@ -356,7 +383,7 @@ class PredictionsEvaluator:
                 writer.writerow([expiration_date_str, group + 1, f"{group_probabilities.min():.4f}",
                                  f"{group_probabilities.max():.4f}", f"{mean_predicted:.4f}",
                                  f"{survival_rate:.4f}", hits, samples])
-        logger.info(f"Logged {NUMBER_OF_QUANTILES} quantile(s) of {total_count} prediction(s) to {quantiles_file}")
+        logger.info(f"Logged {number_of_quantiles} quantile(s) of {total_count} prediction(s) to {quantiles_file}")
 
     @staticmethod
     def _log_averages(expiration_date_str, average_expected_profit, average_realized_profit, profit_deviation):

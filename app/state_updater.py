@@ -22,6 +22,7 @@ from .target_delta_calculator import TargetDeltaCalculator
 from .limit_adjuster import LimitAdjuster
 from .trading_bot import TradingBot
 from .opportunity_explorer import OpportunityExplorer
+from .price_levels_manager import PriceLevelsManager
 from .subscription_manager import SubscriptionManager
 from .positions_manager import PositionsManager
 from .option_sampler import OptionSampler
@@ -362,8 +363,10 @@ class StateUpdater:
                 state['daily_profit'] += state['after_hours_profit']
 
         opportunity_explorer = OpportunityExplorer()
-        state['last_put_option_price'] = round(opportunity_explorer.get_last_put_option_price(), 2)
-        state['last_call_option_price'] = round(opportunity_explorer.get_last_call_option_price(), 2)
+        price_levels_manager = PriceLevelsManager()
+        for right, key in (('P', 'last_put_option_price'), ('C', 'last_call_option_price')):
+            price = round(price_levels_manager.get_last_option_price(right), 2)
+            state[key] = f"{price} (ML)" if price_levels_manager.is_last_option_ml_derived[right] else price
         state['call_margin_reduction'] = opportunity_explorer.call_margin_reduction
         state['put_margin_reduction'] = opportunity_explorer.put_margin_reduction
         

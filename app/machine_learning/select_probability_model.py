@@ -58,6 +58,7 @@ from .best_subset import (
     select_one_se_fewest_features, standard_error_from_fold_scores,
 )
 from .probability_transforms import TRANSFORMS, TransformedLinearModel
+from .utilities.plot_model_scores import plot_model_scores
 from .regress_max_ask import (
     CANDIDATE_FEATURE_COLUMNS, CSV_PATH, CV_FOLDS, GROUP_COLUMN, TARGET_COLUMN, ProbabilityClassifier,
 )
@@ -66,6 +67,7 @@ import pandas as pd
 
 MODEL_PATH = "machine_learning/model/best_probability_model.pkl"
 LOG_PATH = "logs/model_selection.log"
+SCORES_PLOT_PATH = "machine_learning/data/model_scores_{right}.png"
 
 logger = logging.getLogger(__name__)
 
@@ -352,6 +354,7 @@ def _select_best_model_distribution(df: pd.DataFrame, right: str,
         "per_transform_best": per_transform_best,
         "logistic_extrapolation_fraction": logistic_extrapolation_fraction,
         "logistic_spread_comparison": logistic_spread_comparison,
+        "all_candidates": all_candidates, "winner_candidate": best,
     }
     return classifier, report
 
@@ -475,6 +478,19 @@ def compare_with_stored(new_classifier, stored_classifier) -> str:
     return f"Model unchanged: {_format_description(new)}"
 
 
+def plot_scores(right: str, report: dict) -> None:
+    """Dot plot of every candidate's CV score for right, coloured by feature count.
+    Only the distribution score methods keep the full candidate list; rss has one
+    candidate per transform, so it gets no plot."""
+    if "all_candidates" not in report:
+        logger.info(f"  No score plot for score method {report['score_method']}")
+        return
+    output_path = SCORES_PLOT_PATH.format(right=right)
+    plot_model_scores(right, report["all_candidates"], report["winner_candidate"],
+                             report["standard_error"], output_path)
+    logger.info(f"  Saved the candidate score plot: {output_path}")
+
+
 def configure_logging():
     """Sends every module's logger.info to both the console and LOG_PATH (overwritten
     each run). The root logger defaults to WARNING, so without this all logger.info
@@ -509,6 +525,7 @@ def main(argv=None):
         classifiers[right], reports[right] = select_best_model_for_side(df, right, args.score_method)
         comparisons[right] = compare_with_stored(classifiers[right], stored_classifiers.get(right))
         logger.info(f"  Compared with the stored model: {comparisons[right]}")
+        plot_scores(right, reports[right])
 
     logger.info("\nModel selection summary:")
     for right, report in reports.items():

@@ -10,6 +10,8 @@ MAX_DEVIATION = 0.1
 MIN_PRICE_THRESHOLD = 1
 # Minimum seconds between two _validate_alt_ticker log lines for the same option.
 ALT_TICKER_LOG_INTERVAL_SECONDS = 1
+# Minimum seconds between two "Checking option" log lines for the same option.
+CHECKING_OPTION_LOG_INTERVAL_SECONDS = 60
 
 
 class FairnessChecker:
@@ -31,6 +33,7 @@ class FairnessChecker:
             self.last_unfair_ask_warning_times = {}
             self.last_no_es_option_log_times = {}
             self.last_alt_ticker_log_times = {}
+            self.last_checking_option_log_times = {}
             self._initialized = True
 
     def load_config(self):
@@ -99,7 +102,9 @@ class FairnessChecker:
 
         deviation = (spx_ask - adjusted_es_ask) / adjusted_es_ask
 
-        if int(time.time() * 10) % 1000 == 0:
+        now = time.time()
+        if now - self.last_checking_option_log_times.get(option.conId, 0) >= CHECKING_OPTION_LOG_INTERVAL_SECONDS:
+            self.last_checking_option_log_times[option.conId] = now
             logger.info(f"Checking option {get_option_name(option)} for unfair ask using {lower_name}/{upper_name}. "
                         f"SPX ask is {spx_ask} and the interpolated ES ask is {adjusted_es_ask:.2f}, "
                         f"the deviation is {deviation:.2f}, SPX premium is {indices_difference:.2f}")

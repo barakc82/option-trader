@@ -259,7 +259,7 @@ class SubscriptionManager:
                 if ticker and ticker.time:
                     age_minutes = (time.time() - ticker.time.timestamp()) / 60
                     if age_minutes > 20:
-                        logger.warning(f"ES ticker {get_es_option_name(es_contract)} last updated {age_minutes:.1f} minutes ago (at {ticker.time})")
+                            logger.warning(f"ES ticker {get_es_option_name(es_contract)} last updated {age_minutes:.1f} minutes ago (at {ticker.time})")
                 elif ticker and time.time() % 1000000:
                     logger.error(f"ES ticker {get_es_option_name(es_contract)} has no time field")
 

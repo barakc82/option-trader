@@ -111,7 +111,7 @@ def check_process_state(process, should_print_health=False):
             logger.error(f"Error analyzing log {latest_log}: {e}")
 
         if timeout_error_count:
-            logger.warning(f"Number of times 'TimeoutError' appeared in the pas hour: {timeout_error_count}")
+            logger.warning(f"Number of times 'TimeoutError' appeared in the past hour: {timeout_error_count}")
 
         if timeout_error_count >= TIMEOUT_ERROR_THRESHOLD:
             raise ExcessiveTimeoutError(

@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 TRANSFORM_NAME = "knn"
 
-N_NEIGHBORS_GRID = [15, 25, 50]
+N_NEIGHBORS_GRID = [25, 50, 100]
 
 KNN_SEARCH_TIME_BUDGET_SEC = SEARCH_TIME_BUDGET_SEC
 

@@ -14,6 +14,7 @@ from .market_data_fetcher import MarketDataFetcher
 from .max_loss_calculator import MaxLossCalculator
 from .opportunity_explorer import OpportunityExplorer
 from .predictor import Predictor
+from .price_levels_manager import PriceLevelsManager
 from .trading_bot import TradingBot
 
 
@@ -269,10 +270,10 @@ class PositionsManager:
                                key=lambda position: position.contract.strike)
         positions_by_right = {'C': call_positions, 'P': put_positions}
 
-        opportunity_explorer = OpportunityExplorer()
+        price_levels_manager = PriceLevelsManager()
         for right in ['C', 'P']:
-            current_price_level = opportunity_explorer.get_last_call_option_price() if right == 'C' else opportunity_explorer.get_last_put_option_price()
-            is_price_level_ml_derived = opportunity_explorer.is_last_option_ml_derived[right]
+            current_price_level = price_levels_manager.get_last_option_price(right)
+            is_price_level_ml_derived = price_levels_manager.is_last_option_ml_derived[right]
             if current_price_level < MINIMAL_SELL_PRICE_TO_CLOSE_POSITION:
                 continue
 
@@ -295,7 +296,7 @@ class PositionsManager:
 
                 quantity = abs(position.position)
                 slots_limit = self.get_available_ml_slots_count(right)
-                if slots_limit > 0:
+                if  slots_limit > 0 and is_price_level_ml_derived:
                     quantity = min(slots_limit, quantity)
                 logger.info(
                     f"Submitting a buy trade for position of {get_option_name(position.contract)}, quantity: {quantity}, bid is {bid}, current price level is {current_price_level}")

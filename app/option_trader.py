@@ -35,7 +35,7 @@ class OptionTrader:
         self.pending_trades_manager = PendingTradesManager()
         
         self.connection_failure_start_time = None
-        self.config = {}
+
 
     async def run(self):
         logger.info("OptionTrader: Starting trading loop...")
@@ -45,7 +45,7 @@ class OptionTrader:
             try:
                 from .option_safeguard import OptionSafeguard
                 safeguard = OptionSafeguard()
-                if time.time() - safeguard.last_run_end_time > SAFEGUARD_MAX_CADENCE:
+                if safeguard.should_guard_positions and time.time() - safeguard.last_run_end_time > SAFEGUARD_MAX_CADENCE:
                     await asyncio.sleep(0)
                     continue
 
