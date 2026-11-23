@@ -6,6 +6,7 @@ import csv
 import json
 from types import SimpleNamespace
 from datetime import datetime
+from ib_insync import Position
 from utilities.utils import get_option_name, new_york_timezone, OPTION_TRADER_CONFIG_PATH, ISRAEL_TIMEZONE, \
     PREDICTION_EVALUATION_DIR, is_switched_to_overnight_trading, is_after_hours, is_five_minutes_before_closing_time
 from utilities.ib_utils import (extract_ask, get_delta, get_delta_for_sell, get_individual_deltas, get_model_gamma,
@@ -14,9 +15,11 @@ from utilities.ib_utils import (extract_ask, get_delta, get_delta_for_sell, get_
 from .limit_adjuster import LimitAdjuster
 from .market_data_fetcher import MarketDataFetcher
 from .max_loss_calculator import MaxLossCalculator
+from .net_worth_calculator import NetWorthCalculator, FOLD_AFTER_MARKET_RISE, FOLD_AFTER_MARKET_DROP
 from .predictor import Predictor
 from .price_estimator import PriceEstimator
 from .target_delta_calculator import TargetDeltaCalculator
+from .trading_bot import TradingBot
 
 
 logger = logging.getLogger(__name__)
@@ -44,6 +47,8 @@ class StrikeFinder:
             self.predictor = Predictor()
             self.price_estimator = PriceEstimator()
             self.limit_adjuster = LimitAdjuster()
+            self.net_worth_calculator = NetWorthCalculator()
+            self.trading_bot = TradingBot()
             self.middle_fetched_block = {'C': [], 'P': []}
             self.edge_fetched_block = {'C': [], 'P': []}
             self.middle_fetched_block_last_update_time = {'C': 0.0, 'P': 0.0}
@@ -95,17 +100,14 @@ class StrikeFinder:
 
     def _scan_block_extremes(self, options_block):
         lowest_delta, highest_delta = 1.0, 0.0
-        highest_delta_option = None
 
         for option in options_block:
             delta = self._resolve_delta_for_sell(option)
             if delta is None: continue
             if delta < lowest_delta: lowest_delta = delta
-            if delta > highest_delta:
-                highest_delta = delta
-                highest_delta_option = option
+            if delta > highest_delta: highest_delta = delta
 
-        return lowest_delta, highest_delta, highest_delta_option
+        return lowest_delta, highest_delta
 
     async def _fetch_edge_block_if_needed(self, options_block, lowest_delta, highest_delta,
                                            strike_to_option, strikes, lower_idx, higher_idx, target_delta, right):
@@ -130,27 +132,63 @@ class StrikeFinder:
 
         return options_block
 
-    def _find_highest_delta_under_target(self, options_block, target_delta):
+    def _find_highest_delta_under_target(self, options_block, target_delta, right, net_liquidation_value):
+        """Returns the option with the highest delta under target_delta whose sale (one contract,
+        on top of the current short options) would keep the net worth after the worst-case market
+        move non-negative, or None if no option qualifies."""
+        current_spx_value = self.market_data_fetcher.get_spx_price()
+        if math.isnan(current_spx_value):
+            logger.error(f"Cannot check the net worth after a market change for {right} options because the "
+                         f"S&P 500 index value is NaN")
+            return None
+        fold_after_market_change = FOLD_AFTER_MARKET_RISE if right == 'C' else FOLD_AFTER_MARKET_DROP
+        short_options = self.trading_bot.get_short_options()
+
         highest_delta_under_target = 0
         best_candidate = None
         for option in options_block:
             delta = self._resolve_delta_for_sell(option)
             if delta is None: continue
 
-            if highest_delta_under_target < delta < target_delta:
-                highest_delta_under_target = delta
-                best_candidate = option
+            if not highest_delta_under_target < delta < target_delta:
+                continue
+
+            potential_portfolio = short_options + [Position(account='', contract=option, position=-1, avgCost=0)]
+            net_worth_after_change = self.net_worth_calculator.calculate_net_worth_after_change(
+                fold_after_market_change, current_spx_value, potential_portfolio, net_liquidation_value)
+            if net_worth_after_change < 0:
+                market_change = "rise" if right == 'C' else "drop"
+                logger.info(f"Skipping {get_option_name(option)} in highest-delta-under-target scan: net worth "
+                            f"after a market {market_change} would be {net_worth_after_change:.2f}")
+                continue
+
+            highest_delta_under_target = delta
+            best_candidate = option
 
         return best_candidate
 
-    def _find_max_expected_profit_option(self, options, right, max_delta=None):
-        """Scans options for the one wit    h the highest expected profit. When max_delta is
+    def _find_max_expected_profit_option(self, options, right, net_liquidation_value, max_delta=None):
+        """Scans options for the one with the highest expected profit. When max_delta is
         given, options whose highest available delta exceeds it (or that have no delta at
-        all) are skipped. Returns a SimpleNamespace describing the best option, or None."""
+        all) are skipped. When net_liquidation_value is given, options that would leave a
+        negative net worth after the worst-case market move (a rise for calls, a drop for
+        puts), counting the current short options plus one contract of the option itself,
+        are skipped as well; when it is None, that check is not made. Returns a
+        SimpleNamespace describing the best option, or None."""
         if not max_delta:
             max_delta = self.max_delta[right]
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss(right)
         atm_iv = self.market_data_fetcher.get_cached_spx_implied_volatility(right)
+
+        should_check_net_worth = net_liquidation_value is not None
+        if should_check_net_worth:
+            current_spx_value = self.market_data_fetcher.get_spx_price()
+            if math.isnan(current_spx_value):
+                logger.error(f"Cannot check the net worth after a market change for {right} options because the "
+                             f"S&P 500 index value is NaN")
+                return None
+            fold_after_market_change = FOLD_AFTER_MARKET_RISE if right == 'C' else FOLD_AFTER_MARKET_DROP
+            short_options = self.trading_bot.get_short_options()
 
         best = None
         for option in options:
@@ -171,13 +209,23 @@ class StrikeFinder:
                                f"{right} option: {e}")
                 continue
 
-            if estimated_sell_price < 0:
+            if estimated_sell_price < 0 or stop_loss_per_option < estimated_sell_price:
                 continue
 
             delta_values = [d for d in (bid_delta, ask_delta, last_delta, model_delta) if d is not None]
             option_max_delta = max(delta_values) if delta_values else None
             if option_max_delta is None or option_max_delta > max_delta:
                 continue
+
+            if should_check_net_worth:
+                potential_portfolio = short_options + [Position(account='', contract=option, position=-1, avgCost=0)]
+                net_worth_after_change = self.net_worth_calculator.calculate_net_worth_after_change(
+                    fold_after_market_change, current_spx_value, potential_portfolio, net_liquidation_value)
+                if net_worth_after_change < 0:
+                    market_change = "rise" if right == 'C' else "drop"
+                    logger.info(f"Skipping {get_option_name(option)} in expected-profit scan: net worth after a "
+                                f"market {market_change} would be {net_worth_after_change:.2f}")
+                    continue
 
             out_of_the_money_probability = self.predictor.predict_out_of_the_money_probability(
                 option, right, estimated_sell_price, stop_loss_per_option,
@@ -219,7 +267,8 @@ class StrikeFinder:
             options += self.edge_fetched_block[right]
 
         max_delta = target_delta * 9
-        best = self._find_max_expected_profit_option(options, right, max_delta=max_delta)
+        best = self._find_max_expected_profit_option(options, right, net_liquidation_value=None,
+                                                     max_delta=max_delta)
         if best is None:
             return
 
@@ -292,12 +341,13 @@ class StrikeFinder:
         assert options
         self.load_config()
         middle_options_block, strike_to_option, strikes, lower_idx, higher_idx = await self._fetch_middle_block(options, right)
-        lowest_delta, highest_delta, _ = self._scan_block_extremes(middle_options_block)
+        lowest_delta, highest_delta = self._scan_block_extremes(middle_options_block)
         edge_options_block = await self._fetch_edge_block_if_needed(
             middle_options_block, lowest_delta, highest_delta, strike_to_option, strikes, lower_idx, higher_idx,
             self.max_delta[right], right)
         options_block = middle_options_block + edge_options_block
-        best = self._find_max_expected_profit_option(options_block, right)
+        net_liquidation_value = await self.net_worth_calculator.account_data.get_net_liquidation_value()
+        best = self._find_max_expected_profit_option(options_block, right, net_liquidation_value)
         return best.option if best else None
 
     async def _get_low_delta_option(self, options, target_delta, right):
@@ -306,23 +356,19 @@ class StrikeFinder:
 
         options_block, strike_to_option, strikes, lower_idx, higher_idx = await self._fetch_middle_block(options, right)
 
-        lowest_delta, highest_delta, highest_delta_option = self._scan_block_extremes(options_block)
+        lowest_delta, highest_delta = self._scan_block_extremes(options_block)
 
         if lowest_delta > highest_delta:
             logger.error(f"No delta data available for {right} options")
             return None
 
-        current_candidate = None
-        if lowest_delta > target_delta:
-            current_candidate = options_block[0] if right == 'P' else options_block[-1]
-        elif highest_delta < target_delta:
-            current_candidate = highest_delta_option
-
         options_block = await self._fetch_edge_block_if_needed(
             options_block, lowest_delta, highest_delta, strike_to_option, strikes, lower_idx, higher_idx,
             target_delta, right)
 
-        current_candidate = self._find_highest_delta_under_target(options_block, target_delta) or current_candidate
+        net_liquidation_value = await self.net_worth_calculator.account_data.get_net_liquidation_value()
+        current_candidate = self._find_highest_delta_under_target(
+            options_block, target_delta, right, net_liquidation_value)
 
         if not current_candidate:
             logger.error(f"No {right} option candidate found")

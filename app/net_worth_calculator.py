@@ -6,7 +6,7 @@ from ib_insync import OrderStatus, Position
 from utilities.utils import *
 
 from .account_data import AccountData
-from .market_data_fetcher import MarketDataFetcher
+from .index_price_manager import IndexPriceManager
 from .trading_bot import TradingBot
 
 FOLD_AFTER_MARKET_RISE = 1 + 0.2
@@ -25,7 +25,7 @@ class NetWorthCalculator:
     def __init__(self):
         if not self._initialized:
             self.account_data = AccountData()
-            self.market_data_fetcher = MarketDataFetcher()
+            self.index_price_manager = IndexPriceManager()
             self.trading_bot = TradingBot()
 
             self._initialized = True
@@ -37,7 +37,7 @@ class NetWorthCalculator:
         if is_expiry_or_day_before and not is_switched_to_overnight_trading():
             return sys.float_info.max
 
-        current_spx_value = self.market_data_fetcher.get_spx_price()
+        current_spx_value = self.index_price_manager.get_spx_price()
         if math.isnan(current_spx_value):
             logger.error(
                 "Cannot calculate max number of options for market rise because the S&P 500 index value is NaN")
@@ -48,7 +48,9 @@ class NetWorthCalculator:
             return sys.float_info.max
 
         positions = self.trading_bot.get_short_options()
-        net_worth_after_rise = await self.calculate_net_worth_after_change(FOLD_AFTER_MARKET_RISE, current_spx_value, positions)
+        net_liquidation_value = await self.account_data.get_net_liquidation_value()
+        net_worth_after_rise = self.calculate_net_worth_after_change(FOLD_AFTER_MARKET_RISE, current_spx_value, positions,
+                                                                     net_liquidation_value)
         if net_worth_after_rise < 0:
             return 0
 
@@ -65,7 +67,7 @@ class NetWorthCalculator:
         if is_expiry_or_day_before and not is_switched_to_overnight_trading():
             return sys.float_info.max
 
-        current_spx_value = self.market_data_fetcher.get_spx_price()
+        current_spx_value = self.index_price_manager.get_spx_price()
         if math.isnan(current_spx_value):
             logger.error(
                 "Cannot calculate max number of options for market drop because the S&P 500 index value is NaN")
@@ -77,8 +79,9 @@ class NetWorthCalculator:
             return sys.float_info.max
 
         positions = self.trading_bot.get_short_options()
-        net_worth_after_drop = await self.calculate_net_worth_after_change(FOLD_AFTER_MARKET_DROP, current_spx_value,
-                                                                      positions)
+        net_liquidation_value = await self.account_data.get_net_liquidation_value()
+        net_worth_after_drop = self.calculate_net_worth_after_change(FOLD_AFTER_MARKET_DROP, current_spx_value,
+                                                                     positions, net_liquidation_value)
         if net_worth_after_drop < 0:
             logger.info(f"Negative net worth in case of a market drop")
             return 0
@@ -86,7 +89,8 @@ class NetWorthCalculator:
         liability_per_contract = (put_option.strike - spx_price_after_drop) * 100
         return math.floor(net_worth_after_drop / liability_per_contract)
 
-    async def calculate_net_worth_after_change(self, fold_after_market_change: float, current_spx_value, positions) -> float:
+    def calculate_net_worth_after_change(self, fold_after_market_change: float, current_spx_value, positions,
+                                         net_liquidation_value: float) -> float:
 
         spx_value_after_market_change = current_spx_value * fold_after_market_change
 
@@ -106,8 +110,7 @@ class NetWorthCalculator:
                 spx_value_after_market_change - position.contract.strike) * 100 * -position.position
             current_total_liability += position_liability
 
-        current_net_liquidation_value = await self.account_data.get_net_liquidation_value()
-        net_liquidation_value_after_change = current_net_liquidation_value * fold_after_market_change
+        net_liquidation_value_after_change = net_liquidation_value * fold_after_market_change
         net_worth_after_change = net_liquidation_value_after_change - current_total_liability
         return net_worth_after_change
 
@@ -115,7 +118,7 @@ class NetWorthCalculator:
         positions = self.trading_bot.get_short_options()
         open_trades = self.trading_bot.get_open_trades()
         today_nyc = datetime.now(new_york_timezone).date()
-        current_spx_value = self.market_data_fetcher.get_spx_price()
+        current_spx_value = self.index_price_manager.get_spx_price()
         if math.isnan(current_spx_value):
             logger.error(
                 "Cannot calculate max number of options for market rise because the S&P 500 index value is NaN")
@@ -136,7 +139,9 @@ class NetWorthCalculator:
             position = Position(account='', contract=call_option, position=open_sell_call_trade.remaining(), avgCost=0)
             potential_portfolio.append(position)
 
-        net_worth_after_rise = await self.calculate_net_worth_after_change(FOLD_AFTER_MARKET_RISE, current_spx_value, potential_portfolio)
+        net_liquidation_value = await self.account_data.get_net_liquidation_value()
+        net_worth_after_rise = self.calculate_net_worth_after_change(FOLD_AFTER_MARKET_RISE, current_spx_value,
+                                                                     potential_portfolio, net_liquidation_value)
         if net_worth_after_rise < 0:
             logger.info(f"Negative net worth in case of a market rise")
             return FAILED
@@ -157,7 +162,8 @@ class NetWorthCalculator:
             position = Position(account='', contract=put_option, position=open_sell_put_trade.remaining(), avgCost=0)
             potential_portfolio.append(position)
 
-        net_worth_after_drop = await self.calculate_net_worth_after_change(FOLD_AFTER_MARKET_DROP, current_spx_value, potential_portfolio)
+        net_worth_after_drop = self.calculate_net_worth_after_change(FOLD_AFTER_MARKET_DROP, current_spx_value,
+                                                                     potential_portfolio, net_liquidation_value)
         if net_worth_after_drop < 0:
             logger.info(f"Negative net worth in case of a market drop")
             return FAILED
