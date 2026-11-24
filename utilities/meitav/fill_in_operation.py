@@ -123,6 +123,9 @@ def extract_bid_ask_value(cell_index: int, driver, table_type: str) -> int:
             rows = table_container_div.find_elements(By.XPATH, ".//div[@role='row']")
             best_data_row = rows[1]
             first_grandchild = best_data_row.find_element(By.XPATH, f"(./*[{cell_index}]/*)[1]")
-            return int(first_grandchild.text.replace(',', ''))
+            bid_ask_string = first_grandchild.text
+            if len(bid_ask_string.strip()) == 0:
+                return 0
+            return int(bid_ask_string.replace(',', ''))
         except ValueError:
             time.sleep(0.5)

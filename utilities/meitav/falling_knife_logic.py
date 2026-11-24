@@ -1,11 +1,14 @@
 import math
 import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 BOTTOM = 695
 TOP = 9281
 FEE_RATE = 0.0025 * 3
+# find_next_transfer_price skips prices whose required transfer is below this sum.
+MIN_TRANSFER_IN_SHEKELS = 1000
 
 class FallingKnifeCalculator:
     def __init__(self, leveraged_quantity, current_leveraged_price, base_etfs_data, cash, person_data, should_decrease_base=True):
@@ -45,7 +48,7 @@ class FallingKnifeCalculator:
         base_share = new_base_sum_in_shekels / total_in_shekels
         
         status = (leveraged_price - BOTTOM) / (TOP - BOTTOM)
-        required_leveraged_share = self.min_leveraged_share + (self.max_leveraged_share - self.min_leveraged_share) * (1 - status)
+        required_leveraged_share = self.calculate_required_leveraged_share(status)
         print(f"Required leveraged share: {required_leveraged_share:.3f}, Leveraged share: {leveraged_share:.3f}, total in shekels: {total_in_shekels:.0f}")
         required_transfer = (required_leveraged_share - leveraged_share) * total_in_shekels
 
@@ -62,47 +65,46 @@ class FallingKnifeCalculator:
             "required_transfer": required_transfer
         }
 
-    def _portfolio_after_rebalancing(self):
-        """Simulate buying 1000 NIS at a time at the current price until rebalanced.
-        Returns (leveraged_quantity, cash) reflecting all simulated purchases."""
-        leveraged_quantity, cash = self.leveraged_quantity, self.cash
-        person_data = {'max_leveraged_share': self.max_leveraged_share, 'min_leveraged_share': self.min_leveraged_share}
-        while cash >= 1000:
-            temp = FallingKnifeCalculator(leveraged_quantity, self.current_leveraged_price,
-                                          self.base_etfs_data, cash, person_data, self.should_decrease_base)
-            if temp.calculate_at_price(self.current_leveraged_price)['required_transfer'] <= 1000:
-                break
-            leveraged_quantity += 100000 / self.current_leveraged_price  # 1000 NIS / (price in agorot)
-            cash -= 1000
-        return leveraged_quantity, cash
+    def calculate_required_leveraged_share(self, status: Any) -> Any:
+        return self.min_leveraged_share + (self.max_leveraged_share - self.min_leveraged_share) * (1 - status)
 
     def find_next_transfer_price(self):
-        """Searches for the next lower price at which a transfer of 1000 NIS will be required."""
-        current_result = self.calculate_at_price(self.current_leveraged_price)
+        """Returns (price, result) for the highest leveraged price, at or below the current
+        one (in agorot), at which the leveraged share of the portfolio is lower than its
+        required share by at least MIN_TRANSFER_IN_SHEKELS, along with calculate_at_price's
+        result at that price. Prices where the shortfall is smaller are skipped. When the
+        shortfall at the current price is already big enough, that's the current price.
 
-        required_transfer = current_result['required_transfer']
-        if current_result['required_transfer'] > 1000:
-            print(f"The required transfer is more than 1000 NIS: {required_transfer:.2f}")
-            qty, cash = self._portfolio_after_rebalancing()
-            person_data = {'max_leveraged_share': self.max_leveraged_share, 'min_leveraged_share': self.min_leveraged_share}
-            search_calc = FallingKnifeCalculator(qty, self.current_leveraged_price,
-                                                 self.base_etfs_data, cash, person_data, self.should_decrease_base)
-        else:
-            print(f"Considering the current price of {self.current_leveraged_price}, the required transfer is less than "
-                  f"1000 NIS ({required_transfer}:.2f)")
-            search_calc = self
+        As the price falls, the leveraged share falls and the required share rises, so the
+        search walks down one agora at a time from the current price and stops at the
+        first price that qualifies."""
+        for price in range(self.current_leveraged_price, 0, -1):
+            result = self.calculate_at_price(price)
+            if (result['leveraged_share'] < result['required_leveraged_share']
+                    and result['required_transfer'] >= MIN_TRANSFER_IN_SHEKELS):
+                return price, result
 
-        for price in range(self.current_leveraged_price - 1, 0, -1):
-            result = search_calc.calculate_at_price(price)
-            if result['required_transfer'] > 1000:
-                return result['leveraged_price'], result
-
-        return self.current_leveraged_price, current_result
+        raise ValueError(f"The required transfer doesn't reach {MIN_TRANSFER_IN_SHEKELS} NIS at any price at or "
+                         f"below {self.current_leveraged_price}")
 
     @staticmethod
-    def calculate_units(target_price):
-        """Number of units that 1000 NIS buys at target_price (in agorot), rounded up."""
-        return math.ceil(100000 / target_price) if target_price > 0 else 0
+    def calculate_units(result, cash):
+        """Number of units that the required transfer of result (in NIS, as returned by
+        calculate_at_price) buys at its leveraged price (in agorot). The transfer is capped
+        at cash (in NIS): the required transfer is rounded up to whole units, but never to
+        more units than cash buys. 0 when no transfer is required."""
+        price = result['leveraged_price']
+        required_transfer = result['required_transfer']
+        if price <= 0 or required_transfer <= 0:
+            return 0
+        required_units = math.ceil(required_transfer * 100 / price)
+        affordable_units = math.floor(cash * 100 / price)
+        print(f"barak: available cash: {cash}")
+        if required_units > affordable_units:
+            print(f"The required transfer of {required_transfer:.2f} NIS is more than the cash of "
+                  f"{cash:.2f} NIS allows, capping it at {affordable_units} units")
+            return affordable_units
+        return required_units
 
     def print_summary(self, target_price, result, units):
         """Utility to print the simulation results in a standardized format."""

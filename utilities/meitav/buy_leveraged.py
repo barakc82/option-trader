@@ -30,11 +30,12 @@ def main(user, program_type):
 
         open_operation_window(driver, operation_type='buy', security_id=1144708, target_date=target_date)
         bid, ask = find_current_bid_ask(driver, operation_type='buy')
-        best_price_estimate = (bid + ask) / 2
+        if bid and ask:
+            best_price_estimate = (bid + ask) / 2
 
-        holdings = status['holdings']
-        ta35_3x_holding = holdings[1144708]
-        ta35_3x_holding['last_price'] = best_price_estimate
+            holdings = status['holdings']
+            ta35_3x_holding = holdings[1144708]
+            ta35_3x_holding['last_price'] = best_price_estimate
 
         # price, units = calculate_next_buy(user, program_type)
         price, units = calculate_next_buy2(status, ask)

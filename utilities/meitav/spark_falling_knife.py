@@ -43,7 +43,7 @@ def calculate_next_buy2(status, ask):
     )
     
     target_price, result = calculator.find_next_transfer_price()
-    units = calculator.calculate_units(target_price)
+    units = calculator.calculate_units(result, cash)
     calculator.print_summary(target_price, result, units)
     if target_price > ask:
         print(f"Warning: the target price {target_price} is greater than the ask value {ask}")
