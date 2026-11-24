@@ -57,8 +57,11 @@ def decile_table(p: np.ndarray, survived: np.ndarray) -> pd.DataFrame:
     rate = table["survival_rate"]
     centre = (rate + z ** 2 / (2 * n)) / (1 + z ** 2 / n)
     half_width = z * np.sqrt(rate * (1 - rate) / n + z ** 2 / (4 * n ** 2)) / (1 + z ** 2 / n)
-    table["ci_low"] = centre - half_width
-    table["ci_high"] = centre + half_width
+    # The interval always contains the rate, but at rate 0 or 1 rounding can put an edge
+    # ~1e-16 on the wrong side of it, which would make draw_panel's yerr negative
+    # (matplotlib rejects that), so clamp the edges around the rate and into [0, 1].
+    table["ci_low"] = np.minimum(centre - half_width, rate).clip(lower=0.0)
+    table["ci_high"] = np.maximum(centre + half_width, rate).clip(upper=1.0)
     return table.reset_index(drop=True)
 
 

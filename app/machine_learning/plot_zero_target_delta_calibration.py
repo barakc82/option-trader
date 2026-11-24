@@ -21,6 +21,7 @@ Run from the repo root:
     .venv/Scripts/python.exe -m app.machine_learning.plot_zero_target_delta_calibration
 """
 import pickle
+from datetime import date
 from pathlib import Path
 
 import matplotlib
@@ -38,6 +39,7 @@ from app.machine_learning.select_probability_model import MODEL_PATH
 from app.machine_learning.survival_scoring import STOP_COLUMN, compute_survival_label
 
 TARGET_DELTA_COLUMN = "target_delta"
+DATETIME_COLUMN = "datetime"
 RIGHTS = ["C", "P"]
 RIGHT_NAMES = {"C": "Calls", "P": "Puts"}
 
@@ -61,11 +63,18 @@ GRIDLINE = "#e1e0d9"
 BASELINE = "#c3c2b7"
 
 
-def load_zero_target_delta_predictions() -> pd.DataFrame:
+def load_zero_target_delta_predictions(starting_from: date | None = None) -> pd.DataFrame:
     """One row per zero-target-delta trade the model can score: its right, predicted
-    probability of not hitting the stop loss, and whether it actually did not hit it."""
+    probability of not hitting the stop loss, and whether it actually did not hit it.
+    When starting_from is given, trades recorded before that date (by the date of their
+    DATETIME_COLUMN, as written in the file) are ignored."""
     df = pd.read_csv(CSV_PATH)
     df = df[df[TARGET_DELTA_COLUMN] == 0]
+    if starting_from is not None:
+        trade_dates = pd.to_datetime(df[DATETIME_COLUMN]).dt.date
+        ignored = int((trade_dates < starting_from).sum())
+        df = df[trade_dates >= starting_from]
+        print(f"Considering trades from {starting_from} onwards ({ignored} earlier trade(s) ignored)")
     with open(MODEL_PATH, "rb") as f:
         classifiers = pickle.load(f)
 
@@ -118,7 +127,10 @@ def wilson_interval(rate: float, n: int, z: float = 1.96) -> tuple[float, float]
         return np.nan, np.nan
     centre = (rate + z ** 2 / (2 * n)) / (1 + z ** 2 / n)
     half_width = z * np.sqrt(rate * (1 - rate) / n + z ** 2 / (4 * n ** 2)) / (1 + z ** 2 / n)
-    return centre - half_width, centre + half_width
+    # The interval always contains rate, but at rate 0 or 1 rounding can put an edge ~1e-16
+    # on the wrong side of it, which would make draw_panel's yerr negative (matplotlib
+    # rejects that), so clamp the edges around rate and into [0, 1].
+    return max(0.0, min(centre - half_width, rate)), min(1.0, max(centre + half_width, rate))
 
 
 def draw_panel(ax, table: pd.DataFrame, title: str):
@@ -154,7 +166,12 @@ def draw_panel(ax, table: pd.DataFrame, title: str):
 
 
 def main():
-    predictions = load_zero_target_delta_predictions()
+    # Only trades recorded on this date or later are considered; earlier ones are ignored.
+    # None considers every trade. E.g. starting_from = date(2026, 11, 1)
+    # starting_from = None
+    starting_from = date(2026, 11, 17)
+
+    predictions = load_zero_target_delta_predictions(starting_from)
     if predictions.empty:
         print("No trades with a target delta of exactly zero could be scored")
         return
@@ -176,8 +193,9 @@ def main():
                         bbox_to_anchor=(0.5, 1.0))
     for text in legend.get_texts():
         text.set_color(PRIMARY_INK)
-    fig.suptitle("Trades with a target delta of zero: predicted vs. realized probability of not hitting the stop loss",
-                 color=PRIMARY_INK, fontsize=13, y=1.06)
+    since = f" since {starting_from}" if starting_from is not None else ""
+    fig.suptitle(f"Trades with a target delta of zero{since}: predicted vs. realized probability of not hitting "
+                 f"the stop loss", color=PRIMARY_INK, fontsize=13, y=1.06)
 
     fig.tight_layout()
     Path(OUTPUT_PATH).parent.mkdir(parents=True, exist_ok=True)
