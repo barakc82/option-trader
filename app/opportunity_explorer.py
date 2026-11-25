@@ -20,6 +20,8 @@ from .trading_bot import TradingBot
 
 TIME_UNTIL_NEXT_SELL_CHECK = 120
 MINIMAL_SELL_PRICE_FOR_GENERAL_MARGIN_REDUCTION = MINIMAL_SELL_PRICE + 0.1
+# How many of the latest candidate progress entries are kept per right.
+MAX_CANDIDATE_PROGRESS_ENTRIES = 3
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +66,9 @@ class OpportunityExplorer:
             self.last_call_margin_reduction_record_time = 0
             self.last_put_margin_reduction_record_time = 0
             self.last_margin_lock_resolution_attempt_time = 0
+            # Per right, the latest entries (oldest first) monitoring the progress of the
+            # candidate options for selling; written to the state file by StateUpdater.
+            self.candidate_progress = {'C': [], 'P': []}
 
             # Dynamic config fields
             self.should_write_options_overnight = True
@@ -174,6 +179,7 @@ class OpportunityExplorer:
         call_option, is_ml_derived, slots_limit = await self.find_call_candidate(call_options, target_delta)
         if not call_option:
             return SellOptionResult()
+        self.add_candidate_progress_entry('C', f"Checking candidate option {get_option_name(call_option)}")
 
         estimated_sell_price = self.price_estimator.estimate_sell_price(call_option)
         if estimated_sell_price < 0:
@@ -311,6 +317,13 @@ class OpportunityExplorer:
             logger.warning(f"Failed to sell {get_option_name(call_option)} due to projected exposure fee")
         return max_options
 
+    def add_candidate_progress_entry(self, right, title):
+        """Appends an entry to right's candidate progress list, keeping only the latest
+        MAX_CANDIDATE_PROGRESS_ENTRIES entries."""
+        entries = self.candidate_progress[right]
+        entries.append({'title': title})
+        del entries[:-MAX_CANDIDATE_PROGRESS_ENTRIES]
+
     def try_to_publish_available_cheap_option(self, right):
         strike_finder = StrikeFinder()
         available_cheap_option = strike_finder.find_first_cheap_option(right)
@@ -370,6 +383,7 @@ class OpportunityExplorer:
         put_option, is_ml_derived, slots_limit = await self.find_put_candidate(put_options, target_delta)
         if not put_option:
             return SellOptionResult()
+        self.add_candidate_progress_entry('P', f"Checking candidate option {get_option_name(put_option)}")
 
         estimated_sell_price = self.price_estimator.estimate_sell_price(put_option)
         if estimated_sell_price < 0:

@@ -369,6 +369,8 @@ class StateUpdater:
             state[key] = f"{price} (ML)" if price_levels_manager.is_last_option_ml_derived[right] else price
         state['call_margin_reduction'] = opportunity_explorer.call_margin_reduction
         state['put_margin_reduction'] = opportunity_explorer.put_margin_reduction
+        # Two lists, calls first and puts second, monitoring the progress of the candidate options for selling.
+        state['candidate_progress'] = [list(opportunity_explorer.candidate_progress[right]) for right in ('C', 'P')]
         
         is_reg_hours = is_regular_hours()
         if is_reg_hours:
