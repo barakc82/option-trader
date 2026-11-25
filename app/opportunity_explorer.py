@@ -26,6 +26,11 @@ MAX_CANDIDATE_PROGRESS_ENTRIES = 3
 logger = logging.getLogger(__name__)
 
 
+def candidate_progress_timestamp():
+    """The time of a candidate progress entry or log entry: Israel time, e.g. 25/11/26 17:03:42."""
+    return datetime.now(ISRAEL_TIMEZONE).strftime('%d/%m/%y %H:%M:%S')
+
+
 def find_all_buy_trades(option, open_buy_trades):
     buy_trades_for_position = []
     for open_buy_trade in open_buy_trades:
@@ -69,6 +74,9 @@ class OpportunityExplorer:
             # Per right, the latest entries (oldest first) monitoring the progress of the
             # candidate options for selling; written to the state file by StateUpdater.
             self.candidate_progress = {'C': [], 'P': []}
+            # Per right, the most recent entry of candidate_progress[right] (None until the
+            # first one); its log gets an entry every time that candidate fails.
+            self.current_candidate_entry = {'C': None, 'P': None}
 
             # Dynamic config fields
             self.should_write_options_overnight = True
@@ -183,15 +191,16 @@ class OpportunityExplorer:
 
         estimated_sell_price = self.price_estimator.estimate_sell_price(call_option)
         if estimated_sell_price < 0:
-            logger.error("Failed to estimate selling price")
+            self.report_candidate_failure('C', f"Failed to estimate the selling price of {get_option_name(call_option)}",
+                                          logging.ERROR)
             return SellOptionResult()
         self.price_levels_manager.update_last_option_price(estimated_sell_price, 'C', is_ml_derived)
 
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss('C')
         if stop_loss_per_option < estimated_sell_price:
-            logger.warning(
-                f"Failed to sell {get_option_name(call_option)} since the acceptable loss ({stop_loss_per_option:2f})"
-                f" is smaller than the option price ({estimated_sell_price})")
+            self.report_candidate_failure(
+                'C', f"Failed to sell {get_option_name(call_option)} since the acceptable loss ({stop_loss_per_option:2f})"
+                     f" is smaller than the option price ({estimated_sell_price})")
             return SellOptionResult()
 
         max_options_for_market_rise = await self.calculate_max_allowed_call_options(call_option)
@@ -246,12 +255,12 @@ class OpportunityExplorer:
         if sell_option_result.success:
             return sell_option_result
 
-        logger.warning(f"Failed to sell {quantity} options of {get_option_name(call_option)}")
+        self.report_candidate_failure('C', f"Failed to sell {quantity} options of {get_option_name(call_option)}")
         if quantity == 2:
             logger.info(f"Testing sell 1 option of {get_option_name(call_option)}")
             sell_option_result = await self.try_to_sell(call_option, 1, position_initial_state)
             if not sell_option_result.success:
-                logger.warning(f"Failed to sell 1 options of {get_option_name(call_option)}")
+                self.report_candidate_failure('C', f"Failed to sell 1 option of {get_option_name(call_option)}")
 
         await self.handle_call_sell_failure(call_option, sell_option_result, call_options, open_trades)
         self.no_call_options_above_minimal_sell_price = sell_option_result.no_option_above_minimal_sell_price
@@ -314,15 +323,27 @@ class OpportunityExplorer:
         logger.info(f"Testing sell capacity for {get_option_name(call_option)}")
         max_options = await self.net_worth_calculator.calculate_max_options_for_market_rise(call_option)
         if not max_options:
-            logger.warning(f"Failed to sell {get_option_name(call_option)} due to projected exposure fee")
+            self.report_candidate_failure('C', f"Failed to sell {get_option_name(call_option)} due to projected exposure fee")
         return max_options
 
     def add_candidate_progress_entry(self, right, title):
         """Appends an entry to right's candidate progress list, keeping only the latest
-        MAX_CANDIDATE_PROGRESS_ENTRIES entries."""
+        MAX_CANDIDATE_PROGRESS_ENTRIES entries, and makes it right's current candidate entry.
+        Each entry has its title, the time it was added and a log of the candidate's failures
+        (see report_candidate_failure)."""
+        entry = {'title': title, 'timestamp': candidate_progress_timestamp(), 'log': []}
         entries = self.candidate_progress[right]
-        entries.append({'title': title})
+        entries.append(entry)
         del entries[:-MAX_CANDIDATE_PROGRESS_ENTRIES]
+        self.current_candidate_entry[right] = entry
+
+    def report_candidate_failure(self, right, text, log_level=logging.WARNING):
+        """Logs text and appends it, with its time, to the log of right's current candidate
+        entry."""
+        logger.log(log_level, text)
+        entry = self.current_candidate_entry[right]
+        if entry is not None:
+            entry['log'].append({'timestamp': candidate_progress_timestamp(), 'text': text})
 
     def try_to_publish_available_cheap_option(self, right):
         strike_finder = StrikeFinder()
@@ -342,8 +363,9 @@ class OpportunityExplorer:
         target_delta = position_initial_state.target_delta
         delta = get_delta_for_sell(option.ticker)
         if delta > target_delta and not position_initial_state.is_ml_derived:
-            logger.warning(f"Failed to sell {get_option_name(option)} since the delta has risen to {delta:.3f}, "
-                           f"beyond the target delta of {target_delta:.3f}")
+            self.report_candidate_failure(option.right, f"Failed to sell {get_option_name(option)} since the delta "
+                                                        f"has risen to {delta:.3f}, beyond the target delta of "
+                                                        f"{target_delta:.3f}")
             result = SellOptionResult()
             result.success = False
             return result
@@ -387,14 +409,16 @@ class OpportunityExplorer:
 
         estimated_sell_price = self.price_estimator.estimate_sell_price(put_option)
         if estimated_sell_price < 0:
-            logger.error("Failed to estimate selling price")
+            self.report_candidate_failure('P', f"Failed to estimate the selling price of {get_option_name(put_option)}",
+                                          logging.ERROR)
             return SellOptionResult()
         self.price_levels_manager.update_last_option_price(estimated_sell_price, 'P', is_ml_derived)
 
         stop_loss_per_option = self.max_loss_calculator.calculate_max_loss('P')
         if stop_loss_per_option < estimated_sell_price:
-            logger.warning(
-                f"Failed to sell {get_option_name(put_option)} since the acceptable loss ({stop_loss_per_option}) is smaller than the option price ({estimated_sell_price})")
+            self.report_candidate_failure(
+                'P', f"Failed to sell {get_option_name(put_option)} since the acceptable loss ({stop_loss_per_option}) "
+                     f"is smaller than the option price ({estimated_sell_price})")
             return SellOptionResult()
 
         max_options_for_market_drop = await self.calculate_max_allowed_put_options(put_option)
@@ -448,13 +472,13 @@ class OpportunityExplorer:
         if sell_option_result.success:
             return sell_option_result
 
-        logger.warning(f"Failed to sell {quantity} options of {get_option_name(put_option)}")
+        self.report_candidate_failure('P', f"Failed to sell {quantity} options of {get_option_name(put_option)}")
         if quantity == 2:
             logger.info(f"Testing sell 1 option of {get_option_name(put_option)}")
             sell_option_result = await self.try_to_sell(put_option, 1, position_initial_state)
             if sell_option_result.success:
                 return sell_option_result
-            logger.warning(f"Failed to sell 1 options of {get_option_name(put_option)}")
+            self.report_candidate_failure('P', f"Failed to sell 1 option of {get_option_name(put_option)}")
 
         await self.handle_put_sell_failure(put_option, sell_option_result, put_options, open_trades)
         if sell_option_result.no_option_above_minimal_sell_price:
@@ -487,7 +511,7 @@ class OpportunityExplorer:
         logger.info(f"Testing sell capacity for {get_option_name(put_option)}")
         max_options = await self.net_worth_calculator.calculate_max_options_for_market_drop(put_option)
         if not max_options:
-            logger.warning(f"Failed to sell {get_option_name(put_option)} due to projected exposure fee")
+            self.report_candidate_failure('P', f"Failed to sell {get_option_name(put_option)} due to projected exposure fee")
         return max_options
 
     async def handle_put_sell_failure(self, put_option, sell_option_result, put_options, open_trades):
