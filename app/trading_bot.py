@@ -266,6 +266,21 @@ class TradingBot:
 
         return float(order_state.initMarginChange)
 
+    async def get_new_excess_liquidity(self, option, quantity, limit=0.05, action='BUY'):
+        """The excess liquidity after an action ('BUY' or 'SELL') limit order, per its what-if
+        order state: equityWithLoanAfter - maintMarginAfter. 0 when the response has no real
+        data (the market is probably closed)."""
+        order = LimitOrder(action, quantity, limit, whatIf=True, account=MY_ACCOUNT,
+                           usePriceMgmtAlgo=False, outsideRth=True, tif='GTC')
+        order_state = await self.ib.whatIfOrderAsync(option, order)
+
+        equity_with_loan_after = float(order_state.equityWithLoanAfter)
+        if equity_with_loan_after == sys.float_info.max:
+            logger.error(f"Response has no real data, the market is probably closed")
+            return 0
+
+        return equity_with_loan_after - float(order_state.maintMarginAfter)
+
     async def modify_limit_order(self, limit_buy_trade, raw_limit):
         limit_price = self.limit_adjuster.adjust_limit_to_market_rules(raw_limit)
         if limit_price == limit_buy_trade.order.lmtPrice:

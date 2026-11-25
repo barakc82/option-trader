@@ -138,6 +138,25 @@ class PendingTradesManager:
                     f"Cancelling sell of {get_option_name(trade_to_cancel.contract)} because if all the trades get filled they will lead to exposure fee")
                 self.trading_bot.cancel_trade(open_sell_trade)
 
+        logger.info("Checking for collective excessive sell trades leading to negative excess liquidity")
+        for right in ('C', 'P'):
+            right_sell_trades = [trade for trade in open_sell_trades if trade.contract.right == right]
+            if not right_sell_trades:
+                continue
+            # The most extreme trade is the one closest to the money: the lowest call strike,
+            # the highest put strike.
+            extreme_trade = (min if right == 'C' else max)(right_sell_trades, key=lambda trade: trade.contract.strike)
+            new_excess_liquidity = await self.trading_bot.get_new_excess_liquidity(
+                extreme_trade.contract, len(right_sell_trades), extreme_trade.order.lmtPrice, action='SELL')
+            logger.info(f"Excess liquidity after selling {len(right_sell_trades)} option(s) of the most extreme "
+                        f"{right} sell trade, {get_option_name(extreme_trade.contract)} at "
+                        f"{extreme_trade.order.lmtPrice}: {new_excess_liquidity:.2f}")
+            if new_excess_liquidity < 0:
+                logger.info(f"Cancelling sell of {get_option_name(extreme_trade.contract)} because if all the {right} "
+                            f"sell trades get filled the excess liquidity will be negative "
+                            f"({new_excess_liquidity:.2f})")
+                self.trading_bot.cancel_trade(extreme_trade)
+
         logger.info("Checking for excessive buy-limit trades")
         buy_limit_trades = [trade for trade in open_trades if
                             trade.order.orderType == 'LMT' and trade.order.action.upper() == 'BUY']
