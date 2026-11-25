@@ -40,10 +40,44 @@ QUANTILES_COLUMNS = ['results_date', 'bucket', 'min_probability', 'max_probabili
                      'survival_rate', 'hits', 'samples']
 PROCESS_LOOP_INTERVAL_SECONDS = 300
 BUCKET_LOWER_BOUNDS = [0, 0.7, 0.8, 0.9]
+# Columns _append_to_all_predictions adds to every row of ALL_PREDICTIONS_CSV: the
+# expiration the record was evaluated for, and whether its stop loss was hit (True/False;
+# blank when the record could not be evaluated, e.g. no bars were found for its option).
+EXPIRATION_DATE_COLUMN = 'expiration_date'
+HIT_STOP_LOSS_COLUMN = 'hit_stop_loss'
 
 def quantiles_csv_path(histogram_file, number_of_quantiles):
     """The quantiles file of one division, in the same folder as its histogram file."""
     return os.path.join(os.path.dirname(histogram_file), f"quantiles_{number_of_quantiles}.csv")
+
+
+def aggregated_bucket_columns():
+    """The columns of an aggregated buckets file after results_date: one per
+    BUCKET_LOWER_BOUNDS bucket (e.g. '70-80%'), then distance."""
+    upper_bounds = BUCKET_LOWER_BOUNDS[1:] + [1.0]
+    return [f"{round(lower * 100)}-{round(upper * 100)}%"
+            for lower, upper in zip(BUCKET_LOWER_BOUNDS, upper_bounds)] + ['distance']
+
+
+def aggregated_bucket_values(total_record_counts, total_not_hit_counts):
+    """The aggregated_bucket_columns values for pooled per-bucket record and not-hit
+    counts: each bucket's not-hit-stop-loss probability (blank when it has no records),
+    then the distance -- how far each bucket's probability falls outside the bucket's own
+    [lower, upper] range (0 when inside it), summed over the non-empty buckets."""
+    upper_bounds = BUCKET_LOWER_BOUNDS[1:] + [1.0]
+    not_hit_probabilities = [
+        round(not_hit_count / record_count, 3) if record_count else ''
+        for record_count, not_hit_count in zip(total_record_counts, total_not_hit_counts)
+    ]
+    distance = 0.0
+    for lower, upper, probability in zip(BUCKET_LOWER_BOUNDS, upper_bounds, not_hit_probabilities):
+        if probability == '':
+            continue
+        if probability < lower:
+            distance += lower - probability
+        elif probability > upper:
+            distance += probability - upper
+    return not_hit_probabilities + [round(distance, 3)]
 
 
 class PredictionsEvaluator:
@@ -95,10 +129,10 @@ class PredictionsEvaluator:
             if now_nyc <= regular_hours_end:
                 continue
 
-            averages_logged = await self._process_file(csv_path, expiration_date_str)
-            if averages_logged:
+            evaluated_rows = await self._process_file(csv_path, expiration_date_str)
+            if evaluated_rows is not None:
                 processed_any_file = True
-                self._append_to_all_predictions(csv_path)
+                self._append_to_all_predictions(csv_path, evaluated_rows, expiration_date_str)
                 os.remove(csv_path)
                 logger.info(f"PredictionsEvaluator: Deleted {csv_path} after processing")
 
@@ -109,25 +143,60 @@ class PredictionsEvaluator:
             Predictor().load_calibration_corrections()
 
     @staticmethod
-    def _append_to_all_predictions(csv_path):
-        """Appends every row of csv_path except its header to ALL_PREDICTIONS_CSV. The
-        lines are copied as they are. When ALL_PREDICTIONS_CSV doesn't exist yet, it is
-        created with csv_path's header line first, so the file has exactly one header."""
-        with open(csv_path, 'r', newline='') as f:
-            lines = f.readlines()
-        if not lines:
-            return
-        header, rows = lines[0], lines[1:]
-        if rows and not rows[-1].endswith('\n'):
-            rows[-1] += '\n'
+    def _append_to_all_predictions(csv_path, evaluated_rows, expiration_date_str):
+        """Appends evaluated_rows (every row of csv_path, in file order, as _process_file
+        returned them) to ALL_PREDICTIONS_CSV with csv_path's columns plus
+        EXPIRATION_DATE_COLUMN and HIT_STOP_LOSS_COLUMN, so that the whole evaluation can be
+        rebuilt from that one file (utilities/rebuild_prediction_evaluation.py).
 
-        is_new_file = not os.path.exists(ALL_PREDICTIONS_CSV)
+        When ALL_PREDICTIONS_CSV doesn't exist yet, it is created with a header first. When
+        its header lacks some of these columns (it was written before they were added), it
+        is rewritten first with the missing columns added, blank in its existing rows."""
+        with open(csv_path, 'r', newline='') as f:
+            file_columns = next(csv.reader(f, delimiter='\t'), [])
+        if not file_columns:
+            return
+        columns = file_columns + [c for c in (EXPIRATION_DATE_COLUMN, HIT_STOP_LOSS_COLUMN) if c not in file_columns]
+
         os.makedirs(os.path.dirname(ALL_PREDICTIONS_CSV), exist_ok=True)
+        write_header = not os.path.exists(ALL_PREDICTIONS_CSV)
+        if not write_header:
+            columns = PredictionsEvaluator._extend_all_predictions_columns(columns)
+
         with open(ALL_PREDICTIONS_CSV, 'a', newline='') as f:
-            if is_new_file:
-                f.write(header if header.endswith('\n') else header + '\n')
-            f.writelines(rows)
-        logger.info(f"PredictionsEvaluator: Appended {len(rows)} row(s) of {csv_path} to {ALL_PREDICTIONS_CSV}")
+            writer = csv.DictWriter(f, fieldnames=columns, delimiter='\t', restval='', extrasaction='ignore')
+            if write_header:
+                writer.writeheader()
+            for row in evaluated_rows:
+                hit_stop_loss = row.get(HIT_STOP_LOSS_COLUMN)
+                writer.writerow({**row, EXPIRATION_DATE_COLUMN: expiration_date_str,
+                                 HIT_STOP_LOSS_COLUMN: '' if hit_stop_loss is None else bool(hit_stop_loss)})
+        logger.info(f"PredictionsEvaluator: Appended {len(evaluated_rows)} row(s) of {csv_path} to {ALL_PREDICTIONS_CSV}")
+
+    @staticmethod
+    def _extend_all_predictions_columns(columns):
+        """Returns the columns to append to the existing ALL_PREDICTIONS_CSV with: its own
+        header's columns, followed by those of columns that it lacks. When it lacks any, the
+        file is first rewritten (to a temporary file that is then swapped in) with them added
+        to its header and left blank in its existing rows."""
+        with open(ALL_PREDICTIONS_CSV, 'r', newline='') as f:
+            reader = csv.DictReader(f, delimiter='\t')
+            existing_columns = list(reader.fieldnames or [])
+            missing_columns = [c for c in columns if c not in existing_columns]
+            if not missing_columns:
+                return existing_columns
+            existing_rows = list(reader)
+
+        extended_columns = existing_columns + missing_columns
+        temporary_path = f"{ALL_PREDICTIONS_CSV}.tmp"
+        with open(temporary_path, 'w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=extended_columns, delimiter='\t', restval='')
+            writer.writeheader()
+            writer.writerows(existing_rows)
+        os.replace(temporary_path, ALL_PREDICTIONS_CSV)
+        logger.info(f"PredictionsEvaluator: Added the column(s) {missing_columns} to {ALL_PREDICTIONS_CSV} "
+                    f"(blank in its {len(existing_rows)} existing row(s))")
+        return extended_columns
 
     @staticmethod
     def _extract_expiration_date(csv_path):
@@ -147,13 +216,17 @@ class PredictionsEvaluator:
         to decide whether the stop loss was hit: realized_profit is
         estimated_sell_price if not, or estimated_sell_price - stop_loss if
         it was. Finally averages realized_profit across every record in the
-        file."""
+        file.
+
+        Returns every row of csv_path, in file order, each evaluated one carrying max_high,
+        hit_stop_loss and realized_profit; or None when no record could be evaluated (then
+        nothing is logged)."""
 
         logger.info(f"Processing predictions for {expiration_date_str}")
         grouped = {}
         with open(csv_path, 'r', newline='') as f:
-            reader = csv.DictReader(f, delimiter='\t')
-            for row in reader:
+            rows = list(csv.DictReader(f, delimiter='\t'))
+            for row in rows:
                 key = f"{row['strike']}_{row['right']}"
                 grouped.setdefault(key, []).append(row)
 
@@ -255,7 +328,7 @@ class PredictionsEvaluator:
 
         if not realized_profits:
             logger.error(f"Could not find any realized profits for {expiration_date_str}")
-            return False
+            return None
 
         average_realized_profit = round(sum(realized_profits) / len(realized_profits), 3)
         average_expected_profit = round(sum(expected_profits) / len(expected_profits), 3)
@@ -274,7 +347,7 @@ class PredictionsEvaluator:
         logger.info(f"PredictionsEvaluator: Processed {csv_path} into {len(grouped)} strike/right group(s); "
                     f"average expected profit over {len(expected_profits)} record(s) = {average_expected_profit:.4f}; "
                     f"average realized profit = {average_realized_profit:.4f}")
-        return True
+        return rows
 
     @staticmethod
     def _parse_record_time(datetime_str):
@@ -354,14 +427,9 @@ class PredictionsEvaluator:
         predicted probability, observed survival rate, stop-loss hits and sample count.
         Bins are never split, so a group holds every prediction of each bin it covers; a bin
         goes to the group in which its first prediction falls."""
-        counts = totals['prediction_count']
-        total_count = int(counts.sum())
+        total_count = int(totals['prediction_count'].sum())
         if not total_count:
             return
-
-        probabilities = np.arange(HISTOGRAM_BINS) / HISTOGRAM_RESOLUTION
-        predictions_before_bin = np.cumsum(counts) - counts
-        group_of_bin = np.minimum(predictions_before_bin * number_of_quantiles // total_count, number_of_quantiles - 1)
 
         os.makedirs(os.path.dirname(quantiles_file), exist_ok=True)
         write_header = not os.path.exists(quantiles_file)
@@ -369,21 +437,39 @@ class PredictionsEvaluator:
             writer = csv.writer(f, delimiter='\t')
             if write_header:
                 writer.writerow(QUANTILES_COLUMNS)
-            for group in range(number_of_quantiles):
-                in_group = (group_of_bin == group) & (counts > 0)
-                samples = int(counts[in_group].sum())
-                if not samples:
-                    # Too few distinct bins to fill every group (e.g. very few predictions so far).
-                    writer.writerow([expiration_date_str, group + 1, '', '', '', '', 0, 0])
-                    continue
-                group_probabilities = probabilities[in_group]
-                mean_predicted = float((group_probabilities * counts[in_group]).sum() / samples)
-                survival_rate = float(totals['survival_count'][in_group].sum() / samples)
-                hits = int(totals['stop_loss_hit_count'][in_group].sum())
-                writer.writerow([expiration_date_str, group + 1, f"{group_probabilities.min():.4f}",
-                                 f"{group_probabilities.max():.4f}", f"{mean_predicted:.4f}",
-                                 f"{survival_rate:.4f}", hits, samples])
+            for group_values in PredictionsEvaluator.quantile_values(number_of_quantiles, totals):
+                writer.writerow([expiration_date_str] + group_values)
         logger.info(f"Logged {number_of_quantiles} quantile(s) of {total_count} prediction(s) to {quantiles_file}")
+
+    @staticmethod
+    def quantile_values(number_of_quantiles, totals):
+        """The quantiles of the predictions in the histogram totals (see _log_quantiles), as
+        one list per group: the QUANTILES_COLUMNS values after results_date. Empty when the
+        histogram has no predictions."""
+        counts = totals['prediction_count']
+        total_count = int(counts.sum())
+        if not total_count:
+            return []
+
+        probabilities = np.arange(HISTOGRAM_BINS) / HISTOGRAM_RESOLUTION
+        predictions_before_bin = np.cumsum(counts) - counts
+        group_of_bin = np.minimum(predictions_before_bin * number_of_quantiles // total_count, number_of_quantiles - 1)
+
+        groups = []
+        for group in range(number_of_quantiles):
+            in_group = (group_of_bin == group) & (counts > 0)
+            samples = int(counts[in_group].sum())
+            if not samples:
+                # Too few distinct bins to fill every group (e.g. very few predictions so far).
+                groups.append([group + 1, '', '', '', '', 0, 0])
+                continue
+            group_probabilities = probabilities[in_group]
+            mean_predicted = float((group_probabilities * counts[in_group]).sum() / samples)
+            survival_rate = float(totals['survival_count'][in_group].sum() / samples)
+            hits = int(totals['stop_loss_hit_count'][in_group].sum())
+            groups.append([group + 1, f"{group_probabilities.min():.4f}", f"{group_probabilities.max():.4f}",
+                           f"{mean_predicted:.4f}", f"{survival_rate:.4f}", hits, samples])
+        return groups
 
     @staticmethod
     def _log_averages(expiration_date_str, average_expected_profit, average_realized_profit, profit_deviation):
@@ -440,28 +526,10 @@ class PredictionsEvaluator:
             logger.warning(f"Skipped {skipped_old_layout_rows} row(s) of {log_file} whose bucket lower bound isn't one "
                            f"of {BUCKET_LOWER_BOUNDS} (written with an earlier bucket layout)")
 
-        upper_bounds = BUCKET_LOWER_BOUNDS[1:] + [1.0]
-        not_hit_probabilities = [
-            round(not_hit_count / record_count, 3) if record_count else ''
-            for record_count, not_hit_count in zip(total_record_counts, total_not_hit_counts)
-        ]
-        # How far each bucket's observed not-hit probability falls outside the bucket's own
-        # [lower, upper] range (0 when inside it), summed over the non-empty buckets.
-        distance = 0.0
-        for lower, upper, probability in zip(BUCKET_LOWER_BOUNDS, upper_bounds, not_hit_probabilities):
-            if probability == '':
-                continue
-            if probability < lower:
-                distance += lower - probability
-            elif probability > upper:
-                distance += probability - upper
-
         aggregated_log_file = os.path.join(os.path.dirname(log_file), f"aggregated_{os.path.basename(log_file)}")
         write_header = not os.path.exists(aggregated_log_file)
         with open(aggregated_log_file, 'a', newline='') as f:
             writer = csv.writer(f, delimiter='\t')
             if write_header:
-                writer.writerow(['results_date'] + [f"{round(lower * 100)}-{round(upper * 100)}%"
-                                                    for lower, upper in zip(BUCKET_LOWER_BOUNDS, upper_bounds)]
-                                + ['distance'])
-            writer.writerow([expiration_date_str] + not_hit_probabilities + [round(distance, 3)])
+                writer.writerow(['results_date'] + aggregated_bucket_columns())
+            writer.writerow([expiration_date_str] + aggregated_bucket_values(total_record_counts, total_not_hit_counts))
